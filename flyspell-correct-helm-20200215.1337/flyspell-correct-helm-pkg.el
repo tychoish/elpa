@@ -1,0 +1,2 @@
+;;; Generated package description from /home/tychoish/.emacs.d/elpa/flyspell-correct-helm-20200215.1337/flyspell-correct-helm.el  -*- no-byte-compile: t -*-
+(define-package "flyspell-correct-helm" "20200215.1337" "Correcting words with flyspell via helm interface" '((flyspell-correct "0.6.1") (helm "1.9.0") (emacs "24")) :commit "dea1290a371c540dde7b8d0eef7a12d92f7a0b83" :authors '(("Boris Buliga" . "boris@d12frosted.io")) :maintainer '("Boris Buliga" . "boris@d12frosted.io") :url "https://github.com/d12frosted/flyspell-correct")

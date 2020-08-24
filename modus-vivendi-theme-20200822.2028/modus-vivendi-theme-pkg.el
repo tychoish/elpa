@@ -1,0 +1,2 @@
+;;; Generated package description from /home/tychoish/.emacs.d/elpa/modus-vivendi-theme-20200822.2028/modus-vivendi-theme.el  -*- no-byte-compile: t -*-
+(define-package "modus-vivendi-theme" "20200822.2028" "Accessible dark theme (WCAG AAA)" '((emacs "26.1")) :commit "a2dfc18cb7e59afe4e375a3d7ef07c5cea24868e" :keywords '("faces" "theme" "accessibility") :authors '(("Protesilaos Stavrou" . "info@protesilaos.com")) :maintainer '("Protesilaos Stavrou" . "info@protesilaos.com") :url "https://gitlab.com/protesilaos/modus-themes")
