@@ -1,0 +1,2 @@
+;;; Generated package description from /home/tychoish/.emacs.d/elpa/revbufs-20200831.11/revbufs.el  -*- no-byte-compile: t -*-
+(define-package "revbufs" "20200831.11" "Reverts all out-of-date buffers safely" 'nil :commit "d515fc9fed6a9e520e3325c970a88e21d4deccb3" :keywords '("convenience" "buffers") :authors '(("Neil Van Dyke" . "neil@neilvandyke.org")) :maintainer '("Sam Kleinman" . "sam@tychoish.com") :url "http://www.neilvandyke.org/revbufs/")
