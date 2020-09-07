@@ -1,0 +1,2 @@
+;;; Generated package description from /home/tychoish/.emacs.d/elpa/flycheck-aspell-20200830.2357/flycheck-aspell.el  -*- no-byte-compile: t -*-
+(define-package "flycheck-aspell" "20200830.2357" "Aspell checker for flycheck" '((flycheck "28.0") (emacs "25.1")) :commit "9ff2072a9bfa16ec5c762d94edd57bc4c8a5faf2" :keywords '("wp" "flycheck" "spell" "aspell") :authors '(("Leo Gaskin" . "leo.gaskin@brg-feldkirchen.at")) :maintainer '("Leo Gaskin" . "leo.gaskin@brg-feldkirchen.at") :url "https://github.com/leotaku/flycheck-aspell")
