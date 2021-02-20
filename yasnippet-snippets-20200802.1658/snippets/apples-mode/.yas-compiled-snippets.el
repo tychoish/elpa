@@ -22,4 +22,4 @@
 		       ("comment" "(*\n$0\n*)" "comment" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/apples-mode/comment" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:25 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:53 2020

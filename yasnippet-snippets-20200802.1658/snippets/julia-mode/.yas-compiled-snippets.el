@@ -29,4 +29,4 @@
 		       ("atype" "abstract type ${1:${2:type} <: ${3:supertype}} end$0" "abstract type ... end" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/julia-mode/atype" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:26 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:55 2020

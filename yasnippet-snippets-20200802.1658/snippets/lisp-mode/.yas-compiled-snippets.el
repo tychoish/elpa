@@ -17,4 +17,4 @@
 		       ("cls" "(defclass ${1:name} (${2:inherits})\n   (${4:slot})\n   (:documentation \"${3:doc}\"))\n$0\n" "class" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/lisp-mode/class" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:26 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:55 2020

@@ -15,4 +15,4 @@
 		       ("do" "do\n	$0\nend\n" "do" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/lua-mode/do" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:26 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:55 2020

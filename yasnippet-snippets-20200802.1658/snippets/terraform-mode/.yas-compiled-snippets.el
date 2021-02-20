@@ -733,4 +733,4 @@
 			nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/terraform-mode/google/storage_resources/google_storage_bucket" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:28 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:57 2020

@@ -42,4 +42,4 @@
 		       ("acls" "abstract class ${1:Name} {\n  $0\n}" "aclass" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/dart-mode/aclass" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:25 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:54 2020

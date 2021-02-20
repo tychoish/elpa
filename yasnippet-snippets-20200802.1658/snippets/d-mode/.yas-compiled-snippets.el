@@ -23,4 +23,4 @@
 		       ("class" "/++\n + $1\n +/\nclass ${1:ClassName}\n{\n	this($2)\n	{\n      $0\n	}\n}\n" "class … { … }" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/d-mode/class" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:25 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:54 2020

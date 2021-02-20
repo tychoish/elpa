@@ -11,4 +11,4 @@
 		       ("chan" "channel Channel extends ${1:ned.DelayChannel} {\n        $0\n}\n" "chan" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/ned-mode/chan" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:27 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:55 2020

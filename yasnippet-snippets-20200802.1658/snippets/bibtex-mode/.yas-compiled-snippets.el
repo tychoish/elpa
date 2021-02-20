@@ -44,4 +44,4 @@
 		       ("article" "@article{ ${title},\n  author  = {${author}},\n  title   = {${title}},\n  journal = {${journal}},\n  year    = {${year}}${,\n  volume  = {${volume}}}${,\n  number  = {${number}}}${,\n  pages   = {${pages}}}${,\n  month   = {${month}}}${,\n  note    = {${note}}}\n}\n\n$0" "article" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/bibtex-mode/article" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:25 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:53 2020

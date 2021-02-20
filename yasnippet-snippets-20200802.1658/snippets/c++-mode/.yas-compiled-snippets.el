@@ -195,4 +195,4 @@ If found, the class name is returned, otherwise STR is returned"
 		       ("acl" "auto sum = std::accumulate(std::begin(${1:container}), std::end($1), 0, [](int total, $2) {\n  $3\n});\n$0\n" "accumulate" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/c++-mode/acl" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:25 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:54 2020

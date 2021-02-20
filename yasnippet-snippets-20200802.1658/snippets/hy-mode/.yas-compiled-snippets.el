@@ -19,4 +19,4 @@
 		       ("class" "(defclass ${1:ClassName} [${2:BaseClass}]\n${3:  (defn --init-- [${4:arg}]\n    (setv $0))})" "class" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/hy-mode/class" "direct-keybinding" nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:26 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:55 2020

@@ -335,4 +335,4 @@
 			nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/rjsx-mode/Redux/hocredux" nil "68de6229-17f5-4bd6-83ef-feaa3a1ccb31")))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:27 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:56 2020

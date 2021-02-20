@@ -130,4 +130,4 @@
 		       ("ah" "(add-hook '${1:name}-hook ${2:'${3:function}})$0\n" "add-hook" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/emacs-lisp-mode/add-hook" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:26 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:54 2020

@@ -16,4 +16,4 @@
 		       ("args" "if [ $# -lt ${1:2} ]\n   then $0\nfi" "args" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/sh-mode/args" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:28 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:56 2020

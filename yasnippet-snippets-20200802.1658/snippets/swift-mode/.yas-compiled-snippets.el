@@ -28,4 +28,4 @@
 		       ("available" "@available(iOS $1, *)" "available" nil nil nil "/home/tychoish/.emacs.d/elpa/yasnippet-snippets-20200802.1658/snippets/swift-mode/available" nil nil)))
 
 
-;;; Do not edit! File generated at Tue Aug 18 10:07:28 2020
+;;; Do not edit! File generated at Mon Nov 16 13:05:56 2020
