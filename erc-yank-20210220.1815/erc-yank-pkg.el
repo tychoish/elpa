@@ -1,0 +1,2 @@
+;;; Generated package description from /home/tychoish/.emacs.d/elpa/erc-yank-20210220.1815/erc-yank.el  -*- no-byte-compile: t -*-
+(define-package "erc-yank" "20210220.1815" "Automagically create a Gist if pasting more than 5 lines" 'nil :commit "55d96f18c5df9d8fce51fa073d7a12c47a46ac80" :authors '(("John Wiegley" . "jwiegley@gmail.com")) :maintainer '("John Wiegley" . "jwiegley@gmail.com") :keywords '("comm" "erc" "chat" "irc" "yank" "gist") :url "https://github.com/jwiegley/erc-yank")
