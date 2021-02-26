@@ -1,0 +1,2 @@
+;;; Generated package description from /home/tychoish/.emacs.d/elpa/fountain-mode-20210225.1517/fountain-mode.el  -*- no-byte-compile: t -*-
+(define-package "fountain-mode" "20210225.1517" "Major mode for screenwriting in Fountain markup" '((emacs "24.4") (seq "2.20")) :commit "98e2729b7dfc99607778b07ef03ff994a74c045d" :authors '(("Paul W. Rankin" . "pwr@bydasein.com")) :maintainer '("Paul W. Rankin" . "pwr@bydasein.com") :keywords '("wp" "text") :url "https://github.com/rnkn/fountain-mode")

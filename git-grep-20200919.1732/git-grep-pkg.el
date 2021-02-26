@@ -1,2 +1,0 @@
-;;; Generated package description from /home/tychoish/.emacs.d/elpa/git-grep-20200919.1732/git-grep.el  -*- no-byte-compile: t -*-
-(define-package "git-grep" "20200919.1732" "Search tools using git grep" '((projectile "0.10.0")) :commit "7f942089808fa26669c207a7a796d2ccb14c41ac" :keywords '("matching" "files" "grep" "search" "using" "git-grep") :authors '(("Sam Kleinman")) :maintainer '("tychoish" . "garen@tychoish.com") :url "https://github.com/tychoish/git-grep/")

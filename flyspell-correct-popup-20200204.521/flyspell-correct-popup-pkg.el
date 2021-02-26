@@ -1,2 +1,0 @@
-;;; -*- no-byte-compile: t -*-
-(define-package "flyspell-correct-popup" "20200204.521" "Correcting words with flyspell via popup interface" '((flyspell-correct "0.6.1") (popup "0.5.3") (emacs "24")) :commit "fd8ac7a4f922ce5ea1cc5d4583a7d584847cb6b5" :authors '(("Boris Buliga" . "boris@d12frosted.io")) :maintainer '("Boris Buliga" . "boris@d12frosted.io") :url "https://github.com/d12frosted/flyspell-correct")
