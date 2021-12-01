@@ -1,2 +1,0 @@
-;;; Generated package description from /home/tychoish/.emacs.d/elpa/flycheck-grammarly-20210217.909/flycheck-grammarly.el  -*- no-byte-compile: t -*-
-(define-package "flycheck-grammarly" "20210217.909" "Grammarly support for Flycheck" '((emacs "25.1") (flycheck "0.14") (grammarly "0.3.0")) :commit "67c1135193f98cfa4ee1ff83cc502dc11f648334" :authors '(("Shen, Jen-Chieh" . "jcs090218@gmail.com")) :maintainer '("Shen, Jen-Chieh" . "jcs090218@gmail.com") :url "https://github.com/emacs-grammarly/flycheck-grammarly")
