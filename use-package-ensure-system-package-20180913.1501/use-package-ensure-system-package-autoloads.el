@@ -1,4 +1,4 @@
-;;; use-package-ensure-system-package-autoloads.el --- automatically extracted autoloads
+;;; use-package-ensure-system-package-autoloads.el --- automatically extracted autoloads  -*- lexical-binding: t -*-
 ;;
 ;;; Code:
 
@@ -20,7 +20,7 @@ Execute the handler for `:ensure-system-package' keyword in `use-package'.
 
 \(fn NAME KEYWORD ARG REST STATE)" nil nil)
 
-(if (fboundp 'register-definition-prefixes) (register-definition-prefixes "use-package-ensure-system-package" '("use-package-ensure-system-package-")))
+(register-definition-prefixes "use-package-ensure-system-package" '("use-package-ensure-system-package-"))
 
 ;;;***
 

@@ -11,11 +11,9 @@
 ;;; Generated autoloads from twittering-mode.el
 
 (autoload 'twit "twittering-mode" "\
-Start twittering-mode.
+Start twittering-mode." t nil)
 
-\(fn)" t nil)
-
-(if (fboundp 'register-definition-prefixes) (register-definition-prefixes "twittering-mode" '("twittering-" "debug-print" "case-string" "list-push" "assocref")))
+(if (fboundp 'register-definition-prefixes) (register-definition-prefixes "twittering-mode" '("assocref" "case-string" "debug-print" "list-push" "twittering-")))
 
 ;;;***
 
