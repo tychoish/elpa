@@ -1,2 +1,0 @@
-;;; Generated package description from /home/tychoish/.emacs.d/elpa/flyspell-correct-popup-20210124.1143/flyspell-correct-popup.el  -*- no-byte-compile: t -*-
-(define-package "flyspell-correct-popup" "20210124.1143" "Correcting words with flyspell via popup interface" '((flyspell-correct "0.6.1") (popup "0.5.3") (emacs "24")) :commit "d19a090b978a249fc8f6d8b14309a5705a6bb483" :authors '(("Boris Buliga" . "boris@d12frosted.io")) :maintainer '("Boris Buliga" . "boris@d12frosted.io") :url "https://github.com/d12frosted/flyspell-correct")

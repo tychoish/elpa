@@ -1,0 +1,2 @@
+;;; Generated package description from use-package-ensure-system-package.el  -*- no-byte-compile: t -*-
+(define-package "use-package-ensure-system-package" "20220807.1558" "auto install system packages" '((use-package "2.1") (system-packages "1.0.4")) :commit "d3c648a88e68547ec0e2ff5ea0f236f7d0e5942c" :authors '(("Justin Talbott" . "justin@waymondo.com")) :maintainer '("Justin Talbott" . "justin@waymondo.com") :keywords '("convenience" "tools" "extensions") :url "https://github.com/waymondo/use-package-ensure-system-package")
