@@ -964,7 +964,7 @@
 	 ("Eduardo Ochs" . "eduardoochs@gmail.com"))
 	(:commit . "ed23e0f2920df09ced0889627879567fd2a097ac"))])
  (ef-themes .
-	    [(0 6 0)
+	    [(0 7 0)
 	     ((emacs
 	       (27 1)))
 	     "Colorful and legible themes" tar
@@ -973,28 +973,30 @@
 	      (:maintainer "Ef-Themes Development" . "~protesilaos/ef-themes@lists.sr.ht")
 	      (:authors
 	       ("Protesilaos Stavrou" . "info@protesilaos.com"))
-	      (:commit . "fe8fcf23a326b4b7ccf1870a1919de6347a1191e"))])
+	      (:commit . "887f91e07c9997df9038401252cac6769ed393ca"))])
  (eglot .
-	[(1 8)
+	[(1 9)
 	 ((emacs
 	   (26 1))
 	  (jsonrpc
 	   (1 0 14))
 	  (flymake
-	   (1 0 9))
+	   (1 2 1))
 	  (project
 	   (0 3 0))
 	  (xref
 	   (1 0 1))
 	  (eldoc
-	   (1 11 0)))
+	   (1 11 0))
+	  (seq
+	   (2 23)))
 	 "Client for Language Server Protocol (LSP) servers" tar
 	 ((:url . "https://github.com/joaotavora/eglot")
 	  (:keywords "convenience" "languages")
 	  (:maintainer "João Távora" . "joaotavora@gmail.com")
 	  (:authors
 	   ("João Távora" . "joaotavora@gmail.com"))
-	  (:commit . "132ea08f97f94ad2e050fc8d1628ecb41de7229a"))])
+	  (:commit . "d1159172c9d436d7e649207565c606e9e572a8db"))])
  (el-search .
 	    [(1 12 6 1)
 	     ((emacs
@@ -1094,7 +1096,7 @@
 	   ("Adam Porter" . "adam@alphapapa.net"))
 	  (:commit . "049c4b67c4dd693a22641221863b7d7c9fef4e4d"))])
  (emms .
-       [(11)
+       [(12)
 	((cl-lib
 	  (0 5))
 	 (nadvice
@@ -1107,7 +1109,7 @@
 	 (:maintainer "Yoni Rabkin" . "yrk@gnu.org")
 	 (:authors
 	  ("Jorgen Schäfer" . "forcer@forcix.cx"))
-	 (:commit . "9adffa2e362e3d93367f5f69be20d81b969ad00c"))])
+	 (:commit . "d9f67eeb1ce68c228fcbe02596318c6452b6292a"))])
  (engrave-faces .
 		[(0 3 1)
 		 ((emacs
@@ -1255,7 +1257,7 @@
 		       ("Manuel Uberti" . "manuel.uberti@inventati.org"))
 		      (:commit . "9c68ee881f18f554f0ab5bbf5bee1a4b753d792b"))])
  (fontaine .
-	   [(0 4 0)
+	   [(0 4 1)
 	    ((emacs
 	      (27 1)))
 	    "Set font configurations using presets" tar
@@ -1263,7 +1265,7 @@
 	     (:maintainer "Fontaine Development" . "~protesilaos/fontaine@lists.sr.ht")
 	     (:authors
 	      ("Protesilaos Stavrou" . "info@protesilaos.com"))
-	     (:commit . "f60a999ca399fab9555a3e6e2087d8905837058d"))])
+	     (:commit . "e7c6c0a172ffc51d16d7df77a528b87e183531a6"))])
  (frame-tabs .
 	     [(1 1)
 	      nil "show buffer tabs in side window" single
@@ -2491,7 +2493,7 @@
 	   ("Mario Lang" . "mlang@delysid.org"))
 	  (:maintainer "Mario Lang" . "mlang@delysid.org"))])
  (posframe .
-	   [(1 1 7)
+	   [(1 1 8)
 	    ((emacs
 	      (26 1)))
 	    "Pop a posframe (just a frame) at point" tar
@@ -2500,16 +2502,16 @@
 	     (:maintainer "Feng Shu" . "tumashu@163.com")
 	     (:authors
 	      ("Feng Shu" . "tumashu@163.com"))
-	     (:commit . "c91d4d53fa479ceb604071008ce0a901770eff57"))])
+	     (:commit . "0c5e57ac870735cb780936b1efc4bdd17fe87112"))])
  (project .
-	  [(0 8 1)
+	  [(0 8 2)
 	   ((emacs
 	     (26 1))
 	    (xref
-	     (1 0 2)))
+	     (1 4 0)))
 	   "Operations on the current project" tar
 	   ((:url . "https://elpa.gnu.org/packages/project.html")
-	    (:commit . "6bf29072e968401f842789c71468e624e5c913a9"))])
+	    (:commit . "ef6e518035fddf13547d7f1f945b5069a0fe6ea7"))])
  (psgml .
 	[(1 3 4)
 	 nil "SGML-editing mode with parsing support" tar
