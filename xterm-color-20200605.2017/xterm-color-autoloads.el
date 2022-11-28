@@ -73,6 +73,10 @@ comparisons/benchmarks with libraries that offer similar functionality." t nil)
 
 ;;;***
 
+;;;### (autoloads nil nil ("xterm-color-pkg.el") (0 0 0 0))
+
+;;;***
+
 ;; Local Variables:
 ;; version-control: never
 ;; no-byte-compile: t
