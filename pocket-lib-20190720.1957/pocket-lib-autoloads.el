@@ -1,4 +1,4 @@
-;;; pocket-lib-autoloads.el --- automatically extracted autoloads
+;;; pocket-lib-autoloads.el --- automatically extracted autoloads  -*- lexical-binding: t -*-
 ;;
 ;;; Code:
 
@@ -9,7 +9,7 @@
 ;;;### (autoloads nil "pocket-lib" "pocket-lib.el" (0 0 0 0))
 ;;; Generated autoloads from pocket-lib.el
 
-(if (fboundp 'register-definition-prefixes) (register-definition-prefixes "pocket-lib" '("pocket-lib-")))
+(register-definition-prefixes "pocket-lib" '("pocket-lib-"))
 
 ;;;***
 
