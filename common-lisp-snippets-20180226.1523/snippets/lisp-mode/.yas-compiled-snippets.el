@@ -42,4 +42,4 @@
 		       ("assert" "(assert ${1:assertion} (${2:vars-to-change})\n  \"${3:string}\"\n  ${4:mentioned-vars})" "assert" nil nil nil "/home/tychoish/.emacs.d/elpa/common-lisp-snippets-20180226.1523/snippets/lisp-mode/assert" nil nil)))
 
 
-;;; Do not edit! File generated at Mon Nov 16 13:05:57 2020
+;;; Do not edit! File generated at Sun Jul  9 00:25:27 2023
