@@ -310,17 +310,21 @@ FORCE is used for testing only, should not be used in real code."
 (defun telega-notifications-msg-notify-p (msg)
   "Return non-nil if message MSG should pop-up notification."
   (let ((chat (telega-msg-chat msg)))
-    (unless (or (not (telega-chat-match-p chat
-                       '(or (type private secret) me-is-member)))
-                (and (telega-chat-muted-p chat)
-                     (or (telega-chat-notification-setting
-                          chat :disable_mention_notifications)
-                         (not (plist-get msg :contains_unread_mention))))
-                (telega-msg-seen-p msg chat)
-                (with-telega-chatbuf chat
-                  (and (telega-chatbuf--msg-observable-p msg)
-                       (not (telega-chatbuf--history-state-get :newer-freezed)))))
-      t)))
+    (unless (or 
+	     (not (telega-chat-match-p chat
+                    '(or (type private secret) me-is-member)))
+             (and (telega-chat-muted-p chat)
+                  (or (telega-chat-notification-setting
+                       chat :disable_mention_notifications)
+                      (not (plist-get msg :contains_unread_mention))))
+             (telega-msg-seen-p msg chat)
+             (with-telega-chatbuf chat
+               (and (telega-chatbuf--msg-observable-p msg)
+                    (not (telega-chatbuf--history-state-get :newer-freezed))))
+	     )
+      t))
+
+)
 
 (defun telega-notifications-chat-message (msg)
   "Function intended to be added to `telega-chat-post-message-hook'."

@@ -63,5 +63,4 @@
                    #'ignore)))
 
 (provide 'telega-alert)
-
 ;;; telega-alert.el ends here
