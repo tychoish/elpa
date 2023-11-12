@@ -221,7 +221,7 @@
 	    (:url . "https://elpa.nongnu.org/nongnu/cdlatex.html")
 	    (:commit . "7521fa1b39de735dcbd32bca92a792d5261e9ce2"))])
  (cider .
-	[(1 10 0)
+	[(1 11 1)
 	 ((emacs
 	   (26))
 	  (clojure-mode
@@ -239,7 +239,7 @@
 	  (transient
 	   (0 4 1)))
 	 "Clojure Interactive Development Environment that Rocks" tar
-	 ((:url . "http://www.github.com/clojure-emacs/cider")
+	 ((:url . "https://www.github.com/clojure-emacs/cider")
 	  (:keywords "languages" "clojure" "cider")
 	  (:maintainer "Bozhidar Batsov" . "bozhidar@batsov.dev")
 	  (:authors
@@ -249,7 +249,7 @@
 	   ("Artur Malabarba" . "bruce.connor.am@gmail.com")
 	   ("Hugo Duncan" . "hugo@hugoduncan.org")
 	   ("Steve Purcell" . "steve@sanityinc.com"))
-	  (:commit . "d16988719ae5561f32b06db0726adb03d84fe15c"))])
+	  (:commit . "9c605cd4938c0055c2766c55606f19ecbf664e8e"))])
  (clojure-mode .
 	       [(5 18 0)
 		((emacs
@@ -1833,7 +1833,7 @@
 	       ("David Christiansen" . "david@davidchristiansen.dk"))
 	      (:keywords "convenience"))])
  (racket-mode .
-	      [(1 0 20230919 113921)
+	      [(1 0 20231110 100840)
 	       ((emacs
 		 (25 1)))
 	       "Racket editing, REPL, and more" tar
@@ -2079,16 +2079,16 @@
 		     ("John Olsson" . "john@cryon.se"))
 		    (:commit . "2d5acd143a153e16372d59000e57d76291ab81dd"))])
  (subed .
-	[(1 2 5)
+	[(1 2 7)
 	 ((emacs
 	   (25 1)))
 	 "A major mode for editing subtitles" tar
 	 ((:url . "https://github.com/sachac/subed")
 	  (:keywords "convenience" "files" "hypermedia" "multimedia")
 	  (:maintainer "Sacha Chua" . "sacha@sachachua.com")
-	  (:commit . "de7ee929613a9c5430d5f8927f3beab7af002659"))])
+	  (:commit . "c9e3ec9963fcc95050fe8a73ce978bebe2ac41ac"))])
  (sweeprolog .
-	     [(0 26 1)
+	     [(0 26 2)
 	      ((emacs
 		(27 1))
 	       (compat
@@ -2099,7 +2099,7 @@
 	       (:maintainer "Eshel Yaron" . "~eshel/dev@lists.sr.ht")
 	       (:authors
 		("Eshel Yaron" . "me@eshelyaron.com"))
-	       (:commit . "d89118a4f3c0e2df191524ab8b9da73b1069f64b"))])
+	       (:commit . "f87507029ff45096384358619724bb97b5491865"))])
  (swift-mode .
 	     [(9 1 0)
 	      ((emacs
@@ -2408,14 +2408,14 @@
 	      (:authors
 	       ("Le Wang")))])
  (xah-fly-keys .
-	       [(24 15 20231102161602)
+	       [(24 17 20231111131112)
 		((emacs
-		  (29)))
+		  (27)))
 		"ergonomic modal keybinding minor mode." tar
 		((:url . "http://xahlee.info/emacs/misc/xah-fly-keys.html")
-		 (:keywords "convenience" "emulations" "vim" "ergoemacs")
+		 (:keywords "convenience" "vi" "vim" "ergoemacs" "keybinding")
 		 (:maintainer "Xah Lee" . "xah@xahlee.org")
-		 (:commit . "9637e144a0a9349ce11f82cd61b413fb95de9659"))])
+		 (:commit . "7fc6afdbe1a7ebf632f1a45df3d120d939fc0725"))])
  (xkcd .
        [(1 1)
 	((json
