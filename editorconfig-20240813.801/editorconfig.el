@@ -3,7 +3,12 @@
 ;; Copyright (C) 2011-2024 EditorConfig Team
 
 ;; Author: EditorConfig Team <editorconfig@googlegroups.com>
+<<<<<<< HEAD
 ;; Version: 0.11.0
+=======
+;; Package-Version: 20240813.801
+;; Package-Revision: 648f0cf9aeb7
+>>>>>>> afee9cf4 (updated with new packages)
 ;; URL: https://github.com/editorconfig/editorconfig-emacs#readme
 ;; Package-Requires: ((emacs "26.1"))
 ;; Keywords: convenience editorconfig

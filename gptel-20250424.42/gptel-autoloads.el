@@ -29,10 +29,15 @@ The mode's hook is called both when the mode is enabled and when
 it is disabled.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 \\{gptel-mode-map}
 
 >>>>>>> fd1044fe (update)
+=======
+\\{gptel-mode-map}
+
+>>>>>>> afee9cf4 (updated with new packages)
 (fn &optional ARG)" t)
 (autoload 'gptel-send "gptel" "\
 Submit this prompt to the current LLM backend.

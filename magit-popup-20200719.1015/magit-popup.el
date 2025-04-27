@@ -12,6 +12,11 @@
 ;; Author: Jonas Bernoulli <jonas@bernoul.li>
 ;; Maintainer: Jonas Bernoulli <jonas@bernoul.li>
 
+<<<<<<< HEAD
+=======
+;; Package-Version: 20200719.1015
+;; Package-Revision: d8585fa39f88
+>>>>>>> afee9cf4 (updated with new packages)
 ;; Package-Requires: ((emacs "24.4") (dash "2.13.0"))
 ;; Keywords: bindings
 ;; Homepage: https://github.com/magit/magit-popup

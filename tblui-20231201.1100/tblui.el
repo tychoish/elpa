@@ -9,7 +9,12 @@
 
 ;; Author: Yuki Inoue <inouetakahiroki _at_ gmail.com>
 ;; URL: https://github.com/Yuki-Inoue/tblui.el
+<<<<<<< HEAD
 ;; Version: 0.2.0
+=======
+;; Package-Version: 20231201.1100
+;; Package-Revision: 62ab5f62982c
+>>>>>>> afee9cf4 (updated with new packages)
 ;; Package-Requires: ((dash "2.12.1") (magit-popup "2.6.0") (tablist "0.70") (cl-lib "0.5"))
 
 ;; This file is NOT part of GNU Emacs.
