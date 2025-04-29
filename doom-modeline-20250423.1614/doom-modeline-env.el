@@ -1,6 +1,6 @@
 ;;; doom-modeline-env.el --- A environment parser for doom-modeline -*- lexical-binding: t -*-
 
-;; Copyright (C) 2019-2024 Vincent Zhang, Justin Barclay
+;; Copyright (C) 2019-2025 Vincent Zhang, Justin Barclay
 
 ;; This file is not part of GNU Emacs.
 
@@ -119,14 +119,14 @@ Example:
      \\='(\"--version\")
      (lambda (line)
         (message (doom-modeline-parser--ruby line)))"
-  (when-let ((proc (ignore-errors
-                     (apply 'start-process
-                            ;; Flaten process-args into a single list so we can handle
-                            ;; variadic length args
-                            (append
-                             (list "doom-modeline-env" nil prog)
-                             args))))
-             (parser callback))
+  (when-let* ((proc (ignore-errors
+                      (apply 'start-process
+                             ;; Flaten process-args into a single list so we can handle
+                             ;; variadic length args
+                             (append
+                              (list "doom-modeline-env" nil prog)
+                              args))))
+              (parser callback))
     (set-process-filter proc
                         (lambda (_proc line)
                           (ignore-errors
@@ -217,10 +217,11 @@ PARSER should be a function for parsing COMMAND's output line-by-line, to
                                    ;; Direnv unfortunately writes crao on stderr
                                    ;; so we need to pipe that to /dev/null
                                    (format "direnv exec %s %s --version 2>/dev/null"
-                                           default-directory
+                                           (file-truename default-directory)
                                            (or doom-modeline-env-python-executable
                                                python-shell-interpreter
                                                "python"))))
+                       ((executable-find "uv") (list "uv" "run" "--no-sync" "python" "--version"))
                        ((list (or doom-modeline-env-python-executable
                                   python-shell-interpreter
                                   "python")

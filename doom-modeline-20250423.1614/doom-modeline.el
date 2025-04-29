@@ -1,11 +1,12 @@
 ;;; doom-modeline.el --- A minimal and modern mode-line -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2018-2024 Vincent Zhang
+;; Copyright (C) 2018-2025 Vincent Zhang
 
 ;; Author: Vincent Zhang <seagle0128@gmail.com>
 ;; Homepage: https://github.com/seagle0128/doom-modeline
-;; Version: 4.2.0
-;; Package-Requires: ((emacs "25.1") (compat "29.1.4.5") (nerd-icons "0.1.0") (shrink-path "0.3.1"))
+;; Package-Version: 20250423.1614
+;; Package-Revision: 297b57585fe3
+;; Package-Requires: ((emacs "25.1") (compat "30.1.0.0") (nerd-icons "0.1.0") (shrink-path "0.3.1"))
 ;; Keywords: faces mode-line
 
 ;; This file is not part of GNU Emacs.
@@ -88,15 +89,15 @@
 ;;
 
 (doom-modeline-def-modeline 'main
-  '(eldoc bar workspace-name window-number modals matches follow buffer-info remote-host buffer-position word-count parrot selection-info)
-  '(compilation objed-state misc-info persp-name battery grip irc mu4e gnus github debug repl lsp minor-modes input-method indent-info buffer-encoding major-mode process vcs check time))
+  '(eldoc bar window-state workspace-name window-number modals matches follow buffer-info remote-host buffer-position word-count parrot selection-info)
+  '(compilation objed-state misc-info project-name persp-name battery grip irc mu4e gnus github debug repl lsp minor-modes input-method indent-info buffer-encoding major-mode process vcs check time))
 
 (doom-modeline-def-modeline 'minimal
   '(bar window-number modals matches buffer-info-simple)
   '(media-info major-mode time))
 
 (doom-modeline-def-modeline 'special
-  '(eldoc bar window-number modals matches buffer-info remote-host buffer-position word-count parrot selection-info)
+  '(eldoc bar window-state window-number modals matches buffer-info remote-host buffer-position word-count parrot selection-info)
   '(compilation objed-state misc-info battery irc-buffers debug minor-modes input-method indent-info buffer-encoding major-mode process time))
 
 (doom-modeline-def-modeline 'project
@@ -108,7 +109,7 @@
   '(compilation misc-info battery irc mu4e gnus github debug minor-modes input-method major-mode process time))
 
 (doom-modeline-def-modeline 'vcs
-  '(bar window-number modals matches buffer-info remote-host buffer-position parrot selection-info)
+  '(bar window-state window-number modals matches buffer-info remote-host buffer-position parrot selection-info)
   '(compilation misc-info battery irc mu4e gnus github debug minor-modes buffer-encoding major-mode process time))
 
 (doom-modeline-def-modeline 'package
@@ -124,7 +125,7 @@
   '(compilation misc-info media-info major-mode process vcs time))
 
 (doom-modeline-def-modeline 'message
-  '(eldoc bar window-number modals matches buffer-info-simple buffer-position word-count parrot selection-info)
+  '(eldoc bar window-state window-number modals matches buffer-info-simple buffer-position word-count parrot selection-info)
   '(compilation objed-state misc-info battery debug minor-modes input-method indent-info buffer-encoding major-mode time))
 
 (doom-modeline-def-modeline 'pdf
@@ -132,7 +133,7 @@
   '(compilation misc-info major-mode process vcs time))
 
 (doom-modeline-def-modeline 'org-src
-  '(eldoc bar window-number modals matches buffer-info buffer-position word-count parrot selection-info)
+  '(eldoc bar window-state window-number modals matches buffer-info buffer-position word-count parrot selection-info)
   '(compilation objed-state misc-info debug lsp minor-modes input-method indent-info buffer-encoding major-mode process check time))
 
 (doom-modeline-def-modeline 'helm
@@ -232,6 +233,9 @@ If DEFAULT is non-nil, set the default mode-line for all buffers."
         ;; Automatically set mode-lines
         (add-hook 'after-change-major-mode-hook #'doom-modeline-auto-set-modeline)
 
+        ;; Setup font height cache hook
+        (add-hook 'after-setting-font-hook #'doom-modeline--reset-font-height-cache)
+
         ;; Special handles
         (advice-add #'helm-display-mode-line :after #'doom-modeline-set-helm-modeline)
         (setq helm-ag-show-status-function #'doom-modeline-set-helm-modeline))
@@ -251,6 +255,9 @@ If DEFAULT is non-nil, set the default mode-line for all buffers."
 
       ;; For two-column editing
       (setq 2C-mode-line-format (doom-modeline--original-value '2C-mode-line-format))
+
+      ;; Remove font height cache hook
+      (remove-hook 'after-setting-font-hook #'doom-modeline--reset-font-height-cache)
 
       ;; Cleanup
       (remove-hook 'after-change-major-mode-hook #'doom-modeline-auto-set-modeline)
