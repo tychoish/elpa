@@ -544,12 +544,7 @@ Does not currently work for constructors."
 (defun solidity-estimate-gas-at-point ()
   "Estimate gas of the function at point.
 
-<<<<<<< HEAD
 Cursor must be at the function's name.  Does not currently work for constructors."
-=======
-Cursor must be at the function's name.  Does not currently work
-for constructors."
->>>>>>> fd1044fe (update)
   (interactive)
   (solidity--start-gasestimate (thing-at-point 'symbol 'no-properties)))
 
