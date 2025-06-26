@@ -1,2 +1,10 @@
-;;; Generated package description from rust-playground.el  -*- no-byte-compile: t -*-
-(define-package "rust-playground" "20200116.1043" "Local Rust playground for short code snippets." '((emacs "24.3")) :commit "5a117781dcb66065bea7830dd73618008fc34949" :authors '(("Alexander I.Grafov" . "grafov@gmail.com")) :maintainer '("Alexander I.Grafov" . "grafov@gmail.com") :keywords '("tools" "rust") :url "https://github.com/grafov/rust-playground")
+;; -*- no-byte-compile: t; lexical-binding: nil -*-
+(define-package "rust-playground" "20200116.1043"
+  "Local Rust playground for short code snippets."
+  '((emacs "24.3"))
+  :url "https://github.com/grafov/rust-playground"
+  :commit "5a117781dcb66065bea7830dd73618008fc34949"
+  :revdesc "5a117781dcb6"
+  :keywords '("tools" "rust")
+  :authors '(("Alexander I.Grafov + all the contributors" . "grafov@gmail.com"))
+  :maintainers '(("Alexander I.Grafov + all the contributors" . "grafov@gmail.com")))
