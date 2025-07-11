@@ -776,7 +776,7 @@
 	       ("Carsten Dominik" . "carsten.dominik@gmail.com"))
 	      (:commit . "f07e221d4d5597c7ccf4b0003c0909a88bdfcc9e"))])
  (consult .
-	  [(2 5)
+	  [(2 6)
 	   ((emacs
 	     (28 1))
 	    (compat
@@ -785,7 +785,7 @@
 	   ((:url . "https://github.com/minad/consult")
 	    (:keywords "matching" "files" "completion")
 	    (:maintainer "Daniel Mendler" . "mail@daniel-mendler.de")
-	    (:commit . "b6fd7feda74267a53f9f1cf1bd122e519a308132"))])
+	    (:commit . "4314c45d84d9e00d45d2b611562d8fe2e4ddcf48"))])
  (consult-denote .
 		 [(0 3 1)
 		  ((emacs
@@ -1348,16 +1348,16 @@
 	    (:url . "https://elpa.gnu.org/packages/docbook.html")
 	    (:commit . "a59f87c0dc04bcfcf9f55a124658c2e7a585dbd2"))])
  (doric-themes .
-	       [(0 1 0)
+	       [(0 2 0)
 		((emacs
 		  (29 1)))
-		"Minimalist themes" tar
+		"Highly legible minimalist themes with precise typography" tar
 		((:url . "https://github.com/protesilaos/doric-themes")
 		 (:keywords "faces" "theme" "accessibility")
 		 (:maintainer "Protesilaos Stavrou" . "info@protesilaos.com")
 		 (:authors
 		  ("Protesilaos Stavrou" . "info@protesilaos.com"))
-		 (:commit . "88e924ea72d1a26196d418297a44e523167dfdde"))])
+		 (:commit . "279297c36c16b02fac114aa817c59cc2f71b3d4a"))])
  (drepl .
 	[(0 3)
 	 ((emacs
@@ -2326,7 +2326,7 @@
 	   ("Durand" . "mmemmew@gmail.com"))
 	  (:commit . "5a57e52122fe483fa9bd39049c13a25334e408da"))])
  (indent-bars .
-	      [(0 8 5)
+	      [(0 9 1)
 	       ((emacs
 		 (27 1))
 		(compat
@@ -2337,7 +2337,7 @@
 		(:maintainer "J.D. Smith" . "jdtsmith+elpa@gmail.com")
 		(:authors
 		 ("J.D. Smith" . "jdtsmith+elpa@gmail.com"))
-		(:commit . "9a89849cec54debc85791118ea9b05cf9567765f"))])
+		(:commit . "a2f8b63f0f79282f04c1120e32ce39fdffca1824"))])
  (inspector .
 	    [(0 38)
 	     ((emacs
@@ -2736,7 +2736,7 @@
 		      ("Sean Whitton" . "spwhitton@spwhitton.name"))
 		     (:commit . "00b8f65effe4f2673e6450d70000644b266aa78a"))])
  (llm .
-      [(0 26 1)
+      [(0 27 0)
        ((emacs
 	 (28 1))
 	(plz
@@ -2752,7 +2752,7 @@
 	(:maintainer "Andrew Hyatt" . "ahyatt@gmail.com")
 	(:authors
 	 ("Andrew Hyatt" . "ahyatt@gmail.com"))
-	(:commit . "7f11ee2d61e7ff24b3895851854a2b3856ac83f2"))])
+	(:commit . "ecc58b8ee2667dcb024c8ce90010a823be412169"))])
  (lmc .
       [(1 4)
        nil "Little Man Computer in Elisp" tar
@@ -2886,6 +2886,19 @@
 	    (:authors
 	     ("Augusto Stoffel" . "arstoffel@gmail.com"))
 	    (:commit . "db669451bbee7d2ea9872c28661c4679391b9644"))])
+ (mathsheet .
+	    [(1 2)
+	     ((peg
+	       (1 0))
+	      (emacs
+	       (28 1)))
+	     "Generate dynamic math worksheets" tar
+	     ((:url . "https://gitlab.com/ianxm/mathsheet")
+	      (:keywords "tools" "education" "math")
+	      (:maintainer "Ian Martins" . "ianxm@jhu.edu")
+	      (:authors
+	       ("Ian Martins" . "ianxm@jhu.edu"))
+	      (:commit . "344d10db24358c0974bdd9fffc2e3f8d960fbb07"))])
  (matlab-mode .
 	      [(6 3)
 	       ((emacs
@@ -2901,15 +2914,15 @@
 		 ("Eric M. Ludlam" . "eludlam@mathworks.com"))
 		(:commit . "935137844e16551a5369f928d2591556be7fb9c2"))])
  (mct .
-      [(1 0 0)
+      [(1 1 0)
        ((emacs
 	 (29 1)))
        "Minibuffer Confines Transcended" tar
-       ((:url . "https://git.sr.ht/~protesilaos/mct")
+       ((:url . "https://github.com/protesilaos/mct")
 	(:maintainer "Protesilaos Stavrou" . "info@protesilaos.com")
 	(:authors
 	 ("Protesilaos Stavrou" . "info@protesilaos.com"))
-	(:commit . "2cbf74edb4f4553d7075b34e06adcf59e96efda2"))])
+	(:commit . "306cb704196c643b552aceb5893693641ca747d9"))])
  (memory-usage .
 	       [(0 2)
 		nil "Analyze the memory usage of Emacs in various ways" tar
@@ -4730,9 +4743,9 @@
 		  (:url . "https://elpa.gnu.org/packages/track-changes.html")
 		  (:commit . "ffb7d656a2c89f86ccd2de51379de9612c7a4aa3"))])
  (tramp .
-	[(2 7 2 4)
+	[(2 8 0)
 	 ((emacs
-	   (27 1)))
+	   (28 1)))
 	 "Transparent Remote Access, Multiple Protocol" tar
 	 ((:url . "https://www.gnu.org/software/tramp/")
 	  (:keywords "comm" "processes")
@@ -4740,7 +4753,7 @@
 	  (:authors
 	   ("Kai Großjohann" . "kai.grossjohann@gmx.net")
 	   ("Michael Albinus" . "michael.albinus@gmx.de"))
-	  (:commit . "c37e5fa5f4e60a19b38089672fbad377035a33a2"))])
+	  (:commit . "34921006953b49f5ec04389bbc901122a3549265"))])
  (tramp-nspawn .
 	       [(1 0 1)
 		((emacs
@@ -4772,7 +4785,7 @@
 	       (:url . "https://elpa.gnu.org/packages/transcribe.html")
 	       (:commit . "89832e4cdc1e6d8262a4a2c9d1ff70f398b8faf0"))])
  (transient .
-	    [(0 9 2)
+	    [(0 9 3)
 	     ((emacs
 	       (26 1))
 	      (compat
@@ -4785,7 +4798,7 @@
 	      (:maintainer "Jonas Bernoulli" . "emacs.transient@jonas.bernoulli.dev")
 	      (:authors
 	       ("Jonas Bernoulli" . "emacs.transient@jonas.bernoulli.dev"))
-	      (:commit . "f3f498aa155f88c7e2ab6d1d01d1361813059db8"))])
+	      (:commit . "49bbb29fd34b807948d4f2b91f61587c12a595f0"))])
  (transient-cycles .
 		   [(2 0)
 		    ((emacs

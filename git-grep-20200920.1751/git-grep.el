@@ -64,7 +64,7 @@
   "Search for the given regexp using `git grep' in the entire repository.
 This operation uses projectile to determine the root of the project
 and, by default, searchers for the current selection.."
-  (interactive)
+  (interactive "sRegexp: ")
   (unless (boundp 'grep-find-template) (grep-compute-defaults))
   (let ((old-command grep-find-template)
 	(search-text (buffer-substring-no-properties (region-beginning) (region-end))))
