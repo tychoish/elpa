@@ -10,8 +10,7 @@
 ;;             Bozhidar Batsov <bozhidar@batsov.dev>
 ;; URL: https://www.flycheck.org
 ;; Keywords: convenience, languages, tools
-;; Package-Version: 20250527.907
-;; Package-Revision: a4d782e7af12
+;; Version: 35.0
 ;; Package-Requires: ((emacs "27.1"))
 
 ;; This file is not part of GNU Emacs.
@@ -10893,7 +10892,6 @@ See URL `https://docs.astral.sh/ruff/'."
   :command ("ruff"
             "check"
             (config-file "--config" flycheck-python-ruff-config)
-            ;; older versions of ruff (before 0.2) used "text" instead of "concise"
             "--output-format=concise"
             (option "--stdin-filename" buffer-file-name)
             "-")
@@ -11393,7 +11391,7 @@ See URL `https://github.com/markdownlint/markdownlint'."
 
 See URL `https://pypi.org/project/pymarkdownlnt/'."
   :command ("pymarkdown"
-            (config-file "--config" flycheck-markdown-pymarkdown-config)
+            (config-file "--config" flycheck-markdown-markdownlint-cli-config)
             "scan"
             source)
   :error-patterns
