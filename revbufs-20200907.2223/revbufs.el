@@ -46,9 +46,9 @@ If there are orphans or out of date buffers, this operation opens
 the `*revbufs*' buffer reporting the outcome."
   (interactive)
   (let ((conflicts  '())
-	(orphans    '())
-	(reverts    '())
-	(report-buf (get-buffer-create "*revbufs*")))
+		(orphans    '())
+		(reverts    '())
+		(report-buf (get-buffer-create "*revbufs*")))
 
     ;; Process the buffers.
     (mapc (function
@@ -108,7 +108,7 @@ the `*revbufs*' buffer reporting the outcome."
 
 (defun revbufs-buffer-at-point ()
   "Used in revbufs report buffer to get the buffer in a report."
-  (plist-get (text-properties-at (point)) 'revbufs-buffer))
+  (plist-get (text-properties-at (line-end-position)) 'revbufs-buffer))
 
 (defun revbufs-find-other-window (&optional event)
   "Operation available within revbuf to view a listed buffer.

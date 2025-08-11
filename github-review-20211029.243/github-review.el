@@ -2,11 +2,10 @@
 ;; Author: Laurent Charignon <l.charignon@gmail.com>
 ;; Maintainer: Laurent Charignon <l.charignon@gmail.com>
 ;; Keywords: git, tools, vc, github
-;; Package-Commit: 725fbc7b385228f53a7ddc46a92c1276bab4aea8
 ;; Homepage: https://github.com/charignon/github-review
 ;; Package-Requires: ((emacs "25.1") (s "1.12.0") (ghub "2.0") (dash "2.11.0") (deferred "0.5.1") (a "0.1.1"))
 ;; Package-Version: 20211029.243
-;; Package-X-Original-Version: 0.1
+;; Package-Revision: 725fbc7b3852
 
 ;; This file is not part of GNU Emacs
 

@@ -1,8 +1,8 @@
 ;;; ctags-update.el --- (auto) update TAGS in parent directory using exuberant-ctags
 
 ;; Created: 2011-10-16 13:17
-;; Version: 1.1
 ;; Package-Version: 20190609.613
+;; Package-Revision: 67faf248b923
 ;; Author: Joseph(纪秀峰)  jixiuf@gmail.com
 ;; Keywords: exuberant-ctags etags
 ;; URL: https://github.com/jixiuf/ctags-update
