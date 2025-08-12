@@ -2,9 +2,8 @@
 
 ;; Author:     Neil Van Dyke <neil@neilvandyke.org>
 ;; Maintainer: Sam Kleinman <sam@tychoish.com>
-;; Version:    1.2
 ;; Package-Version: 20200907.2223
-;; Package-Commit: df3c02d3063951582c693ae12547993cec8256e2
+;; Package-Revision: df3c02d30639
 ;; URL:        http://www.neilvandyke.org/revbufs/
 ;; Keywords:   convenience buffers
 
@@ -123,8 +122,8 @@ Optional EVENT argument is ignored."
   "Operation available within revbuf report buffer to kill a buffer.
 Optional EVENT argument is ignored."
   (interactive)
-  (let ((buffer (revbufs-buffer-at-point))
-	(buffer-read-only nil))
+  (let ((buffer-read-only nil)
+	(buffer (revbufs-buffer-at-point)))
     (cond (buffer
 	   (kill-buffer buffer)
 	   (kill-whole-line))

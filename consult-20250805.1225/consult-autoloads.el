@@ -441,6 +441,7 @@ FETCHER and ALIST arguments.
 
 (fn FETCHER &optional ALIST)")
 (register-definition-prefixes "consult-xref" '("consult-xref--"))
+
 
 ;;; End of scraped data
 

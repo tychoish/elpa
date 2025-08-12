@@ -29,6 +29,7 @@ With ARG select snippets from all snippet tables, not just the current one.
 
 (fn ARG)" t)
 (register-definition-prefixes "consult-yasnippet" '("consult-yasnippet-"))
+
 
 ;;; End of scraped data
 

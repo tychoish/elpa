@@ -5,7 +5,7 @@
 ;; Author: Ingo Lohmar <i.lohmar@gmail.com>
 ;; URL: https://github.com/company-mode/company-statistics
 ;; Package-Version: 20170210.1933
-;; Version: 0.2.3
+;; Package-Revision: e62157d43b2c
 ;; Keywords: abbrev, convenience, matching
 ;; Package-Requires: ((emacs "24.3") (company "0.8.5"))
 
@@ -162,7 +162,8 @@ number)."
 
 (defun company-statistics--load ()
   "Restore statistics."
-  (load company-statistics-file 'noerror nil 'nosuffix))
+  (let ((inhibit-message t))
+    (load company-statistics-file 'noerror nil 'nosuffix)))
 
 ;; score calculation for insert/retrieval --- can be changed on-the-fly
 
