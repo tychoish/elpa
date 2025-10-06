@@ -5195,7 +5195,8 @@ input."
      :state (consult--grep-state)
      :initial initial
      :add-history (thing-at-point 'symbol)
-     :require-match t
+     :command #'consult-grep
+     :require-match nil
      :category 'consult-grep
      :group #'consult--prefix-group
      :history '(:input consult--grep-history)
