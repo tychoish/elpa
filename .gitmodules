@@ -1,0 +1,6 @@
+[submodule "claude-code"]
+	path = claude-code
+	url = ./claude-code
+[submodule "monet"]
+	path = monet
+	url = ./monet
