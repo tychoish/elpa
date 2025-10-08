@@ -4,3 +4,6 @@
 [submodule "monet"]
 	path = monet
 	url = ./monet
+[submodule "consult-ag"]
+	path = consult-ag
+	url = ./consult-ag
