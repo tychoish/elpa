@@ -1,9 +1,9 @@
 [submodule "claude-code"]
 	path = claude-code
-	url = ./claude-code
+	url = https://github.com/stevemolitor/claude-code.el
 [submodule "monet"]
 	path = monet
-	url = ./monet
+	url = https://github.com/stevemolitor/monet.git
 [submodule "consult-ag"]
 	path = consult-ag
-	url = ./consult-ag
+	url = https://github.com/yadex205/consult-ag.git
