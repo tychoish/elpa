@@ -7,3 +7,6 @@
 [submodule "consult-ag"]
 	path = consult-ag
 	url = https://github.com/yadex205/consult-ag.git
+[submodule "gptel"]
+	path = gptel
+	url = https://github.com/karthink/gptel.git
