@@ -1842,8 +1842,9 @@ Turning on `deft-mode' runs the hook `deft-mode-hook'.
                             (frame-text-cols)))
 
   ;; Visual line mode causes lines to wrap, so turn it off.
-  (when (fboundp 'visual-line-mode)
-    (visual-line-mode 0))
+  (when (and (boundp 'visual-line-mode)
+             visual-line-mode)
+    (visual-line-mode -1))
 
   (use-local-map deft-mode-map)
   (deft-cache-initialize)

@@ -1,9 +1,9 @@
 [submodule "monet"]
 	path = monet
 	url = https://github.com/stevemolitor/monet.git
-[submodule "consult-ag"]
-	path = consult-ag
-	url = https://github.com/yadex205/consult-ag.git
 [submodule "gptel"]
 	path = gptel
 	url = https://github.com/karthink/gptel.git
+[submodule "claude-code"]
+	path = claude-code
+	url = https://github.com/stevemolitor/claude-code.el
