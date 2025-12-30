@@ -1,7 +1,7 @@
 ;;; aidermacs.el --- AI pair programming with Aider -*- lexical-binding: t; -*-
 ;; Author: Mingde (Matthew) Zeng <matthewzmd@posteo.net>
-;; Package-Version: 20251020.2027
-;; Package-Revision: 14238322a636
+;; Package-Version: 20251203.2318
+;; Package-Revision: 6d0c41d1cfd2
 ;; Package-Requires: ((emacs "26.1") (transient "0.3.0") (compat "30.0.2.0") (markdown-mode "2.7"))
 ;; Keywords: ai emacs llm aider ai-pair-programming tools
 ;; URL: https://github.com/MatthewZMD/aidermacs
@@ -48,9 +48,41 @@
   "AI pair programming with Aider."
   :group 'aidermacs)
 
-(defcustom aidermacs-program "aider-ce"
-  "The name or path of the Aider program."
-  :type 'string)
+(defcustom aidermacs-program '("aider-ce" "aider")
+  "The name or path of the Aider program.
+If it is a list, Aidermacs will try each program in order."
+  :type '(choice string (repeat :tag "Program fallbacks" string)))
+
+(defvar aidermacs--resolved-programs (make-hash-table :test 'equal)
+  "Hash table of cached resolved Aider program paths keyed by workspace.")
+
+(defvar aidermacs--cached-versions (make-hash-table :test 'equal)
+  "Hash table of cached aider versions keyed by workspace.")
+
+(defun aidermacs--get-cache-key ()
+  "Generate a unique cache key based on current workspace context.
+Returns a string combining the remote connection (if any) and project root."
+  (let ((remote-prefix (file-remote-p default-directory))
+        (root (aidermacs-project-root)))
+    (concat (or remote-prefix "local") "::" root)))
+
+
+(defun aidermacs-get-program ()
+  "Resolve and return the path to the Aider program.
+The value is cached per-workspace in `aidermacs--resolved-programs`.
+It respects `aidermacs-program` which can be a string or a list of strings."
+  (let* ((key (aidermacs--get-cache-key))
+         (cached (gethash key aidermacs--resolved-programs)))
+    (or cached
+        (let* ((programs (if (listp aidermacs-program) aidermacs-program (list aidermacs-program)))
+               (finder-fn (if (file-remote-p default-directory)
+                              (lambda (prog) (executable-find prog t))
+                            #'executable-find))
+               (program (cl-some finder-fn programs)))
+          (unless program
+            (error "Aider executable not found. Checked: %s" programs))
+          (puthash key program aidermacs--resolved-programs)
+          program))))
 
 (defvar-local aidermacs--current-mode nil
   "Buffer-local variable to track the current aidermacs mode.
@@ -166,27 +198,37 @@ These will be available for selection when using aidermacs commands."
 (defun aidermacs-aider-version ()
   "Check the installed aider version.
 Returns a version string like \"0.77.0\" or nil if version can't be determined.
-Uses cached version if available to avoid repeated process calls."
+Uses cached version per-workspace if available to avoid repeated process calls."
   (interactive)
-  (let ((path exec-path))
-    (or aidermacs--cached-version
-        (setq aidermacs--cached-version
-              (with-temp-buffer
-                (setq-local exec-path path)
-                (when (= 0 (process-file aidermacs-program nil t nil "--version"))
-                  (goto-char (point-min))
-                  (when (re-search-forward
-                         "\\([0-9]+\\.[0-9]+\\.[0-9]+\\)" nil t)
-                    (match-string 0)))))))
-  (message "Aider version %s" aidermacs--cached-version)
-  aidermacs--cached-version)
+  (let* ((path exec-path)
+         (key (aidermacs--get-cache-key))
+         (cached (gethash key aidermacs--cached-versions)))
+    (unless cached
+      (let ((version
+             (with-temp-buffer
+               (setq-local exec-path path)
+               (when (= 0 (process-file (aidermacs-get-program) nil t nil "--version"))
+                 (goto-char (point-min))
+                 (when (re-search-forward
+                        "\\([0-9]+\\.[0-9]+\\.[0-9]+\\)" nil t)
+                   (match-string 0))))))
+        (puthash key version aidermacs--cached-versions)
+        (setq cached version)))
+    (message "Aider version %s" (or cached "unknown"))
+    cached))
 
-(defun aidermacs-clear-aider-version-cache ()
+(defun aidermacs-clear-aider-version-cache (&optional all)
   "Clear the cached aider version.
+With prefix argument ALL (C-u), clear all cached versions.
+Without prefix, clear only the cache for the current workspace.
 Call this after upgrading aider to ensure the correct version is detected."
-  (interactive)
-  (setq aidermacs--cached-version nil)
-  (message "Aider version cache cleared."))
+  (interactive "P")
+  (if all
+      (progn
+        (clrhash aidermacs--cached-versions)
+        (message "Aider version cache cleared for all workspaces."))
+    (remhash (aidermacs--get-cache-key) aidermacs--cached-versions)
+    (message "Aider version cache cleared for current workspace.")))
 
 (defun aidermacs-project-root ()
   "Get the project root using VC-git, or fallback to file directory.
@@ -423,6 +465,10 @@ set `aidermacs-default-chat-mode' to 'architect' instead."
                ;; Add weak model if specified
                (when aidermacs-weak-model
                  (list "--weak-model" aidermacs-weak-model))
+               ;; Aider-CE Only Option
+               (when (let ((prog (gethash (aidermacs--get-cache-key) aidermacs--resolved-programs)))
+                       (and prog (string-match-p "aider-ce" prog)))
+                 '("--linear-output"))
                (when aidermacs-global-read-only-files
                  (apply #'append
                         (mapcar (lambda (file) (list "--read" file))
@@ -439,7 +485,7 @@ set `aidermacs-default-chat-mode' to 'architect' instead."
                                aidermacs-extra-args)))
       (if (aidermacs--live-p buffer-name)
           (aidermacs-switch-to-buffer buffer-name)
-        (aidermacs-run-backend aidermacs-program final-args buffer-name)
+        (aidermacs-run-backend (aidermacs-get-program) final-args buffer-name)
         (with-current-buffer buffer-name
           ;; Set initial mode based on startup configuration
           (setq-local aidermacs--current-mode startup-mode))
