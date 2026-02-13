@@ -1,9 +1,8 @@
-[submodule "monet"]
-	path = monet
-	url = https://github.com/stevemolitor/monet.git
 [submodule "gptel"]
 	path = gptel
 	url = https://github.com/karthink/gptel.git
-[submodule "claude-code"]
-	path = claude-code
-	url = https://github.com/stevemolitor/claude-code.el
+	ignore = untracked
+[submodule "claude-code-ide"]
+	path = claude-code-ide
+	url = https://github.com/manzaltu/claude-code-ide.el
+	ignore = untracked
