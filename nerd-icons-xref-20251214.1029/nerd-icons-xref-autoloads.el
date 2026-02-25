@@ -37,7 +37,7 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "nerd-icons-xref" '("nerd-icons-xref--add-icons"))
+(register-definition-prefixes "nerd-icons-xref" '("nerd-icons-xref--add-"))
 
 ;;; End of scraped data
 

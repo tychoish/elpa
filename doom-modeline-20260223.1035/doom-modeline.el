@@ -1,11 +1,11 @@
 ;;; doom-modeline.el --- A minimal and modern mode-line -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2018-2025 Vincent Zhang
+;; Copyright (C) 2018-2026 Vincent Zhang
 
 ;; Author: Vincent Zhang <seagle0128@gmail.com>
 ;; Homepage: https://github.com/seagle0128/doom-modeline
-;; Package-Version: 20251026.1604
-;; Package-Revision: 20de9feaa0ba
+;; Package-Version: 20260223.1035
+;; Package-Revision: 499a44c0333d
 ;; Package-Requires: ((emacs "25.1") (compat "30.1.0.0") (nerd-icons "0.1.0") (shrink-path "0.3.1"))
 ;; Keywords: faces mode-line
 
@@ -75,7 +75,7 @@
 ;; or
 ;; (use-package doom-modeline
 ;;   :ensure t
-;;   :hook (after-init . doom-modeline-mode))
+;;   :init (doom-modeline-mode 1))
 ;;
 
 ;;; Code:
@@ -113,11 +113,11 @@
   '(compilation misc-info battery irc mu4e gnus github debug minor-modes buffer-encoding major-mode process time))
 
 (doom-modeline-def-modeline 'package
-  '(bar window-number modals package)
+  '(bar window-number modals matches package buffer-position parrot)
   '(compilation misc-info major-mode process time))
 
 (doom-modeline-def-modeline 'info
-  '(bar window-number modals buffer-info info-nodes buffer-position parrot selection-info)
+  '(bar window-number modals matches buffer-info info-nodes buffer-position parrot selection-info)
   '(compilation misc-info buffer-encoding major-mode time))
 
 (doom-modeline-def-modeline 'media
@@ -129,7 +129,7 @@
   '(compilation objed-state misc-info battery debug minor-modes input-method indent-info buffer-encoding major-mode time))
 
 (doom-modeline-def-modeline 'pdf
-  '(bar window-number modals matches buffer-info pdf-pages)
+  '(bar window-number modals matches buffer-info pdf-pages reader-pages)
   '(compilation misc-info major-mode process vcs time))
 
 (doom-modeline-def-modeline 'org-src
@@ -186,7 +186,9 @@ If DEFAULT is non-nil, set the default mode-line for all buffers."
     (Info-mode            . info)
     (image-mode           . media)
     (pdf-view-mode        . pdf)
+    (reader-mode          . pdf)
     (org-src-mode         . org-src)
+    (package-menu-mode    . package)
     (paradox-menu-mode    . package)
     (xwidget-webkit-mode  . minimal)
     (git-timemachine-mode . timemachine)
@@ -245,10 +247,18 @@ If DEFAULT is non-nil, set the default mode-line for all buffers."
         ;; For two-column editing
         (setq 2C-mode-line-format (doom-modeline 'special))
 
+        ;; For window
+        (if (boundp 'after-focus-change-function)
+            (add-function :after after-focus-change-function #'doom-modeline-focus-change)
+          (with-no-warnings
+            (add-hook 'focus-in-hook #'doom-modeline-set-selected-window)
+            (add-hook 'focus-out-hook #'doom-modeline-unset-selected-window)))
+        (add-hook 'window-selection-change-functions #'doom-modeline-set-selected-window)
+
         ;; Automatically set mode-lines
         (add-hook 'after-change-major-mode-hook #'doom-modeline-auto-set-modeline)
 
-        ;; Setup font height cache hook
+        ;; Setup font height cache
         (add-hook 'after-setting-font-hook #'doom-modeline--reset-font-height-cache)
 
         ;; Special handles
@@ -274,14 +284,25 @@ If DEFAULT is non-nil, set the default mode-line for all buffers."
       ;; For two-column editing
       (setq 2C-mode-line-format (doom-modeline--original-value '2C-mode-line-format))
 
-      ;; Remove font height cache hook
+      ;; Cleanup
+      ;; For window
+      (if (boundp 'after-focus-change-function)
+          (remove-function after-focus-change-function #'doom-modeline-focus-change)
+        (with-no-warnings
+          (remove-hook 'focus-in-hook #'doom-modeline-set-selected-window)
+          (remove-hook 'focus-out-hook #'doom-modeline-unset-selected-window)))
+      (remove-hook 'window-selection-change-functions #'doom-modeline-set-selected-window)
+
+      ;; For major modes
+      (remove-hook 'after-change-major-mode-hook #'doom-modeline-auto-set-modeline)
+
+      ;; For font height cache
       (remove-hook 'after-setting-font-hook #'doom-modeline--reset-font-height-cache)
 
-      ;; Cleanup
+      ;; For special handles
       (advice-remove #'speedbar-set-mode-line-format #'doom-modeline-set-speebar-modeline)
       (and (fboundp 'speedbar-set-mode-line-format) (speedbar-set-mode-line-format)) ; reset speedbar
 
-      (remove-hook 'after-change-major-mode-hook #'doom-modeline-auto-set-modeline)
       (advice-remove #'helm-display-mode-line #'doom-modeline-set-helm-modeline)
       (setq helm-ag-show-status-function (default-value 'helm-ag-show-status-function)))))
 

@@ -4,8 +4,8 @@
 
 ;; Author: Hongyu Ding <rainstormstudio@yahoo.com>, Vincent Zhang <seagle0128@gmail.com>
 ;; Keywords: lisp
-;; Package-Version: 20251103.1813
-;; Package-Revision: c65ff02a960b
+;; Package-Version: 20260129.1655
+;; Package-Revision: 9a7f44db9a53
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/rainstormstudio/nerd-icons.el
 ;; Keywords: convenient, lisp
@@ -87,6 +87,7 @@
 
 (defvar nerd-icons-extension-icon-alist
   '(
+    ;; Shell
     ("fish"           nerd-icons-devicon "nf-dev-terminal"       :face nerd-icons-lpink)
     ("zsh"            nerd-icons-devicon "nf-dev-terminal"       :face nerd-icons-lcyan)
     ("sh"             nerd-icons-devicon "nf-dev-terminal"       :face nerd-icons-purple)
@@ -119,17 +120,18 @@
     ("dockerignore"   nerd-icons-devicon "nf-dev-docker"         :face nerd-icons-dblue)
     ("plist"          nerd-icons-faicon "nf-fa-file_code"        :face nerd-icons-dsilver)
     ("xml"            nerd-icons-faicon "nf-fa-file_code_o"      :face nerd-icons-lorange)
-    ("json"           nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-yellow)
-    ("jsonc"          nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-yellow)
-    ("jsonl"          nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-yellow)
+    ("json"           nerd-icons-mdicon "nf-md-code_json"        :face nerd-icons-yellow)
+    ("jsonc"          nerd-icons-mdicon "nf-md-code_json"        :face nerd-icons-yellow)
+    ("jsonl"          nerd-icons-mdicon "nf-md-code_json"        :face nerd-icons-yellow)
     ("cson"           nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-yellow)
     ("yml"            nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-dyellow)
     ("yaml"           nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-dyellow)
-    ("toml"           nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-orange)
+    ("toml"           nerd-icons-sucicon "nf-custom-toml"        :face nerd-icons-orange)
     ("conf"           nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-dorange)
     ("editorconfig"   nerd-icons-sucicon "nf-seti-editorconfig"  :face nerd-icons-silver)
     ("idekeybindings" nerd-icons-faicon "nf-fa-file_code_o"      :face nerd-icons-lblue)
     ("cfg"            nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-dorange)
+    ("env"            nerd-icons-codicon "nf-cod-settings"       :face nerd-icons-yellow)
     ;; ?
     ("pkg"            nerd-icons-octicon "nf-oct-package"        :face nerd-icons-dsilver)
     ("rpm"            nerd-icons-octicon "nf-oct-package"        :face nerd-icons-dsilver)
@@ -193,6 +195,7 @@
     ("pro"            nerd-icons-sucicon "nf-seti-prolog"        :face nerd-icons-lmaroon)
     ("proog"          nerd-icons-sucicon "nf-seti-prolog"        :face nerd-icons-lmaroon)
     ("py"             nerd-icons-devicon "nf-dev-python"         :face nerd-icons-dblue)
+    ("pyc"            nerd-icons-devicon "nf-dev-python"         :face nerd-icons-dsilver)
     ;; ("idr"         nerd-icons-devicon "idris") TODO: idris
     ("ipynb"          nerd-icons-devicon "nf-dev-jupyter"        :face nerd-icons-orange)
     ("gem"            nerd-icons-codicon "nf-cod-ruby"           :face nerd-icons-red)
@@ -202,6 +205,7 @@
     ("rb"             nerd-icons-codicon "nf-cod-ruby"           :face nerd-icons-lred)
     ("rs"             nerd-icons-devicon "nf-dev-rust"           :face nerd-icons-maroon)
     ("rlib"           nerd-icons-devicon "nf-dev-rust"           :face nerd-icons-dmaroon)
+    ("ron"            nerd-icons-devicon "nf-dev-rust"           :face nerd-icons-dorange)
     ("r"              nerd-icons-sucicon "nf-seti-r"             :face nerd-icons-lblue)
     ("rd"             nerd-icons-sucicon "nf-seti-r"             :face nerd-icons-lblue)
     ("rdx"            nerd-icons-sucicon "nf-seti-r"             :face nerd-icons-lblue)
@@ -245,6 +249,8 @@
     ("ledger"         nerd-icons-mdicon  "nf-md-file_table_box_multiple" :face nerd-icons-green)
     ("rkt"            nerd-icons-sucicon "nf-custom-scheme"      :face nerd-icons-red)
     ("scrbl"          nerd-icons-sucicon "nf-custom-scheme"      :face nerd-icons-blue)
+    ;; Vim
+    ("vim"            nerd-icons-sucicon "nf-custom-vim"         :face nerd-icons-dgreen)
     ;; Stylesheeting
     ("css"            nerd-icons-devicon "nf-dev-css3"           :face nerd-icons-yellow)
     ("scss"           nerd-icons-mdicon "nf-md-sass"             :face nerd-icons-pink)
@@ -274,6 +280,9 @@
     ("slim"           nerd-icons-codicon "nf-cod-dashboard"      :face nerd-icons-yellow)
     ("jade"           nerd-icons-sucicon "nf-seti-jade"          :face nerd-icons-red)
     ("pug"            nerd-icons-sucicon "nf-seti-pug"           :face nerd-icons-red)
+    ;; WASM
+    ("wasm"           nerd-icons-sucicon "nf-seti-wasm"          :face nerd-icons-purple-alt)
+    ("wat"            nerd-icons-devicon "nf-dev-wasm"           :face nerd-icons-purple-alt)
     ;; Javascript
     ("d3js"           nerd-icons-devicon "nf-dev-d3js"           :face nerd-icons-orange)
     ("re"             nerd-icons-sucicon "nf-seti-reasonml"      :face nerd-icons-red-alt)
@@ -288,6 +297,8 @@
     ("tsx"            nerd-icons-devicon "nf-dev-react"          :face nerd-icons-lblue)
     ("njs"            nerd-icons-mdicon "nf-md-nodejs"           :face nerd-icons-lgreen)
     ("vue"            nerd-icons-sucicon "nf-seti-vue"           :face nerd-icons-lgreen)
+    ("mjs"            nerd-icons-devicon "nf-dev-javascript"     :face nerd-icons-yellow)
+    ("cjs"            nerd-icons-devicon "nf-dev-javascript"     :face nerd-icons-yellow)
 
     ("sbt"            nerd-icons-sucicon "nf-seti-sbt"           :face nerd-icons-red)
     ("scala"          nerd-icons-devicon "nf-dev-scala"          :face nerd-icons-red)
@@ -340,6 +351,8 @@
     ("dockerfile"     nerd-icons-sucicon "nf-seti-docker"        :face nerd-icons-cyan)
     ;; Vagrant
     ;; ("vagrantfile" nerd-icons-fileicon "vagrant") TODO: vagrant
+    ;; HLSL
+    ("hlsl"           nerd-icons-faicon "nf-fa-paint_brush"      :face nerd-icons-blue)
     ;; GLSL
     ("glsl"           nerd-icons-faicon "nf-fa-paint_brush"      :face nerd-icons-blue)
     ("vert"           nerd-icons-faicon "nf-fa-paint_brush"      :face nerd-icons-blue)
@@ -348,6 +361,8 @@
     ("geom"           nerd-icons-faicon "nf-fa-paint_brush"      :face nerd-icons-green)
     ("frag"           nerd-icons-faicon "nf-fa-paint_brush"      :face nerd-icons-red)
     ("comp"           nerd-icons-faicon "nf-fa-paint_brush"      :face nerd-icons-dblue)
+    ;; WGSL
+    ("wgsl"           nerd-icons-faicon "nf-fa-paint_brush"      :face nerd-icons-blue)
     ;; CUDA
     ("cu"             nerd-icons-sucicon "nf-custom-c"           :face nerd-icons-green)
     ("cuh"            nerd-icons-faicon "nf-fa-h_square"         :face nerd-icons-green)
@@ -469,7 +484,13 @@
     ;; backup
     ("backup"         nerd-icons-mdicon "nf-md-file_restore"     :face nerd-icons-lblue)
     ("old"            nerd-icons-mdicon "nf-md-file_restore"     :face nerd-icons-lblue)
-    ("bak"            nerd-icons-mdicon "nf-md-file_restore"     :face nerd-icons-lblue)))
+    ("bak"            nerd-icons-mdicon "nf-md-file_restore"     :face nerd-icons-lblue)
+    ;; Lock
+    ("lock"           nerd-icons-octicon "nf-oct-lock"           :face nerd-icons-red)
+    ;; Visual Studio
+    ("sln"            nerd-icons-mdicon "nf-md-microsoft_visual_studio" :face nerd-icons-purple)
+    ("slnx"           nerd-icons-mdicon "nf-md-microsoft_visual_studio" :face nerd-icons-purple)
+    ("csproj"         nerd-icons-mdicon "nf-md-language_csharp"         :face nerd-icons-green)))
 
 (defvar                        nerd-icons-regexp-icon-alist
   '(
@@ -483,6 +504,7 @@
     ;; misc GNU documentation files
     ("^\\(MAINTAINERS\\|CONTRIBUTE\\|BUGS\\).*$"  nerd-icons-mdicon
      "nf-md-book" :face nerd-icons-blue)
+    ("^code-of-conduct$"       nerd-icons-octicon "nf-oct-code_of_conduct"   :face nerd-icons-pink)
 
     ;; (info "(standards) NEWS File")
     ("^NEWS.*$"                nerd-icons-faicon "nf-fa-newspaper"           :face nerd-icons-green)
@@ -493,13 +515,46 @@
     ("^INSTALL.*$"             nerd-icons-faicon "nf-fa-file_arrow_down"     :face nerd-icons-green)
 
     ;; autotools related
-    ("^Makefile.\\(am\\|in\\)$" nerd-icons-sucicon "nf-seti-makefile"        :face nerd-icons-lsilver)
+    ("^Makefile.\\(am\\|in\\)$" nerd-icons-sucicon "nf-seti-makefile"         :face nerd-icons-lsilver)
     ("^configure.\\(in\\|ac\\)" nerd-icons-mdicon  "nf-md-file_cog"           :face nerd-icons-lsilver)
-    ("^configure$"             nerd-icons-devicon "nf-dev-terminal"          :face nerd-icons-lsilver)
+    ("^configure$"              nerd-icons-devicon "nf-dev-terminal"          :face nerd-icons-lsilver)
     ("^config.\\(guess\\|rpath\\|status\\|sub\\)$" nerd-icons-devicon "nf-dev-terminal"
      :face nerd-icons-lsilver)
     ("^\\(ar-lib\\|depmond\\|install-sh\\|missing\\|mkdep\\|mkinstalldirs\\|move-if-change\\|symlink-tree\\|test-driver\\|ylwrap\\)$"
      nerd-icons-devicon "nf-dev-terminal" :face nerd-icons-lsilver)
+    ("^\\.editorconfig$"        nerd-icons-sucicon "nf-seti-editorconfig"     :face nerd-icons-silver)
+
+    ;; Env
+    ("^\\.env$"                       nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.defaults$"            nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.example$"             nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.sample$"              nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.template$"            nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.schema$"              nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.local$"               nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.dev$"                 nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.development$"         nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.alpha$"               nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.e2e$"                 nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.qa$"                  nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.dist$"                nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.prod$"                nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.production$"          nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.stage$"               nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.staging$"             nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.preview$"             nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.test$"                nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.testing$"             nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.dev\\.local$"         nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.development\\.local$" nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.qa\\.local$"          nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.prod\\.local$"        nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.production\\.local$"  nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.staging\\.local$"     nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.test\\.local$"        nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.uat$"                 nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.env\\.cat$"                 nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
+    ("^\\.envrc$"                 nerd-icons-codicon "nf-cod-settings"          :face nerd-icons-yellow)
 
     ;; Config
     ("nginx$"                  nerd-icons-devicon "nf-dev-nginx"             :face nerd-icons-dgreen)
@@ -513,7 +568,10 @@
     ("^meson_options.txt$"     nerd-icons-sucicon "nf-seti-makefile"         :face nerd-icons-purple) ;; TODO: meson
 
     ;; Docker
-    ("^\\.?Dockerfile"         nerd-icons-sucicon "nf-seti-docker"           :face nerd-icons-blue)
+    ("^\\.dockerignore$"                  nerd-icons-devicon "nf-dev-docker"  :face nerd-icons-dblue)
+    ("^\\.?\\(Container\\|Docker\\)file"  nerd-icons-sucicon "nf-seti-docker" :face nerd-icons-blue)
+    ("^\\(docker-\\)?compose\\.ya?ml$"    nerd-icons-sucicon "nf-seti-docker" :face nerd-icons-cyan)
+    ("^\\docker-compose\\.gitlab\\.ya?ml" nerd-icons-sucicon "nf-seti-docker" :face nerd-icons-cyan)
 
     ;; Homebrew
     ("^Brewfile$"              nerd-icons-faicon "nf-fa-beer"                :face nerd-icons-lsilver)
@@ -554,11 +612,18 @@
     ("-?test\\.jsx$"           nerd-icons-mdicon "nf-md-react"               :face nerd-icons-blue-alt)
 
     ;; Git
+    ("^\\.git$"                nerd-icons-sucicon "nf-seti-git"              :face nerd-icons-lred)
+    ("^\\.gitattributes$"      nerd-icons-sucicon "nf-seti-git"              :face nerd-icons-lred)
+    ("^\\.gitignore$"          nerd-icons-sucicon "nf-seti-git"              :face nerd-icons-lred)
+    ("^\\.gitmodules$"         nerd-icons-sucicon "nf-seti-git"              :face nerd-icons-lred)
     ("^MERGE_"                 nerd-icons-octicon "nf-oct-git_merge"         :face nerd-icons-red)
     ("^COMMIT_EDITMSG"         nerd-icons-octicon "nf-oct-git_commit"        :face nerd-icons-red)
 
+    ;; Gitlab
+    ("^\\.gitlab-ci\\.ya?ml$"  nerd-icons-devicon "nf-dev-gitlab"            :face nerd-icons-orange)
+
     ;; Stylesheeting
-    ("^stylelint"               nerd-icons-sucicon "nf-seti-stylelint"        :face nerd-icons-lyellow)
+    ("^stylelint"              nerd-icons-sucicon "nf-seti-stylelint"        :face nerd-icons-lyellow)
 
     ;; JavaScript
     ("^package.json$"          nerd-icons-devicon "nf-dev-npm"               :face nerd-icons-red)
@@ -568,7 +633,13 @@
     ("^bower.json$"            nerd-icons-devicon "nf-dev-bower"             :face nerd-icons-lorange)
     ("^gulpfile"               nerd-icons-devicon "nf-dev-gulp"              :face nerd-icons-lred)
     ("^gruntfile"              nerd-icons-devicon "nf-dev-grunt"             :face nerd-icons-lyellow)
-    ("^webpack"                nerd-icons-mdicon "nf-md-webpack"             :face nerd-icons-lblue)
+    ("^webpack"                nerd-icons-devicon "nf-dev-webpack"           :face nerd-icons-lblue)
+    ("^\\.?eslint"             nerd-icons-devicon "nf-dev-eslint"            :face nerd-icons-lblue)
+    ("^\\.?prettier"           nerd-icons-sucicon "nf-custom-prettier"       :face nerd-icons-silver)
+    ("\\`babel\\.config.*"     nerd-icons-sucicon "nf-seti-babel"            :face nerd-icons-yellow)
+    ("^vite.config"            nerd-icons-devicon "nf-dev-vitest"            :face nerd-icons-yellow)
+    ("^vitest"                 nerd-icons-devicon "nf-dev-vitest"            :face nerd-icons-yellow)
+    ("^\\.?jest"               nerd-icons-devicon "nf-dev-jest"              :face nerd-icons-lred)
 
     ;; Go
     ("^go.mod$"                nerd-icons-sucicon "nf-seti-config"           :face nerd-icons-blue-alt)
@@ -589,6 +660,9 @@
     ;; Rust
     ("^Cargo.toml$"            nerd-icons-devicon "nf-dev-rust"              :face nerd-icons-yellow)
     ("^Cargo.lock$"            nerd-icons-devicon "nf-dev-rust"              :face nerd-icons-dyellow)
+
+    ;; Nix
+    ("^flake\\.lock$"          nerd-icons-mdicon "nf-md-nix"                 :face nerd-icons-blue)
 
     ("^\\."                    nerd-icons-octicon "nf-oct-gear")))
 
@@ -761,14 +835,14 @@
     (docker-compose-mode               nerd-icons-sucicon "nf-seti-docker"               :face nerd-icons-lblue)
     (nxml-mode                         nerd-icons-faicon "nf-fa-file_code_o"             :face nerd-icons-lorange)
     (conf-mode                         nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-lyellow)
-    (json-mode                         nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-yellow)
-    (json-ts-mode                      nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-yellow)
-    (jsonc-mode                        nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-yellow)
+    (json-mode                         nerd-icons-mdicon "nf-md-code_json"               :face nerd-icons-yellow)
+    (json-ts-mode                      nerd-icons-mdicon "nf-md-code_json"               :face nerd-icons-yellow)
+    (jsonc-mode                        nerd-icons-mdicon "nf-md-code_json"               :face nerd-icons-yellow)
     (jsonian-mode                      nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-yellow)
     (yaml-mode                         nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-dyellow)
     (yaml-ts-mode                      nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-dyellow)
-    (toml-mode                         nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-orange)
-    (toml-ts-mode                      nerd-icons-codicon "nf-cod-settings"              :face nerd-icons-orange)
+    (toml-mode                         nerd-icons-sucicon "nf-custom-toml"               :face nerd-icons-orange)
+    (toml-ts-mode                      nerd-icons-sucicon "nf-custom-toml"               :face nerd-icons-orange)
     (elisp-byte-code-mode              nerd-icons-octicon "nf-oct-file_binary"           :face nerd-icons-dsilver)
     (archive-mode                      nerd-icons-octicon "nf-oct-file_zip"              :face nerd-icons-lmaroon)
     (elm-mode                          nerd-icons-sucicon "nf-custom-elm"                :face nerd-icons-blue)
@@ -787,8 +861,10 @@
     (graphql-mode                      nerd-icons-sucicon "nf-seti-graphql"              :face nerd-icons-dpink)
     (matlab-mode                       nerd-icons-devicon "nf-dev-matlab"                :face nerd-icons-orange)
     (nix-mode                          nerd-icons-mdicon  "nf-md-nix"                    :face nerd-icons-blue)
+    (nix-ts-mode                       nerd-icons-mdicon  "nf-md-nix"                    :face nerd-icons-blue)
     (perl-mode                         nerd-icons-sucicon "nf-seti-perl"                 :face nerd-icons-lorange)
     (cperl-mode                        nerd-icons-sucicon "nf-seti-perl"                 :face nerd-icons-lorange)
+    (perl-ts-mode                      nerd-icons-sucicon "nf-seti-perl"                 :face nerd-icons-lorange)
     (php-mode                          nerd-icons-devicon "nf-dev-php"                   :face nerd-icons-lsilver)
     (php-ts-mode                       nerd-icons-devicon "nf-dev-php"                   :face nerd-icons-lsilver)
     (prolog-mode                       nerd-icons-devicon "nf-dev-prolog"                :face nerd-icons-lmaroon)
@@ -799,6 +875,7 @@
     (rust-mode                         nerd-icons-devicon "nf-dev-rust"                  :face nerd-icons-maroon)
     (rustic-mode                       nerd-icons-devicon "nf-dev-rust"                  :face nerd-icons-maroon)
     (rust-ts-mode                      nerd-icons-devicon "nf-dev-rust"                  :face nerd-icons-maroon)
+    (ron-mode                          nerd-icons-devicon "nf-dev-rust"                  :face nerd-icons-dorange)
     (scala-mode                        nerd-icons-devicon "nf-dev-scala"                 :face nerd-icons-red)
     (scheme-mode                       nerd-icons-sucicon "nf-custom-scheme"             :face nerd-icons-red)
     (swift-mode                        nerd-icons-devicon "nf-dev-swift"                 :face nerd-icons-lred)
@@ -814,6 +891,7 @@
     (c++-ts-mode                       nerd-icons-sucicon "nf-custom-cpp"                :face nerd-icons-blue)
     (csharp-mode                       nerd-icons-mdicon "nf-md-language_csharp"         :face nerd-icons-dblue)
     (csharp-ts-mode                    nerd-icons-mdicon "nf-md-language_csharp"         :face nerd-icons-dblue)
+    (csproj-mode                       nerd-icons-mdicon "nf-md-language_csharp"         :face nerd-icons-green)
     (clojure-mode                      nerd-icons-devicon "nf-dev-clojure_alt"           :face nerd-icons-blue)
     (clojure-ts-mode                   nerd-icons-devicon "nf-dev-clojure_alt"           :face nerd-icons-blue)
     (cider-repl-mode                   nerd-icons-devicon "nf-dev-clojure_alt"           :face nerd-icons-green)
@@ -1067,18 +1145,17 @@
 (defun nerd-icons-auto-mode-match? (&optional file)
   "Whether or not FILE's `major-mode' match against its `auto-mode-alist'."
   (let* ((file (or file (buffer-file-name) (buffer-name)))
-         (auto-mode (nerd-icons-match-to-alist file auto-mode-alist)))
+         (auto-mode (nerd-icons--auto-mode-lookup (file-name-nondirectory file))))
     (eq major-mode auto-mode)))
 
-(defvar nerd-icons--file-cache (make-hash-table :test 'equal)
-  "Cache for file extension to mode mapping.")
+(defun nerd-icons--auto-mode-lookup (file)
+  "Return the mode-setting function associated with FILE via `auto-mode-alist'.
+NOTE: The mode-setting function may not be the same as the mode itself."
+  (nerd-icons-match-to-alist file auto-mode-alist))
 
-(defun nerd-icons-match-to-alist (file alist)
-  "Match FILE against an entry in ALIST using `string-match'."
-  (or (gethash file nerd-icons--file-cache)
-      (puthash file
-               (cdr (cl-find-if (lambda (it) (string-match (car it) file)) alist))
-               nerd-icons--file-cache)))
+(defun nerd-icons-match-to-alist (string alist)
+  "Match STRING against an entry in ALIST using `string-match'."
+  (cdr (assoc string alist #'string-match)))
 
 (defun nerd-icons-dir-is-submodule (dir)
   "Checker whether or not DIR is a git submodule."
@@ -1199,10 +1276,10 @@ ARG-OVERRIDES should be a plist containining `:height',
 inserting functions."
   (let* ((name (file-name-nondirectory file))
          (ext (file-name-extension name))
-         (icon (or (and ext
+         (icon (or (nerd-icons-match-to-alist name nerd-icons-regexp-icon-alist)
+                   (and ext
                         (cdr (assoc (downcase ext)
                                     nerd-icons-extension-icon-alist)))
-                   (nerd-icons-match-to-alist name nerd-icons-regexp-icon-alist)
                    nerd-icons-default-file-icon))
          (args (cdr icon)))
     (when arg-overrides (setq args (append `(,(car args)) arg-overrides (cdr args))))
@@ -1239,7 +1316,8 @@ ARG-OVERRIDES should be a plist containining `:height',
 `:v-adjust' or `:face' properties like in the normal icon
 inserting functions."
   (let* ((modes (nerd-icons--mode-parents mode))
-         (icon (cdr (cl-some (lambda (m) (assq m nerd-icons-mode-icon-alist)) modes))))
+         (icon (cdr (or (cl-some (lambda (m) (assq m nerd-icons-mode-icon-alist)) modes)
+                        (assq 'fundamental-mode nerd-icons-mode-icon-alist)))))
     (when icon
       (if arg-overrides
           (apply (car icon) (cadr icon) (append arg-overrides (cddr icon)))
@@ -1282,23 +1360,25 @@ icon."
   (unless (get func 'nerd-icons--cached)
     (let ((cache (make-hash-table :test #'equal
                                   :size nerd-icons--cache-limit))
-          (orig-fn (symbol-function func)))
+          (orig-fn (symbol-function func))
+          (unset (make-symbol "unset")))
       (fset func
             (lambda (&rest args)
-              (or (gethash args cache)
-                  (progn
-                    (when (> (hash-table-count cache)
-                             nerd-icons--cache-limit)
-                      (clrhash cache))
-                    (puthash args (apply orig-fn args) cache)))))))
-
-  (put func 'nerd-icons--cached t))
+              (let ((value (gethash args cache unset)))
+                (when (eq value unset)
+                  (when (> (hash-table-count cache)
+                           nerd-icons--cache-limit)
+                    (clrhash cache))
+                  (setq value (puthash args (apply orig-fn args) cache)))
+                value))))
+    (put func 'nerd-icons--cached t)))
 
 (nerd-icons-cache #'nerd-icons-icon-for-dir)
 (nerd-icons-cache #'nerd-icons-icon-for-file)
 (nerd-icons-cache #'nerd-icons-icon-for-extension)
 (nerd-icons-cache #'nerd-icons-icon-for-mode)
 (nerd-icons-cache #'nerd-icons-icon-for-url)
+(nerd-icons-cache #'nerd-icons--auto-mode-lookup)
 
 ;; Weather icons
 (defun nerd-icons-icon-for-weather (weather)
@@ -1306,6 +1386,8 @@ icon."
   (let ((icon (nerd-icons-match-to-alist weather nerd-icons-weather-icon-alist)))
     (when icon
       (apply (car icon) (cdr icon)))))
+
+(nerd-icons-cache #'nerd-icons-icon-for-weather)
 
 (eval-and-compile
   (defun nerd-icons--function-name (name)

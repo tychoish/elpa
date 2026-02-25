@@ -4,8 +4,8 @@
 ;;
 ;; Author: Aleksei Gusev <aleksei.gusev@gmail.com>
 ;; Created: May 11, 2025
-;; Package-Version: 20250625.1113
-;; Package-Revision: 477369eac359
+;; Package-Version: 20251214.1029
+;; Package-Revision: 47db9ce08fe6
 ;; Keywords: tools, xref, icons
 ;; Homepage: https://github.com/hron/nerd-icons-xref
 ;; Package-Requires: ((emacs "30.1") (nerd-icons "0.0.1") (xref "1.0.4"))
@@ -40,18 +40,24 @@
   :group 'xref
   :link '(emacs-commentary-link :tag "Commentary" "nerd-icons-xref.el"))
 
+(defun nerd-icons-xref--add-overlay (position string)
+  "Add overlay at POSITION to display STRING."
+  (let ((overlay (make-overlay position (+ position 1))))
+    (overlay-put overlay 'nerd-icons-dired-overlay t)
+    (overlay-put overlay 'evaporate t)
+    (overlay-put overlay 'before-string (propertize string 'display string))))
+
 (defun nerd-icons-xref--add-icons ()
   "Add nerd-icons to xref results."
   (save-excursion
     (goto-char (point-min))
     (let ((prop))
       (while (setq prop (text-property-search-forward 'xref-group))
-        (let* ((start (prop-match-beginning prop))
-               (end (prop-match-end prop))
-               (file (string-chop-newline (buffer-substring-no-properties start end))))
-          (save-excursion
-            (goto-char start)
-            (insert-before-markers (nerd-icons-icon-for-file file) " ")))))))
+        (when-let* ((start (prop-match-beginning prop))
+                    (end (prop-match-end prop))
+                    (file (string-chop-newline (buffer-substring-no-properties start end)))
+                    (icon (nerd-icons-icon-for-file file)))
+          (nerd-icons-xref--add-overlay start (concat icon " ")))))))
 
 ;;;###autoload
 (define-minor-mode nerd-icons-xref-mode

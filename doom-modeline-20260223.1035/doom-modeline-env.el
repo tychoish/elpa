@@ -1,6 +1,6 @@
 ;;; doom-modeline-env.el --- A environment parser for doom-modeline -*- lexical-binding: t -*-
 
-;; Copyright (C) 2019-2025 Vincent Zhang, Justin Barclay
+;; Copyright (C) 2019-2026 Vincent Zhang, Justin Barclay
 
 ;; This file is not part of GNU Emacs.
 
@@ -100,13 +100,13 @@ Example: \\='doom-modeline-env--ruby")
            (run-hooks 'doom-modeline-after-update-env-hook)))))))
 
 (add-hook 'find-file-hook #'doom-modeline-update-env)
-(with-no-warnings
-  (if (boundp 'after-focus-change-function)
-      (add-function
-       :after after-focus-change-function
-       (lambda ()
-         (if (frame-focus-state)
-             (doom-modeline-update-env))))
+(if (boundp 'after-focus-change-function)
+    (add-function
+     :after after-focus-change-function
+     (lambda ()
+       (if (frame-focus-state)
+           (doom-modeline-update-env))))
+  (with-no-warnings
     (add-hook 'focus-in-hook #'doom-modeline-update-env)))
 
 (defun doom-modeline-env--get (prog args callback)
@@ -121,7 +121,7 @@ Example:
         (message (doom-modeline-parser--ruby line)))"
   (when-let* ((proc (ignore-errors
                       (apply 'start-process
-                             ;; Flaten process-args into a single list so we can handle
+                             ;; Flatten process-args into a single list so we can handle
                              ;; variadic length args
                              (append
                               (list "doom-modeline-env" nil prog)
@@ -203,7 +203,7 @@ PARSER should be a function for parsing COMMAND's output line-by-line, to
 (doom-modeline-def-env python
   :hooks   '(python-mode-hook python-ts-mode-hook)
   :command (lambda () (cond ((and (executable-find "pipenv")
-                                  (locate-dominating-file default-directory "Pipfile"))
+                             (locate-dominating-file default-directory "Pipfile"))
                         (list "pipenv" "run"
                               (or doom-modeline-env-python-executable
                                   python-shell-interpreter
@@ -211,16 +211,16 @@ PARSER should be a function for parsing COMMAND's output line-by-line, to
                               "--version"))
                        ((executable-find "pyenv") (list "pyenv" "version-name"))
                        ((and (executable-find "direnv")
-                                  (locate-dominating-file default-directory ".envrc"))
-                             (list "bash"
-                                   "-c"
-                                   ;; Direnv unfortunately writes crao on stderr
-                                   ;; so we need to pipe that to /dev/null
-                                   (format "direnv exec %s %s --version 2>/dev/null"
-                                           (file-truename default-directory)
-                                           (or doom-modeline-env-python-executable
-                                               python-shell-interpreter
-                                               "python"))))
+                             (locate-dominating-file default-directory ".envrc"))
+                        (list "bash"
+                              "-c"
+                              ;; Direnv unfortunately writes crao on stderr
+                              ;; so we need to pipe that to /dev/null
+                              (format "direnv exec %s %s --version 2>/dev/null"
+                                      (file-truename default-directory)
+                                      (or doom-modeline-env-python-executable
+                                          python-shell-interpreter
+                                          "python"))))
                        ((list (or doom-modeline-env-python-executable
                                   python-shell-interpreter
                                   "python")
