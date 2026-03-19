@@ -3,3 +3,5 @@ telga-server
 telega-server
 archives/*
 **.so
+**.o
+**.c.o
