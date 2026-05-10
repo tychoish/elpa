@@ -1,0 +1,14 @@
+;; -*- no-byte-compile: t; lexical-binding: nil -*-
+(define-package "package-build" "20260507.1703"
+  "Curate an Emacs Lisp package archive."
+  '((emacs  "26.1")
+    (compat "30.1"))
+  :url "https://github.com/melpa/package-build"
+  :commit "9ffd40c4f6bfc315e4c370826c4f933e6384de50"
+  :revdesc "9ffd40c4f6bf"
+  :keywords '("maint" "tools")
+  :authors '(("Donald Ephraim Curtis" . "dcurtis@milkbox.net")
+             ("Steve Purcell" . "steve@sanityinc.com")
+             ("Jonas Bernoulli" . "emacs.package-build@jonas.bernoulli.dev")
+             ("Phil Hagelberg" . "technomancy@gmail.com"))
+  :maintainers '(("Jonas Bernoulli" . "emacs.package-build@jonas.bernoulli.dev")))
