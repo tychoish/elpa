@@ -13,8 +13,8 @@
 ;; Homepage: https://github.com/melpa/package-build
 ;; Keywords: maint tools
 
-;; Package-Version: 20260507.1703
-;; Package-Revision: 9ffd40c4f6bf
+;; Package-Version: 20260510.2156
+;; Package-Revision: 76e909fb23c8
 ;; Package-Requires: (
 ;;     (emacs  "26.1")
 ;;     (compat "30.1"))
@@ -1045,7 +1045,7 @@ Use a sandbox if `package-build--use-sandbox' is non-nil."
      (t
       (when (file-exists-p dir)
         (delete-directory dir t))
-      (package-build--message "Cloning %s to %s" url dir)
+      (package-build--message "Cloning %s" url)
       (make-directory package-build-working-dir t)
       (let ((default-directory package-build-working-dir))
         (package-build--call-process rcp "git" "clone" url dir))))))
@@ -1066,7 +1066,7 @@ Use a sandbox if `package-build--use-sandbox' is non-nil."
      (t
       (when (file-exists-p dir)
         (delete-directory dir t))
-      (package-build--message "Cloning %s to %s" url dir)
+      (package-build--message "Cloning %s" url)
       (make-directory package-build-working-dir t)
       (let ((default-directory package-build-working-dir))
         (package-build--call-process rcp "hg" "clone" url dir))))))
@@ -1368,13 +1368,8 @@ is the same as the value of `export_file_name'."
                   (and-let* ((format (oref rcp repopage-format)))
                     (format format (oref rcp repo)))))
         (oset rcp keywords (lm-keywords-list))
-        (oset rcp maintainers
-              (cond ((fboundp 'lm-maintainers)
-                     (lm-maintainers))
-                    ((fboundp 'lm-maintainer)
-                     (and-let* ((maintainer (lm-maintainer)))
-                       (list maintainer)))))
-        (oset rcp authors (lm-authors))))))
+        (oset rcp authors (package-build--authors))
+        (oset rcp maintainers (package-build--maintainers))))))
 
 (defun package-build--extract-from-package (rcp files)
   "Store information from the \"*-pkg.el\" file from FILES in RCP."
@@ -1421,6 +1416,16 @@ is the same as the value of `export_file_name'."
       (setq summary (substring summary 0 -1)))
     (concat (capitalize (substring summary 0 1))
             (substring summary 1))))
+
+(defun package-build--authors (&optional file)
+  (lm-with-file file
+    (mapcan #'lm-crack-address (lm-header-multiline "authors?"))))
+
+(defun package-build--maintainers (&optional file)
+  (lm-with-file file
+    (mapcan #'lm-crack-address
+            (or (lm-header-multiline "maintainers?")
+                (lm-header-multiline "authors?")))))
 
 ;;; Files Spec
 
@@ -1553,7 +1558,7 @@ or all exclude rules (with the `:exclude' keyword removed)."
 FILES is a list of (SOURCE . DEST) relative filepath pairs."
   (package-build--message
    "Copying files (->) and directories (=>)\n  from %s\n  to %s"
-   default-directory target-dir)
+   default-directory (file-name-as-directory target-dir))
   (pcase-dolist (`(,src . ,dst) files)
     (let ((src* (expand-file-name src))
           (dst* (expand-file-name dst target-dir)))
@@ -1625,20 +1630,17 @@ are subsequently dumped."
     (let* ((start-time (current-time))
            (rcp (package-recipe-lookup name))
            (url (oref rcp url))
-           (repo (oref rcp repo))
            (fetcher (package-recipe--fetcher rcp))
-           (version nil)
-           (msg (format "%s%s package %s"
-                        (if noninteractive " • " "")
-                        (if package-build--inhibit-update "Fetching" "Building")
-                        name)))
+           (version nil))
+      (message "%s%s package %s"
+               (if noninteractive "\n • " "")
+               (if package-build--inhibit-update "Fetching" "Building")
+               name)
       (cond ((and package-build-verbose (not noninteractive))
-             (message "%s..." msg)
              (message "Package: %s" name)
              (message "Fetcher: %s" fetcher)
              (message "Source:  %s\n" url))
-            ((message "%s (from %s)..." msg
-                      (if repo (format "%s:%s" fetcher repo) url))))
+            ((message "From %s" url)))
       (package-build--fetch rcp)
       (unless package-build--inhibit-update
         (package-build--select-version rcp)
@@ -1647,17 +1649,18 @@ are subsequently dumped."
           (package-build--package rcp)
           (when dump-archive-contents
             (package-build-dump-archive-contents)))
-        (if (not version)
-            (message " ✗ Cannot determine version!")
-          (message " ✓ Success:")
-          (pcase-dolist (`(,file . ,attrs)
-                         (directory-files-and-attributes
-                          package-build-archive-dir nil
-                          (format "\\`%s-[0-9]+" name)))
-            (message "  %s  %s"
-                     (format-time-string
-                      "%FT%T%z" (file-attribute-modification-time attrs) t)
-                     file))))
+        (cond ((not version)
+               (message " ✗ Cannot determine version!"))
+              ((and package-build-verbose (not noninteractive))
+               (message " ✓ Success:")
+               (pcase-dolist (`(,file . ,attrs)
+                              (directory-files-and-attributes
+                               package-build-archive-dir nil
+                               (format "\\`%s-[0-9]+" name)))
+                 (message "  %s  %s"
+                          (format-time-string
+                           "%FT%T%z" (file-attribute-modification-time attrs) t)
+                          file)))))
       (message "%s %s in %.3fs, finished at %s"
                (if version "Built" "Fetched")
                name

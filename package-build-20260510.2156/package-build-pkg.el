@@ -1,11 +1,11 @@
 ;; -*- no-byte-compile: t; lexical-binding: nil -*-
-(define-package "package-build" "20260507.1703"
+(define-package "package-build" "20260510.2156"
   "Curate an Emacs Lisp package archive."
   '((emacs  "26.1")
     (compat "30.1"))
   :url "https://github.com/melpa/package-build"
-  :commit "9ffd40c4f6bfc315e4c370826c4f933e6384de50"
-  :revdesc "9ffd40c4f6bf"
+  :commit "76e909fb23c8a661e23da99d5de6a34b7b386772"
+  :revdesc "76e909fb23c8"
   :keywords '("maint" "tools")
   :authors '(("Donald Ephraim Curtis" . "dcurtis@milkbox.net")
              ("Steve Purcell" . "steve@sanityinc.com")
