@@ -27,3 +27,6 @@
 [submodule "agent-shell-workspace"]
 	path = agent-shell-workspace
 	url = https://github.com/gveres/agent-shell-workspace.git
+[submodule "annotated-completing-read.el"]
+	path = annotated-completing-read.el
+	url = https://github.com/tychoish/annotated-completing-read.el
