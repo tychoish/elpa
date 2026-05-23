@@ -15,11 +15,13 @@
 Soft-wrap lines according to `fill-column'.
 
 This minor mode narrows the text area.  Its primary use is in
-conjunction with `visual-line-mode', to enable soft word-wrapping
-of long lines, but it can also be used in other contexts, e.g.,
-to center the text in a window.  To activate it together with
-`visual-line-mode', it is usually best to use
-`visual-line-fill-column-mode'.
+conjunction with `visual-line-mode', to enable soft word-wrapping of
+long lines, but it can also be used in other contexts, e.g., to center
+the text in a window.
+
+Note: to activate and deactivate `visual-fill-column-mode' together with
+`visual-line-mode', add the function `visual-fill-column' to
+`visual-line-mode-hook'.
 
 This is a minor mode.  If called interactively, toggle the
 `Visual-Fill-Column mode' mode.  If the prefix argument is positive,
@@ -34,6 +36,8 @@ evaluate the variable `visual-fill-column-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
+
+\\{visual-fill-column-mode-map}
 
 (fn &optional ARG)" t)
 (put 'global-visual-fill-column-mode 'globalized-minor-mode t)
@@ -61,11 +65,12 @@ See `visual-fill-column-mode' for more information on
 Visual-Fill-Column mode.
 
 (fn &optional ARG)" t)
+(autoload 'visual-fill-column-for-vline "visual-fill-column" "\
+Hook function for `visual-line-mode-hook'.
+Use this function to enable and disable `visual-fill-column-mode' in
+conjunction with `visual-line-mode'.")
 (autoload 'visual-line-fill-column-mode "visual-fill-column" "\
 Enable `visual-line-mode' and soft-wrap lines according to `fill-column'.
-
-Use this mode to activate and deactivate `visual-line-mode' and
-`visual-fill-column-mode' in conjunction.
 
 This is a minor mode.  If called interactively, toggle the
 `Visual-Line-Fill-Column mode' mode.  If the prefix argument is
