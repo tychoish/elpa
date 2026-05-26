@@ -30,3 +30,6 @@
 [submodule "annotated-completing-read.el"]
 	path = annotated-completing-read.el
 	url = https://github.com/tychoish/annotated-completing-read.el
+[submodule "xtdlib"]
+	path = xtdlib
+	url = https://github.com/tychoish/xtdlib.el
