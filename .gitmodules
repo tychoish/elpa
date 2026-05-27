@@ -33,3 +33,9 @@
 [submodule "xtdlib"]
 	path = xtdlib
 	url = https://github.com/tychoish/xtdlib.el
+[submodule "agent-shell-menu"]
+	path = agent-shell-menu
+	url = https://github.com/tychoish/agent-shell-menu
+[submodule "agent-shell-queue"]
+	path = agent-shell-queue
+	url = https://github.com/tychoish/agent-shell-queue
