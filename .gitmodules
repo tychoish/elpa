@@ -1,7 +1,3 @@
-[submodule "gptel"]
-	path = gptel
-	url = https://github.com/karthink/gptel.git
-	ignore = untracked
 [submodule "claude-code-ide"]
 	path = claude-code-ide
 	url = https://github.com/manzaltu/claude-code-ide.el
@@ -27,9 +23,9 @@
 [submodule "agent-shell-workspace"]
 	path = agent-shell-workspace
 	url = https://github.com/gveres/agent-shell-workspace.git
-[submodule "annotated-completing-read.el"]
-	path = annotated-completing-read.el
-	url = https://github.com/tychoish/annotated-completing-read.el
+[submodule "annotated-completing-read"]
+	path = annotated-completing-read
+	url = https://github.com/tychoish/annotated-completing-read
 [submodule "xtdlib"]
 	path = xtdlib
 	url = https://github.com/tychoish/xtdlib.el
