@@ -1,2 +1,0 @@
-;; Generated package description from popper.el  -*- mode: lisp-data; no-byte-compile: t -*-
-(define-package "popper" "0.4.8" "Summon and dismiss buffers as popups" '((emacs "26.1")) :commit "91b71955db19014d7139191660272c736458d87d" :authors '(("Karthik Chikmagalur" . "karthik.chikmagalur@gmail.com")) :maintainer '("Karthik Chikmagalur" . "karthik.chikmagalur@gmail.com") :keywords '("convenience") :url "https://github.com/karthink/popper")
