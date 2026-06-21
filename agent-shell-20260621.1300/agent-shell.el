@@ -4,11 +4,11 @@
 
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/agent-shell
-;; Package-Version: 20260610.815
-;; Package-Revision: dffbcfc297f0
+;; Package-Version: 20260621.1300
+;; Package-Revision: 131b9bec0158
 ;; Package-Requires: ((emacs "29.1") (shell-maker "0.93.1") (acp "0.12.2"))
 
-(defconst agent-shell--version "0.55.1")
+(defconst agent-shell--version "0.56.1")
 
 ;; This package is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@
 (require 'map)
 (unless (require 'markdown-overlays nil 'noerror)
   (error "Please update 'shell-maker' to v0.91.2 or newer"))
+(require 'agent-shell-artist)
 (require 'agent-shell-markdown)
 (require 'agent-shell-anthropic)
 (require 'agent-shell-auggie)
@@ -73,6 +74,7 @@
 (require 'agent-shell-kimi)
 (require 'agent-shell-kiro)
 (require 'agent-shell-mistral)
+(require 'agent-shell-omp)
 (require 'agent-shell-openai)
 (require 'agent-shell-opencode)
 (require 'agent-shell-pi)
@@ -579,10 +581,10 @@ Goose, Cursor, CodeBuddy, Auggie, and others."
         (agent-shell-kimi-make-config)
         (agent-shell-kiro-make-config)
         (agent-shell-mistral-make-config)
+        (agent-shell-omp-make-agent-config)
         (agent-shell-opencode-make-agent-config)
         (agent-shell-pi-make-agent-config)
-        (agent-shell-qwen-make-agent-config)
-        (agent-shell-hermes-make-agent-config)))
+        (agent-shell-qwen-make-agent-config)))
 
 (defcustom agent-shell-agent-configs
   (agent-shell--make-default-agent-configs)
@@ -3192,15 +3194,23 @@ variable (see makunbound)"))
                                       :buffer shell-buffer
                                       :heartbeat (agent-shell-heartbeat-make
                                                   :on-heartbeat
-                                                  (lambda (_heartbeat _status)
-                                                    (when (get-buffer-window shell-buffer)
+                                                  (lambda (_heartbeat status)
+                                                    ;; 'ended is the final tick; render
+                                                    ;; even if off-screen ensures hidden.
+                                                    (when (or (eq status 'ended)
+                                                              (get-buffer-window shell-buffer t))
                                                       (with-current-buffer shell-buffer
                                                         (agent-shell--update-header-and-mode-line)))
+                                                    ;; 'ended is the final tick; render even
+                                                    ;; if off-screen to ensure animation is hidden.
                                                     (when-let* ((using-viewports agent-shell-prefer-viewport-interaction)
                                                                 (viewport-buffer (agent-shell-viewport--buffer
                                                                                   :shell-buffer shell-buffer
                                                                                   :existing-only t))
-                                                                ((get-buffer-window viewport-buffer)))
+                                                                ;; 'ended is the final tick; render even
+                                                                ;; if off-screen to ensure animation is hidden.
+                                                                ((or (eq status 'ended)
+                                                                     (get-buffer-window viewport-buffer t))))
                                                       (with-current-buffer viewport-buffer
                                                         (agent-shell-viewport--update-header)))))
                                       :client-maker (map-elt config :client-maker)
@@ -4423,7 +4433,10 @@ DATA is an optional alist of event-specific data."
                  (or (not (map-elt sub :event))
                      (eq (map-elt sub :event) event)))
         (with-current-buffer (map-elt state :buffer)
-          (funcall (map-elt sub :on-event) event-alist))))))
+          (condition-case err
+              (funcall (map-elt sub :on-event) event-alist)
+            (error
+             (message "agent-shell: subscriber for %s errored: %S" event err))))))))
 
 (cl-defun agent-shell--start-idle-timer (&key event data)
   "Start the idle timer for EVENT with DATA.
@@ -6069,30 +6082,13 @@ Returns a buffer object or nil."
     (with-current-buffer shell-buffer
       (goto-char comint-last-input-start))))
 
-(defun agent-shell--command-and-response-at-point ()
-  "Like `shell-maker--command-and-response-at-point' but preserves
-visual padding emitted by the markdown renderer inside fragments
-(e.g. source-block top/bottom vpad).  Delegates the raw extraction
-to shell-maker and runs the result through `agent-shell-trim'."
-  (when-let* ((cell (shell-maker--command-and-response-at-point :trimmed nil)))
-    (cons (agent-shell-trim (car cell))
-          (agent-shell-trim (cdr cell)))))
-
-(defun agent-shell--next-command-and-response (&optional backwards)
-  "Like `shell-maker-next-command-and-response' but preserves
-visual padding inside fragments — see
-`agent-shell--command-and-response-at-point'."
-  (when-let* ((cell (shell-maker-next-command-and-response backwards :trimmed nil)))
-    (cons (agent-shell-trim (car cell))
-          (agent-shell-trim (cdr cell)))))
-
 (defun agent-shell-interaction-at-point ()
   "Return the interaction at point in the shell buffer.
 Result is of the form ((:prompt . PROMPT) (:response . RESPONSE))."
   (when-let* ((shell-buffer (agent-shell--shell-buffer))
               (result (with-current-buffer shell-buffer
-                        (or (agent-shell--command-and-response-at-point)
-                            (agent-shell--next-command-and-response t)))))
+                        (or (shell-maker--command-and-response-at-point :trimmed nil)
+                            (shell-maker-next-command-and-response t :trimmed nil)))))
     `((:prompt . ,(car result))
       (:response . ,(cdr result)))))
 
@@ -6156,15 +6152,11 @@ inserted into the shell buffer prompt."
   (let* ((command (read-string "insert command output: "))
          (shell-buffer (or (agent-shell--current-shell)
                            (user-error "No shell available")))
-         (destination-buffer (progn
-                               (when (with-current-buffer shell-buffer
-                                       (shell-maker-busy))
-                                 (user-error "Busy, try later"))
-                               (if (or (derived-mode-p 'agent-shell-viewport-view-mode)
-                                       (derived-mode-p 'agent-shell-viewport-edit-mode))
-                                   (agent-shell-viewport--buffer
-                                    :shell-buffer shell-buffer)
-                                 shell-buffer)))
+         (destination-buffer (if (or (derived-mode-p 'agent-shell-viewport-view-mode)
+                                     (derived-mode-p 'agent-shell-viewport-edit-mode))
+                                 (agent-shell-viewport--buffer
+                                  :shell-buffer shell-buffer)
+                               shell-buffer))
          (output-buffer (with-current-buffer (generate-new-buffer (format "*%s*" command))
                           (insert "$ " command "\n\n")
                           (setq-local buffer-read-only t)
@@ -6196,14 +6188,20 @@ inserted into the shell buffer prompt."
                   (when (memq (process-status process) '(exit signal))
                     (message "Done")
                     (set-window-configuration window-config)
-                    (save-excursion
-                      (goto-char (point-max))
-                      (with-current-buffer destination-buffer
-                        (insert "\n\n" (format "```shell
+                    (let ((code-block (format "```shell
 %s
 ```" (with-current-buffer output-buffer
-       (buffer-string))))))
-                    (agent-shell--render-markdown)
+       (buffer-string)))))
+                      (if (with-current-buffer shell-buffer (shell-maker-busy))
+                          (with-current-buffer shell-buffer
+                            (agent-shell-queue-request
+                             (agent-shell--read-queue-prompt
+                              :initial (concat code-block "\n\n"))))
+                        (with-current-buffer destination-buffer
+                          (save-excursion
+                            (goto-char (point-max))
+                            (insert "\n\n" code-block))
+                          (agent-shell--render-markdown))))
                     (when (buffer-live-p output-buffer)
                       (kill-buffer output-buffer)))))))
     (set-process-query-on-exit-flag proc nil)
@@ -7004,7 +7002,8 @@ Returns an alist with insertion details or nil otherwise:
                 (insert text)
                 (setq insert-end (point))
                 (narrow-to-region insert-start insert-end)
-                (agent-shell--render-markdown :render-images nil)))
+                ;; TODO: Render prompt markdown?
+                ))
             (when submit
               (shell-maker-submit)))
           `((:buffer . ,shell-buffer)
@@ -7054,16 +7053,19 @@ Uses optional SHELL-BUFFER to make paths relative to shell project."
 
 When PICK-SHELL is non-nil, prompt for which shell buffer to use."
   (interactive)
-  (let ((shell-buffer (or (when pick-shell
-                            (agent-shell--read-shell-buffer
-                             :prompt "Send region to shell: "))
-                          (agent-shell--shell-buffer))))
-    (agent-shell-insert
-     :text (agent-shell--get-region-context
-            :deactivate t
-            :agent-cwd (with-current-buffer shell-buffer
-                         (agent-shell-cwd)))
-     :shell-buffer shell-buffer)))
+  (let* ((shell-buffer (or (when pick-shell
+                             (agent-shell--read-shell-buffer
+                              :prompt "Send region to shell: "))
+                           (agent-shell--shell-buffer)))
+         (text (agent-shell--get-region-context
+                :deactivate t
+                :agent-cwd (with-current-buffer shell-buffer
+                             (agent-shell-cwd)))))
+    (if (with-current-buffer shell-buffer (shell-maker-busy))
+        (with-current-buffer shell-buffer
+          (agent-shell-queue-request
+           (agent-shell--read-queue-prompt :initial (concat text "\n\n"))))
+      (agent-shell-insert :text text :shell-buffer shell-buffer))))
 
 (defun agent-shell-send-region-to ()
   "Like `agent-shell-send-region' but prompt for which shell to use."
@@ -7077,18 +7079,22 @@ With \\[universal-argument] prefix ARG, force start a new shell.
 
 With \\[universal-argument] \\[universal-argument] prefix ARG, prompt to pick an existing shell."
   (interactive "P")
-  (let ((shell-buffer
-         (cond
-          ((equal arg '(16))
-           (agent-shell--dwim :switch-to-shell t)
-           (agent-shell--shell-buffer))
-          ((equal arg '(4))
-           (agent-shell--dwim :new-shell t)
-           (agent-shell--shell-buffer))
-          (t
-           (agent-shell--shell-buffer)))))
-    (agent-shell-insert :text (agent-shell--context :shell-buffer shell-buffer)
-                        :shell-buffer shell-buffer)))
+  (let* ((shell-buffer
+          (cond
+           ((equal arg '(16))
+            (agent-shell--dwim :switch-to-shell t)
+            (agent-shell--shell-buffer))
+           ((equal arg '(4))
+            (agent-shell--dwim :new-shell t)
+            (agent-shell--shell-buffer))
+           (t
+            (agent-shell--shell-buffer))))
+         (text (agent-shell--context :shell-buffer shell-buffer)))
+    (if (with-current-buffer shell-buffer (shell-maker-busy))
+        (with-current-buffer shell-buffer
+          (agent-shell-queue-request
+           (agent-shell--read-queue-prompt :initial (concat text "\n\n"))))
+      (agent-shell-insert :text text :shell-buffer shell-buffer))))
 
 (cl-defun agent-shell--get-region-context (&key deactivate no-error agent-cwd)
   "Get region as insertable text, ready for sending to agent.

@@ -35,7 +35,6 @@
 (require 'flymake)
 (require 'agent-shell-list-edit)
 (require 'agent-shell-markdown)
-(require 'markdown-overlays)
 (require 'shell-maker)
 (require 'transient)
 
@@ -45,13 +44,11 @@
 (declare-function agent-shell--block-quote "agent-shell")
 (declare-function agent-shell--current-shell "agent-shell")
 (declare-function agent-shell--display-buffer "agent-shell")
-(declare-function agent-shell--next-command-and-response "agent-shell")
 (declare-function agent-shell--get-region "agent-shell")
 (declare-function agent-shell--insert-to-shell-buffer "agent-shell")
 (declare-function agent-shell--make-header "agent-shell")
 (declare-function agent-shell--context "agent-shell")
 (declare-function agent-shell--shell-buffer "agent-shell")
-(declare-function agent-shell--start "agent-shell")
 (declare-function agent-shell--state "agent-shell")
 (declare-function agent-shell--filter-buffer-substring "agent-shell")
 (declare-function agent-shell-buffers "agent-shell")
@@ -70,8 +67,6 @@
 (declare-function agent-shell-next-permission-button "agent-shell")
 (declare-function agent-shell-other-buffer "agent-shell")
 (declare-function agent-shell-previous-permission-button "agent-shell")
-(declare-function agent-shell-project-buffers "agent-shell")
-(declare-function agent-shell-select-config "agent-shell")
 (declare-function agent-shell-set-session-mode "agent-shell")
 (declare-function agent-shell-set-session-model "agent-shell")
 (declare-function agent-shell-set-session-thought-level "agent-shell")
@@ -133,12 +128,6 @@ Returns an alist with insertion details or nil otherwise:
       (error "Cannot override"))
     (let ((insert-start nil)
           (insert-end nil))
-      ;; Is there text to be inserted? Reject while busy.
-      (when (and (agent-shell-viewport--busy-p
-                  :viewport-buffer viewport-buffer)
-                 (or (not (string-empty-p (string-trim text)))
-                     (and override (not (string-empty-p (string-trim override))))))
-        (user-error "Busy... please wait"))
       (agent-shell--display-buffer viewport-buffer)
       (when (and override
                  (with-current-buffer viewport-buffer
@@ -156,7 +145,12 @@ Returns an alist with insertion details or nil otherwise:
       ;; in case viewport compose buffer is created for the
       ;; first time on an ongoing/busy shell session?
       (cond
-       ((agent-shell-viewport--busy-p)
+       ;; Busy with no text/override to drop in -> stay in view mode.
+       ;; When text/override is present, fall through to edit mode so the
+       ;; user can compose; `compose-send-*' will queue on submit.
+       ((and (agent-shell-viewport--busy-p)
+             (string-empty-p (string-trim text))
+             (or (not override) (string-empty-p (string-trim override))))
         (agent-shell-viewport-view-mode))
        (override
         (agent-shell-viewport-edit-mode)
@@ -233,7 +227,7 @@ Returns an alist with insertion details or nil otherwise:
       (user-error "Not in a shell viewport buffer"))
     (let ((shell-buffer (agent-shell-viewport--shell-buffer))
           (viewport-buffer (current-buffer))
-          (prompt (string-trim (buffer-string))))
+          (prompt (buffer-string)))
       (when (string-empty-p (string-trim prompt))
         (agent-shell-viewport--initialize)
         (user-error "Nothing to send"))
@@ -247,8 +241,6 @@ Returns an alist with insertion details or nil otherwise:
           (progn
             (agent-shell-viewport-edit-mode)
             (agent-shell-viewport--initialize))
-        (let ((inhibit-read-only t))
-          (markdown-overlays-put))
         (agent-shell-viewport-view-mode)
         (agent-shell-viewport--initialize :prompt prompt)
         ;; (setq view-exit-action 'kill-buffer) TODO
@@ -261,8 +253,8 @@ Returns an alist with insertion details or nil otherwise:
          :submit t
          :no-focus t)
         ;; TODO: Point should go to beginning of response after submission.
-        (let ((inhibit-read-only t))
-          (markdown-overlays-put))))))
+        ;; TODO: Render prompt markdown?
+        ))))
 
 (defun agent-shell-viewport-interrupt ()
   "Interrupt active agent shell request."
@@ -310,8 +302,13 @@ Optionally set its PROMPT and RESPONSE."
          prompt)))
     (when response
       (insert response))
-    (let ((inhibit-read-only t))
-      (markdown-overlays-put))))
+    ;; Re-render the header from the freshly-cached position.  Without
+    ;; this, callers that set content via this function (e.g.
+    ;; `agent-shell-viewport-refresh' on switch) leave the header showing
+    ;; the previously-rendered position.
+    (agent-shell-viewport--update-header)
+    ;; TODO: Render prompt markdown?
+    ))
 
 (defun agent-shell-viewport--ensure-buffer ()
   "Ensure current buffer is a viewport and err otherwise."
@@ -327,12 +324,11 @@ Optionally set its PROMPT and RESPONSE."
                            (point-min)
                          (next-single-property-change (point-min) 'agent-shell-viewport-prompt)))
                 (found (get-text-property start 'agent-shell-viewport-prompt)))
-      (string-trim
-       (buffer-substring-no-properties
-        start
-        (or (next-single-property-change
-             start 'agent-shell-viewport-prompt)
-            (point-max)))))))
+      (buffer-substring-no-properties
+       start
+       (or (next-single-property-change
+            start 'agent-shell-viewport-prompt)
+           (point-max))))))
 
 (defun agent-shell-viewport--response ()
   "Return the buffer response."
@@ -668,8 +664,6 @@ QUOTED-TEXT is inserted as a block quote as part of the reply."
   (interactive)
   (unless (derived-mode-p 'agent-shell-viewport-view-mode)
     (user-error "Not in a shell viewport buffer"))
-  (when (agent-shell-viewport--busy-p)
-    (user-error "Busy, please wait"))
   (let ((response (or (agent-shell-viewport--response) "")))
     (agent-shell-viewport--setup-reply
      :quoted-text (string-trim (substring-no-properties response)))))
@@ -839,23 +833,31 @@ buffer from the snapshot and switch to edit mode."
           (cl-return-from agent-shell-viewport-next-page))
       (when-let* ((next (with-current-buffer shell-buffer
                           (if backwards
-                              (when (save-excursion
-                                      (let ((orig-line (line-number-at-pos)))
-                                        (comint-previous-prompt 1)
-                                        (= orig-line (line-number-at-pos))))
-                                (error "No previous page"))
+                              (progn
+                                ;; Navigate relative to the interaction
+                                ;; containing point, not wherever point happens
+                                ;; to sit within it.  Without this, switching to
+                                ;; the viewport with point mid-interaction makes
+                                ;; the first backward step land on the current
+                                ;; interaction's prompt instead of the previous
+                                ;; interaction.
+                                (goto-char (shell-maker--prompt-begin-position))
+                                (when (save-excursion
+                                        (let ((orig-line (line-number-at-pos)))
+                                          (comint-previous-prompt 1)
+                                          (= orig-line (line-number-at-pos))))
+                                  (error "No previous page")))
                             (when (save-excursion
                                     (let ((orig-line (point)))
                                       (comint-next-prompt 1)
                                       (= orig-line (point))))
                               (error "No next page")))
-                          (agent-shell--next-command-and-response backwards))))
+                          (shell-maker-next-command-and-response backwards :trimmed nil))))
         (agent-shell-viewport--initialize
          :prompt (car next) :response (cdr next))
         (goto-char (if start-at-top
                        (point-min)
                      (if backwards (point-max) (point-min))))
-        (agent-shell-viewport--update-header)
         next))))
 
 (defun agent-shell-viewport-set-session-model ()
@@ -1120,8 +1122,7 @@ VIEWPORT-BUFFER is the viewport buffer to check."
                                               "Queue reply…"
                                             "Reply…")))
                         ((:function . agent-shell-viewport-quote-reply)
-                         (:description . "Quote reply…")
-                         (:if-not . agent-shell-viewport--busy-p))
+                         (:description . "Quote reply…"))
                         ((:function . agent-shell-viewport-reply-yes)
                          (:description . "Reply \"yes\"")
                          (:if-not . agent-shell-viewport--busy-p))

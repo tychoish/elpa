@@ -357,28 +357,31 @@ Markup characters are deleted; remaining inner text carries face
 properties.  Spans that fall inside any of AVOID-RANGES are left
 untouched.  Returns non-nil if at least one replacement was made.
 
+A `_X_' span must be followed by punctuation, whitespace, or a line
+end, so intraword underscores such as \"_hello_world\" are left as
+literal text rather than emphasized.
+
 For example, the buffer \"hello *world*.\" becomes \"hello
 world.\" with face `agent-shell-markdown-italic' on \"world\"."
   (let ((case-fold-search nil)
         (changed nil))
     (goto-char (point-min))
     (while (re-search-forward
-            (rx (or (group (or bol (one-or-more (any "\n \t")))
-                           (group "*")
-                           (group (one-or-more (not (any "\n*")))) "*")
-                    (group (or bol (one-or-more (any "\n \t")))
-                           (group "_")
-                           (group (one-or-more (not (any "\n_")))) "_")))
+            (rx (or (seq (or bol (one-or-more (any "\n \t")))
+                         (group "*" (group (one-or-more (not (any "\n*")))) "*"))
+                    (seq (or bol (one-or-more (any "\n \t")))
+                         (group "_" (group (one-or-more (not (any "\n_")))) "_")
+                         (or (syntax punctuation) (syntax whitespace) line-end))))
             nil t)
-      (let* ((markup-start (or (match-beginning 2) (match-beginning 5)))
-             (markup-end (match-end 0))
+      (let* ((markup-start (or (match-beginning 1) (match-beginning 3)))
+             (markup-end (or (match-end 1) (match-end 3)))
              (avoid (agent-shell-markdown--in-avoid-range-p
                      markup-start markup-end avoid-ranges)))
         (if avoid
             (goto-char (cdr avoid))
           (let ((text (buffer-substring
-                       (or (match-beginning 3) (match-beginning 6))
-                       (or (match-end 3) (match-end 6)))))
+                       (or (match-beginning 2) (match-beginning 4))
+                       (or (match-end 2) (match-end 4)))))
             (delete-region markup-start markup-end)
             (goto-char markup-start)
             (insert text)
@@ -588,7 +591,9 @@ For example, the buffer \"see ![logo](logo.png)\" becomes
               (let ((image (create-image
                             path nil nil
                             :max-width (agent-shell-markdown--image-max-width)))
-                    (placeholder (if (string-empty-p alt) " " alt)))
+                    (placeholder (if (string-empty-p alt) " " alt))
+                    (line-prefix (get-text-property markup-start 'line-prefix))
+                    (wrap-prefix (get-text-property markup-start 'wrap-prefix)))
                 (image-flush image)
                 (delete-region markup-start markup-end)
                 (goto-char markup-start)
@@ -599,7 +604,11 @@ For example, the buffer \"see ![logo](logo.png)\" becomes
                                      (agent-shell-markdown--make-ret-binding-map
                                       (lambda () (interactive)
                                         (find-file path))))
-                  (put-text-property markup-start end 'mouse-face 'highlight)))))))))))
+                  (put-text-property markup-start end 'mouse-face 'highlight)
+                  (when line-prefix
+                    (put-text-property markup-start end 'line-prefix line-prefix))
+                  (when wrap-prefix
+                    (put-text-property markup-start end 'wrap-prefix wrap-prefix))))))))))))
 
 (cl-defun agent-shell-markdown--replace-image-file-paths (&key avoid-ranges)
   "Render bare image-path lines as displayed images.

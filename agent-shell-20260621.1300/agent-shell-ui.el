@@ -905,21 +905,26 @@ that span a line break."
       found)))
 
 (defun agent-shell-ui-backward-block ()
-  "Jump to the previous block."
+  "Jump to the previous block.
+
+When point is strictly inside a navigatable block, jump to that
+block's beginning instead of the previous block."
   (interactive)
   (when-let* ((start-point (point))
               (found (save-mark-and-excursion
-                       ;; In navigatable block already
-                       ;; move to beginning.
-                       (when-let* ((state (get-text-property (point) 'agent-shell-ui-state))
-                                   (block (agent-shell-ui--block-range :position (point))))
-                         (goto-char (map-elt block :start)))
-                       (when-let* ((prev (text-property-search-backward
-                                          'agent-shell-ui-state nil
-                                          (lambda (_old-val new-val)
-                                            (and new-val (map-elt new-val :navigatable)))
-                                          t)))
-                         (prop-match-beginning prev)))))
+                       (let* ((state (get-text-property (point) 'agent-shell-ui-state))
+                              (block (and state (agent-shell-ui--block-range :position (point))))
+                              (block-start (and block (map-elt block :start))))
+                         (if (and block-start
+                                  (map-elt state :navigatable)
+                                  (< block-start start-point))
+                             block-start
+                           (when-let* ((prev (text-property-search-backward
+                                              'agent-shell-ui-state nil
+                                              (lambda (_old-val new-val)
+                                                (and new-val (map-elt new-val :navigatable)))
+                                              t)))
+                             (prop-match-beginning prev)))))))
     (when found
       (deactivate-mark)
       (goto-char found)

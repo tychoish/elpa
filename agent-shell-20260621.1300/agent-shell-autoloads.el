@@ -132,6 +132,11 @@ Example:
 (register-definition-prefixes "agent-shell-anthropic" '("agent-shell-anthropic-"))
 
 
+;;; Generated autoloads from agent-shell-artist.el
+
+(register-definition-prefixes "agent-shell-artist" '("agent-shell-artist-"))
+
+
 ;;; Generated autoloads from agent-shell-auggie.el
 
 (register-definition-prefixes "agent-shell-auggie" '("agent-shell-auggie-"))
@@ -232,6 +237,11 @@ Example:
 (register-definition-prefixes "agent-shell-mock-agent" '("agent-shell-mock-agent-"))
 
 
+;;; Generated autoloads from agent-shell-omp.el
+
+(register-definition-prefixes "agent-shell-omp" '("agent-shell-omp-"))
+
+
 ;;; Generated autoloads from agent-shell-openai.el
 
 (register-definition-prefixes "agent-shell-openai" '("agent-shell-openai-"))
@@ -280,8 +290,6 @@ evaluate the variable `agent-shell-ui-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{agent-shell-ui-mode-map}
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "agent-shell-ui" '("agent-shell-ui-"))
