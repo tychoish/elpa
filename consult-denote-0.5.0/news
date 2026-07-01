@@ -1,0 +1,99 @@
+                     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                      CHANGE LOG OF CONSULT-DENOTE
+
+                              Protesilaos
+                          info@protesilaos.com
+                     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+This document contains the release notes for each tagged commit on the
+project’s main git repository:
+<https://github.com/protesilaos/consult-denote>.
+
+The newest release is at the top.  For further details, please consult
+the manual: <https://protesilaos.com/emacs/consult-denote>.
+
+Table of Contents
+─────────────────
+
+1. Version 0.2.0 on 2024-09-15
+2. Version 0.1.0 on 2024-07-03
+
+
+1 Version 0.2.0 on 2024-09-15
+═════════════════════════════
+
+1.1 The command `consult-denote-find' always previews files
+───────────────────────────────────────────────────────────
+
+  This command will search for matching file names through the
+  `denote-directory'. It now previews the selected file in the
+  minibuffer, whereas before the preview had to be triggered manually.
+
+  Remember that you can customise what command is actually called, per
+  `consult-denote-find-command' (default is `consult-find', with
+  `consult-fd' as another likely choice).
+
+
+1.2 The commands `denote-find-link' and `denote-find-backlink' have previews
+────────────────────────────────────────────────────────────────────────────
+
+  This is relevant when `consult-denote-mode' is enabled. This mode
+  makes changes in the background to make all file-related Denote
+  minibuffer prompts have the preview functionality. The idea is that
+  users keep the same workflow and overall style, while benefiting from
+  the added features.
+
+  Thanks to hapst3r for suggesting something similar which made me
+  realise those commands were not actually covered by
+  `consult-denote-mode'.
+
+  [ If there are more Denote commands that you think could benefit from
+    `consult-denote-mode' but are not covered yet, please let me know. ]
+
+
+1.3 The package now has a manual and change log
+───────────────────────────────────────────────
+
+  You can find the relevant source files in consult-denote.git and their
+  web pages on my website.
+
+  ⁃ Official manual: <https://protesilaos.com/emacs/consult-denote>
+  ⁃ Change log: <https://protesilaos.com/emacs/consult-denote-changelog>
+
+
+2 Version 0.1.0 on 2024-07-03
+═════════════════════════════
+
+  The `consult-denote' provides glue code to integrate `denote' with
+  Daniel Mendler’s `consult' package. The idea is to enhance minibuffer
+  interactions, such as by providing a preview of the file-to-linked or
+  opened and by adding more sources to the `consult-buffer' command.
+  Interested users can enable the `consult-denote-mode' to get started.
+
+
+2.1 Familiar minibuffer prompts
+───────────────────────────────
+
+  `consult-denote' is designed to enhance all relevant Denote prompts
+  with whatever extras Consult provides, such as the preview facility.
+  These Consult-powered minibuffer prompts will still follow the same
+  patterns of interaction as core Denote: they will never use a
+  profoundly different presentation.
+
+
+2.2 Customise what `consult-buffer' shows from Denote
+─────────────────────────────────────────────────────
+
+  The extra sources added to the `consult-buffer' command are controlled
+  by the user option `consult-denote-buffer-sources'. Its default value
+  is the list of sources called `consult-denote-all-buffer-sources'.
+
+
+2.3 Developed in tandem with Denote
+───────────────────────────────────
+
+  My goal with this package is to keep it as close to Denote as
+  possible. If the community wants a new feature, we can discuss whether
+  a variant of it makes sense for `denote' before considering its
+  inclusion in `consult-denote'.
