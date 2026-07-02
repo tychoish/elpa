@@ -37,6 +37,7 @@ to a file with a Denote file name.
 
 Also see `denote-markdown-convert-links-to-denote-type'." '(markdown-mode))
 (register-definition-prefixes "denote-markdown" '("denote-"))
+
 
 ;;; End of scraped data
 

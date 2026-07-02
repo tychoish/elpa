@@ -110,6 +110,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "denote-journal" '("denote-journal-"))
+
 
 ;;; End of scraped data
 

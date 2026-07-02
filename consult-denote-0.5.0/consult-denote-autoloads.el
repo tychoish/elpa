@@ -44,6 +44,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "consult-denote" '("consult-denote-"))
+
 
 ;;; End of scraped data
 

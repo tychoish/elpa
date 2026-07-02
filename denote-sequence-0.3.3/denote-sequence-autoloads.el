@@ -155,6 +155,7 @@ string, which means to not use a prefix as a restriction.
 
 (fn &optional PREFIX DEPTH)" t)
 (register-definition-prefixes "denote-sequence" '("denote-sequence-"))
+
 
 ;;; End of scraped data
 
