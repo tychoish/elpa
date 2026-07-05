@@ -148,7 +148,7 @@ Optional EVENT argument is ignored."
 						 (define-key map (kbd "C-k") 'revbufs-kill-buffer-at-point)
 						 (define-key map [mouse-1] 'revbufs-find-other-window)
 						 map))
-			   (make-string (- 60 (length (buffer-name buf))) ? )
+			   (make-string (max 0 (- 60 (length (buffer-name buf)))) ? )
 			   (buffer-file-name buf))
 		   'revbufs-buffer buf)))
 	       list
