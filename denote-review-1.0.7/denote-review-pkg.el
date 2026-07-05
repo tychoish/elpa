@@ -1,0 +1,2 @@
+;; Generated package description from denote-review.el  -*- mode: lisp-data; no-byte-compile: t; lexical-binding:t -*-
+(define-package "denote-review" "1.0.7" "implements review process for denote notes" '((emacs "28.1") (denote "4.1.3")) :commit "4fe3bac06249f28119f7aeef91fc03df3b042589" :authors '(("Matto Fransen" . "matto@matto.nl")) :maintainer '("Matto Fransen" . "matto@matto.nl") :keywords '("files") :url "https://codeberg.org/mattof/denote-review")

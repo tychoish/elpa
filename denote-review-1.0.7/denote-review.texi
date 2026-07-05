@@ -1,0 +1,303 @@
+\input texinfo   @c -*-texinfo-*-
+@c %**start of header
+@setfilename denote-review.info
+@settitle Review method for denote
+@documentencoding UTF-8
+@documentlanguage en
+@c %**end of header
+
+@dircategory Emacs misc features
+@direntry
+* denote-review: (denote-review). Review method for denote.
+@end direntry
+
+@copying
+Copyright @copyright{} 2026 Free Software Foundation, Inc.
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+A copy of the license is included in the section entitled ``GNU
+Free Documentation License''.
+
+A copy of the license is also available from the Free Software
+Foundation Web site at @url{https://www.gnu.org/licenses/fdl.html}.
+
+@end quotation
+
+The document was typeset with
+@uref{https://www.gnu.org/software/texinfo/, GNU Texinfo}.
+
+@end copying
+
+@titlepage
+@title Review method for denote
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c Output the table of the contents at the beginning.
+@contents
+
+@ifnottex
+@node Top, Introduction, (dir), (dir)
+@top Review method for denote
+
+@insertcopying
+@end ifnottex
+
+@c Generate the nodes for this menu with `C-c C-u C-m'.
+@menu
+* Introduction::
+* Usage::
+* Installation::
+* Getting started::
+* Commands::
+* Customization::
+* Command Index::
+* GNU Free Documentation License::
+@end menu
+
+@c Update all node entries with `C-c C-u C-n'.
+@c Insert new nodes with `C-c C-c n'.
+@node Introduction
+@chapter Introduction
+
+`denote-review' aims to provide a practical and simple manner to
+implement a review process for some of your denote notes.
+
+`denote-review' adds a single line to the frontmatter, f.e.:
+
+@code{#+reviewdate: [2024-06-12]}
+
+The format of this line is according to `denote-file-type' (defaults
+to org).
+
+@node Usage
+@chapter Usage
+
+Not all denote notes have to part of the review process. Only notes
+that contain the @code{reviewdate} frontmatter will be part of it.
+
+On a regular bases, review some notes:
+
+@itemize
+@item
+Request a list of notes sorted by review date.
+@item
+Review one or more notes and update their review date.
+@end itemize
+
+@node Installation
+@chapter Installation
+
+`denote-review' can be install from GNU ELPA.
+
+@itemize
+@item
+@code{M-x package-refresh-contents}
+@item
+@code{M-x package-install}
+@end itemize
+
+Or use @code{use-package}.
+
+To manually install @code{denote-review}, copy the file
+@file{denote-review.el} in your load path and either visit the file
+and issue the command @code{M-x eval-buffer} to evaluate the code or
+add a line @code{(require 'denote-review)} to your Emacs configuration
+file.
+
+@node Getting started
+@chapter Getting started
+
+To get started, select a number of denote notes in Dired and bulk
+insert the ~reviewdate~ frontmatter.
+@ref{denote-review-set-date-dired-marked-files}
+
+Default this inserts a review date derived from the identifier in the
+file name.  With the Universal Argument (~C-u~) this current date is
+used as review date.
+
+Next, request the list of notes to review
+@ref{denote-review-display-list}
+
+Select and review one or notes, and for each note update the
+reviewdate.
+@ref{denote-review-set-date}
+
+@node Commands
+@chapter Commands
+
+@node denote-review-set-date
+@section denote-review-set-date
+@findex denote-review-set-date
+
+Open a denote note.
+
+Issue the command @code{M-x denote-review-set-date} to set the
+current date as review date.
+
+When the current note doesn't have a frontmatter line with the
+review date, it will be inserted. Otherwise, the review date in the
+frontmatter will be updated to the current date.
+
+To make this easy, bind this command to a key, f.e.:
+
+@code{(define-key global-map (kbd "C-c n x") #'denote-review-set-date)}
+
+@node denote-review-display-list
+@section denote-review-display-list
+@findex denote-review-display-list
+
+Issue the command @code{M-x denote-review-display-list} to open
+a list with notes.
+
+This command prompts for a keyword, using completion.
+Select a keyword to display only notes with that keyword, or don't
+select any keyword to display all notes.
+
+The list shows only notes with the review date frontmatter.
+Notes without a review date are ignored.
+
+The list is created in the tabulated list mode.
+
+The list is initially ordered on review date, oldest on top.
+
+To change the order with your mouse, click on a column header to
+order according to the contents of that column. Click again to
+reverse the order.
+
+To change the order with the keyboard, move to a column and press
+@key{S} (shift-s). Press again to reverse the order.
+
+Move point up or down with the keys @key{n} and @key{p} to select a note.
+With the following keys the note can be viewed or edited.
+
+@itemize
+@item
+@key{RET} Open and edit the note in another window.
+@item
+@key{e} Open and edit the note.
+@item
+@key{o} Open the note in read only mode in another window.
+@end itemize
+
+Open a random note with @key{r}. This command selects a random note
+from the list and opens it in another window.
+
+After editing one or more notes, update the list with the key @key{g}.
+
+Scoll the tabulated list with @key{SPC} (scroll up) and @key{DEL} or
+@key{S-SPC} (scoll down).
+
+Close the buffer with the tabulated list with @key{q}.
+
+@node denote-review-set-date-dired-marked-files
+@section denote-review-set-date-dired-marked-files
+@findex denote-review-set-date-dired-marked-files
+
+Issue the command @code{denote-review-set-date-dired-marked-files}
+to bulk insert the review date frontmatter in one or more notes.
+
+There is no undo for this function. To play it safe, first commit your
+notes to a revision management system like Git, or make a backup of
+the directory.
+
+@node Bulk insert the review date according to the identifier.
+@subsection Bulk insert the review date according to the identifier.
+
+To insert the review date according to the identifier of the individual notes:
+
+@itemize
+@item
+Open a denote directory in Dired.
+@item
+Mark one or more notes (with @key{m})
+@item
+Issue the command @code{M-x denote-review-set-date-dired-marked-files}.
+@end itemize
+
+This will insert the review date frontmatter in all selected notes,
+with a date according to the identifier in the filename.
+
+For example, the note
+@file{20240117T203111--add-a-query-link__demo_denote.org} will get
+@code{2024-01-17} as review date.
+
+Notes where the review date field is already part of the
+frontmatter will be left untouched.
+
+@node Bulk insert the current date as review date.
+@subsection Bulk insert the current date as review date.
+
+To insert the current date as review date in a number of notes:
+
+@itemize
+@item
+Open a denote directory in Dired.
+@item
+Mark one or more notes (with @key{m})
+@item
+Enter the Universal Argument @key{C-u}
+@item
+Issue the command @code{M-x denote-review-set-date-dired-marked-files}.
+@end itemize
+
+This will insert the review date frontmatter in all selected notes,
+with the current date as review date.
+
+Notes where the review date field is already part of the
+frontmatter, will be left untouched.
+
+@node Customization
+@chapter Customization
+
+@defopt denote-review-insert-after
+Location of the review date frontmatter line.
+@end defopt
+
+The default location of the review date frontmatter is right below
+the identifier frontmatter line. This can be customized by setting
+the user option @code{denote-review-insert-after}.
+
+For example, to insert the ~reviewdate~ right below the "date"
+frontmatter, add the following to your Emacs configuration:
+
+@code{(setopt denote-review-insert-after "date")}
+
+@defopt denote-review-max-search-point
+Location at which the search-forward command stops.
+@end defopt
+
+Not all notes have to contain the review date frontmatter.
+
+To prevent needless searching until the end of the file, the
+search command is stopped a point defined by
+@code{denote-review-max-search-point}.
+
+Default this is set at @code{300}.
+
+If you use additional frontmatter fields, or for some other reason
+have a large frontmatter, a higher number might be needed. Set the
+point a few lines below your frontmatter and issue the command
+@key{C-x =} to see what a better value for
+@code{denote-review-max-search-point} could be.
+
+@node Command Index
+@unnumbered Command and Function Index
+@printindex fn
+
+@node GNU Free Documentation License
+@appendix GNU Free Documentation License
+
+* GNU Free Documentation License::  License for copying this manual.
+
+@c Get fdl.texi from https://www.gnu.org/licenses/fdl.html
+@include fdl.texi
+
+
+@bye
