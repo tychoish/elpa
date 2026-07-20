@@ -5,8 +5,8 @@
 ;; Author: Daniel Mendler <mail@daniel-mendler.de>
 ;; Maintainer: Daniel Mendler <mail@daniel-mendler.de>
 ;; Created: 2021
-;; Package-Version: 20260719.2241
-;; Package-Revision: 991224fc0387
+;; Package-Version: 20260720.1240
+;; Package-Revision: 44b926838376
 ;; Package-Requires: ((emacs "29.1") (compat "31"))
 ;; URL: https://github.com/minad/corfu
 ;; Keywords: abbrev, convenience, matching, completion, text

@@ -304,7 +304,8 @@ area and vertical area."
        (cfh (+ cfh (* 2 border)))
        ;; Candidates popup below input
        (below (>= cfy (+ lh (cadr (window-inside-pixel-edges))
-                         (window-tab-line-height)
+                         (static-if (< emacs-major-version 31)
+                             (window-tab-line-height) 0)
                          (or (cdr (posn-x-y (posn-at-point (point)))) 0))))
        ;; Popups aligned at top
        (top-aligned (or below (< ph cfh)))
@@ -483,7 +484,7 @@ not be displayed until this command is called again, even if
 
 ;;;###autoload
 (define-minor-mode corfu-popupinfo-mode
-  "Corfu info popup minor mode."
+  "Show candidate documentation in a popup."
   :global t :group 'corfu)
 
 (cl-defmethod corfu--exhibit :after (&context (corfu-popupinfo-mode (eql t)))
