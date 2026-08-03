@@ -579,8 +579,10 @@ on `agent-shell-markdown-source'.  The placeholder is not a markup
 character, so the styling passes treat an escaped delimiter (like the
 `*' in `**let\\***') as ordinary content rather than markup, and
 `agent-shell-markdown--decode-escapes' restores the bare char after
-they run.  Escapes inside AVOID-RANGES (fenced or inline code, where a
-backslash is literal) are left untouched.  Returns non-nil on a change.
+they run.  Caller-owned properties on the escaped character are carried
+onto the placeholder.  Escapes inside AVOID-RANGES (fenced or inline
+code, where a backslash is literal) are left untouched.  Returns
+non-nil on a change.
 
 For example the buffer `**let vs let\\***' becomes `**let vs letP**'
 \(P the placeholder tagged `*'), so the bold pass matches and the span
@@ -595,7 +597,9 @@ still round-trips to `**let vs let\\***' on copy."
         (if avoid
             (goto-char (cdr avoid))
           (let ((ch (char-after (match-beginning 1)))
-                (source (agent-shell-markdown-reconstruct start end)))
+                (source (agent-shell-markdown-reconstruct start end))
+                (carried (agent-shell-markdown--carry-properties
+                          (match-beginning 1))))
             (delete-region start end)
             (insert (propertize
                      (char-to-string agent-shell-markdown--escape-placeholder)
@@ -605,6 +609,8 @@ still round-trips to `**let vs let\\***' on copy."
                      'rear-nonsticky '(agent-shell-markdown-escaped
                                        agent-shell-markdown-frozen
                                        agent-shell-markdown-source)))
+            (when carried
+              (add-text-properties start (point) carried))
             (setq changed t)))))
     changed))
 

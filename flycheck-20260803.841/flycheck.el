@@ -10,8 +10,8 @@
 ;;             Bozhidar Batsov <bozhidar@batsov.dev>
 ;; URL: https://github.com/flycheck/flycheck
 ;; Keywords: convenience, languages, tools
-;; Package-Version: 20260802.1442
-;; Package-Revision: b7a0e544de45
+;; Package-Version: 20260803.841
+;; Package-Revision: 85dddb85bedc
 ;; Package-Requires: ((emacs "28.1") (seq "2.24"))
 
 ;; This file is not part of GNU Emacs.
@@ -8497,7 +8497,11 @@ annotated on the next command."
 
 ;;; Working with errors
 (defun flycheck-copy-errors-as-kill (pos &optional formatter)
-  "Copy each error at POS into kill ring, using FORMATTER.
+  "Copy the errors at POS into the kill ring, using FORMATTER.
+
+All of them go in as one entry, a line each, so a single yank pastes
+everything reported at POS.  They used to go in one at a time, which put
+the rest behind \[yank-pop] and left a paste showing only one of them.
 
 FORMATTER is a function to turn an error into a string,
 defaulting to `flycheck-error-message'.
@@ -8514,8 +8518,10 @@ universal prefix arg, and only the id with normal prefix arg."
   (let ((messages (delq nil (mapcar (or formatter #'flycheck-error-message)
                                      (flycheck-overlay-errors-at pos)))))
     (when messages
-      (seq-do #'kill-new (nreverse messages))
-      (message (string-join messages "\n")))))
+      (let ((text (string-join messages "\n")))
+        (kill-new text)
+        ;; Not as a format string: a message may well contain a `%'
+        (message "%s" text)))))
 
 (defun flycheck-explain-error-at-point ()
   "Display an explanation for the first explainable error at point.
@@ -11793,19 +11799,41 @@ predicate refuses a buffer whose mode is off."
 (defvar-local flycheck-eglot--diagnostics nil
   "Latest diagnostics Eglot reported for this buffer, in Flymake format.")
 
-(defvar-local flycheck-eglot--report-solicited nil
-  "Non-nil while an answer to Flycheck's own request for diagnostics is due.
+;; A report Flycheck asked for must not start another check, or the two feed
+;; each other: the check asks Eglot for diagnostics, the answer starts a
+;; check, and round it goes.  Reports the server volunteers still start one,
+;; which is how pushed diagnostics reach the buffer.
+;;
+;; Telling the two apart takes both of the flags below, because Eglot answers
+;; in either of two ways and neither alone covers both:
+;;
+;;   - synchronously, and more than once.  `eglot--flymake-report-push+pulled'
+;;     hands over the pulled diagnostics and then the pushed ones, so a single
+;;     request produces two reports.
+;;   - asynchronously, once.  Under the pull model of LSP 3.17 the request
+;;     sends `textDocument/diagnostic' and returns, and the answer lands long
+;;     after any dynamic binding has unwound.
 
-A report Flycheck asked for must not start another check, or the two feed
-each other: the check asks Eglot for diagnostics, the answer triggers a
-check, and so on.  Reports the server volunteers still trigger a check,
-which is how pushed diagnostics reach the buffer.
+(defvar-local flycheck-eglot--in-request nil
+  "Non-nil while inside the `eglot-flymake-backend' call Flycheck made.
+Covers however many reports that call produces.")
 
-This cannot be a `let' around the request.  Under the pull model of LSP
-3.17, asking Eglot for diagnostics sends `textDocument/diagnostic' and
-returns; the answer arrives long after any dynamic binding has unwound,
-and the loop then runs at hundreds of requests a second.  The flag is
-cleared by whichever report answers the request, synchronous or not.")
+(defvar-local flycheck-eglot--answered nil
+  "Non-nil when a report arrived while `flycheck-eglot--in-request' was set.")
+
+(defvar-local flycheck-eglot--awaiting-answer nil
+  "Non-nil while an answer that arrives after the request is still due.")
+
+(defun flycheck-eglot--ask-for-diagnostics ()
+  "Ask Eglot for this buffer's diagnostics, and mark its answer as ours."
+  (setq flycheck-eglot--awaiting-answer t
+        flycheck-eglot--answered nil)
+  (let ((flycheck-eglot--in-request t))
+    (eglot-flymake-backend #'flycheck-eglot--report))
+  ;; Answered before the call returned, so nothing more is due.  Leaving the
+  ;; flag up would swallow the next diagnostics the server volunteers.
+  (when flycheck-eglot--answered
+    (setq flycheck-eglot--awaiting-answer nil)))
 
 (defun flycheck-eglot--available-p ()
   "Return non-nil when Eglot is managing the current buffer."
@@ -11927,12 +11955,14 @@ repeats what we already hold: servers republish an unchanged set freely
 while they index or build, and every one of those used to cost a full
 check."
   (let* ((new (append diags nil))
-         (solicited flycheck-eglot--report-solicited)
+         (ours (or flycheck-eglot--in-request flycheck-eglot--awaiting-answer))
          (changed (not (equal new flycheck-eglot--diagnostics)))
-         (recheck (and changed (not solicited))))
-    ;; Whatever arrives first answers the request, whether Eglot had the
-    ;; diagnostics to hand or had to go and ask for them
-    (setq flycheck-eglot--report-solicited nil)
+         (recheck (and changed (not ours))))
+    (if flycheck-eglot--in-request
+        ;; More reports may follow from the same call, so the request stays
+        ;; open; just record that it was answered
+        (setq flycheck-eglot--answered t)
+      (setq flycheck-eglot--awaiting-answer nil))
     (flycheck-lsp--count-push recheck)
     (when changed
       (setq flycheck-eglot--diagnostics new)
@@ -11946,8 +11976,7 @@ Ask Eglot for the buffer's diagnostics and report the conversions of
 whatever it has to hand.  Under the pull model the answer arrives later
 and reaches the buffer through `flycheck-eglot--report'; the flag marks
 it as one Flycheck asked for, so it does not start a further check."
-  (setq flycheck-eglot--report-solicited t)
-  (eglot-flymake-backend #'flycheck-eglot--report)
+  (flycheck-eglot--ask-for-diagnostics)
   (funcall callback 'finished
            (mapcar #'flycheck-eglot--convert-diagnostic
                    flycheck-eglot--diagnostics)))
@@ -11986,8 +12015,7 @@ ORIG is the advised function; BEG, END and ARGS are its arguments."
     ;; Register as Eglot's report function without letting the answer start
     ;; a check; the trailing `flycheck-buffer-deferred' triggers the first
     ;; one instead.
-    (setq flycheck-eglot--report-solicited t)
-    (eglot-flymake-backend #'flycheck-eglot--report)
+    (flycheck-eglot--ask-for-diagnostics)
     (advice-add 'flymake-diagnostics :around
                 #'flycheck-eglot--flymake-diagnostics)
     (when (bound-and-true-p flymake-mode)
@@ -17595,11 +17623,31 @@ See URL
   'flycheck-chktex-config "39")
 (flycheck-def-config-file-var flycheck-chktex-config tex-chktex ".chktexrc")
 
+(flycheck-def-option-var flycheck-tcl-nagelfar-syntax-databases nil tcl-nagelfar
+  "A list of syntax database files for Nagelfar, passed with `-s'.
+
+Nagelfar only knows the commands in its databases, so in a project whose
+procedures live across several files it reports the ones it has not seen
+as unknown commands.  Running Nagelfar with `-header' over the project
+writes a database describing them; listing it here quiets those reports
+when checking a single file.
+
+Relative paths are relative to the file being checked."
+  :type '(repeat (file :tag "Database file"))
+  :safe #'flycheck-string-list-p
+  :package-version '(flycheck . "39"))
+
+(flycheck-def-args-var flycheck-tcl-nagelfar-args tcl-nagelfar
+  :package-version '(flycheck . "39"))
+
 (flycheck-define-checker tcl-nagelfar
   "A Tcl syntax checker using Nagelfar.
 
 See URL `https://nagelfar.sourceforge.net/'."
-  :command ("nagelfar" "-H" source)
+  :command ("nagelfar" "-H"
+            (option-list "-s" flycheck-tcl-nagelfar-syntax-databases)
+            (eval flycheck-tcl-nagelfar-args)
+            source)
   :error-patterns
   ;; foo.tcl: 29: E Wrong number of arguments (4) to "set"
   ;; foo.tcl: 29: W Expr without braces
