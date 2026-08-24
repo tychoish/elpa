@@ -1,0 +1,294 @@
+#+TITLE: magit-dash.el -- multi-repo dashboard for Emacs with GitHub integration
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+
+=magit-dash= is a tabulated-list dashboard for tracking multiple local git
+repositories from a single buffer.  Each registered repo shows its current
+branch, fetch age, ahead/behind counts, dirty state, and configured
+auto-sync operations.  Selecting a repo opens a per-repo overview buffer with
+recent log, PR counts (via the GitHub CLI), and magit action shortcuts.
+
+A companion PR dashboard (=magit-dash-gh-pr=) and CI log fetcher
+(=magit-dash-gh-actions=) are provided as optional modules.
+
+Repositories are registered with =magit-dash-register= (typically in your
+=user/= or personal init file) and the dashboard is opened with
+=magit-dash-open=.
+
+* Contents                                                       :TOC:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#package-vcel][package-vc.el]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#use-package-with-load-path][use-package with load-path]]
+  - [[#manual][Manual]]
+- [[#auto-sync-hooks-and-operations][Auto-sync hooks and operations]]
+- [[#example-configurations][Example Configurations]]
+  - [[#declarative-remote-host-sync][Declarative Remote Host Sync]]
+  - [[#full-auto-sync-with-bootstrapping-and-ci][Full Auto-Sync with Bootstrapping and CI]]
+- [[#api-reference][API Reference]]
+  - [[#magit-dash-gh-actions-fetch-for-pr][magit-dash-gh-actions-fetch-for-pr]]
+  - [[#magit-dash-gh-actions-fetch][magit-dash-gh-actions-fetch]]
+  - [[#magit-dash-gh-ci-open-last-run][magit-dash-gh-ci-open-last-run]]
+  - [[#magit-dash-ci-dispatch-fix-operation][magit-dash-ci-dispatch-fix-operation]]
+  - [[#magit-dash-gh-pr-fetch][magit-dash-gh-pr-fetch]]
+  - [[#magit-dash-gh-pr-dashboard-open][magit-dash-gh-pr-dashboard-open]]
+  - [[#magit-dash-gh-prune-merged-branches][magit-dash-gh-prune-merged-branches]]
+  - [[#magit-dash-gh-prune-prefetch][magit-dash-gh-prune-prefetch]]
+  - [[#magit-dash-gh-auth-switch][magit-dash-gh-auth-switch]]
+  - [[#magit-dash-open-repo][magit-dash-open-repo]]
+  - [[#magit-dash-sync-repo][magit-dash-sync-repo]]
+  - [[#magit-dash-open-other-window][magit-dash-open-other-window]]
+  - [[#magit-dash-open][magit-dash-open]]
+- [[#license][License]]
+
+* Installation
+** package-vc.el
+
+Requires Emacs 29.1+.  Run once to clone and register the package:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install '(magit-dash
+                      :url "https://github.com/tychoish/magit-dash"))
+#+END_SRC
+
+** use-package with VC
+
+Requires Emacs 30+.  Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package magit-dash
+  :vc (:url "https://github.com/tychoish/magit-dash"))
+#+END_SRC
+
+** use-package with load-path
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/magit-dash ~/path/to/magit-dash
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(use-package magit-dash
+  :load-path "~/path/to/magit-dash"
+  :commands (magit-dash-open magit-dash-open-other-window))
+#+END_SRC
+
+** Manual
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/magit-dash ~/path/to/magit-dash
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/path/to/magit-dash")
+(require 'magit-dash)
+#+END_SRC
+
+* Auto-sync hooks and operations
+
+Each auto-sync operation (=fetch=, =pull=, =commit=, =push=, and the =sync=
+meta-operation that runs them together) can take a =:pre= hook, a =:post=
+hook, and an =:operation= override, all under one =:hooks= keyword passed
+to =magit-dash-register=:
+
+#+BEGIN_SRC emacs-lisp
+(magit-dash-register
+ :name "myrepo" :path "~/src/myrepo"
+ :auto-fetch t :auto-commit t
+ :hooks (:fetch  (:post (docs))               ;; docs = a :commands label
+         :commit (:pre  (lint-staged))
+         :sync   (:operation orchestrate      ;; full pipeline replacement
+                  :post      (recompile-vendored))))
+#+END_SRC
+
+- =:pre= — targets run before the operation; a target signaling an error
+  skips the operation (reported as =skipped=).
+- =:post= — targets run after the operation succeeds (=ok= or a no-op
+  =skipped=); failures here are logged but never fail the overall sync.
+- =:operation= — replaces the default implementation for that operation.
+  For =fetch=/=pull=/=commit=/=push= the step still only runs when its own
+  =:auto-fetch=/=:auto-pull=/=:auto-commit=/=:auto-push= flag is set;
+  for =sync= it replaces the *entire* default pipeline outright —
+  fetch/pull/commit/push and their own settings are not consulted at all.
+
+A target is a symbol (looked up as a label in =:commands=), a string (run
+as a shell command in the repo directory), or a function of
+=(REPO ON-COMPLETE)= where =ON-COMPLETE= accepts =ok=, =skipped=, or =error=.
+
+=magit-dash-global-hooks= applies =:pre=/=:post= hooks (no =:operation=)
+across every registered repo, using the identical shape.  Ordering wraps
+outermost-to-innermost: for =:pre=, global hooks run before repo hooks; for
+=:post=, repo hooks run before global hooks (global closes last). Set it
+with =magit-dash-set-global-hooks= rather than =setq=, so the shape is
+validated:
+
+#+BEGIN_SRC emacs-lisp
+(magit-dash-set-global-hooks '(:sync (:post (notify-dashboard))))
+#+END_SRC
+* Example Configurations
+
+** Declarative Remote Host Sync
+
+For repositories synced across multiple workstations or remote hosts over SSH, =:remote-sync= declares mirror hosts, target branch, optional remote path, and merge strategy.
+
+Options for =:remote-sync=:
+- =:hosts= — list of remote hostnames/SSH targets (strings or symbols).
+- =:branch= — target branch to rebase or merge against (defaults to current branch HEAD).
+- =:path= — remote destination path (defaults to same absolute path as local).
+- =:merge-method= — sync integration strategy: ='rebase= (default) or ='merge=.
+
+=magit-dash= automatically generates per-host =sync-HOST= commands (e.g. =sync-deleuze=, =sync-spinoza=) in the repository command picker:
+
+#+BEGIN_SRC emacs-lisp
+(magit-dash-register
+ :name "blog"
+ :path "~/src/blog"
+ :repo "git@github.com:tychoish/blog.git"
+ :remote-sync '(:hosts ("deleuze" "spinoza")
+                :branch "master"
+                :merge-method merge)
+ :commands '((push  . "make push")
+             (build . "make build"))
+ :sort-hint 20)
+#+END_SRC
+
+Each generated =sync-HOST= command executes a robust multi-stage sync pipeline:
+1. *Remote SSH*: Stage, fetch, and rebase (or merge when =:merge-method= is ='merge=) on the target branch on the remote host, then commit and push.
+2. *Local*: Stage, fetch, rebase/merge, clean deleted files, commit, and push from the local repository.
+3. *Remote SSH*: Repeat remote stage/rebase/commit/push to incorporate local changes.
+4. *Local*: Final fetch and rebase/merge.
+
+To run remote sync automatically during repo sync, you can wire a generated target to =:hooks=:
+
+#+BEGIN_SRC emacs-lisp
+(magit-dash-register
+ :name "mail"
+ :path "~/mail"
+ :repo "git@github.com:tychoish/mail.git"
+ :remote-sync '(:hosts ("deleuze" "spinoza")
+                :branch "master")
+ :hooks '(:sync (:pre (magit-dash-save-project-buffers)
+                 :operation sync-deleuze)))
+#+END_SRC
+
+** Full Auto-Sync with Bootstrapping and CI
+
+#+BEGIN_SRC emacs-lisp
+(magit-dash-register
+ :name "myproject"
+ :path "~/src/myproject"
+ :repo "git@github.com:tychoish/myproject.git"
+ :auto-fetch t
+ :auto-pull t
+ :auto-commit t
+ :auto-push t
+ :sync-branches '("main" "master")
+ :include-prs t
+ :include-ci t
+ :sort-hint 10)
+#+END_SRC
+
+* API Reference
+
+#+BEGIN_COMMENT
+Generated from docstrings across all .el files in magit-dash. To regenerate:
+open this file in Emacs with magit-dash on your load-path, place point in the
+source block below, and run C-c C-c (or M-x org-babel-execute-buffer).
+Do not edit the #+RESULTS: block by hand — it will be overwritten on the next run.
+
+Scope is controlled by the `scope' variable at the top of the source block:
+  'exported   -- all non-private public symbols (no -- in name)
+  'autoloaded -- only ;;;###autoload-annotated symbols  [default]
+  'interactive -- all interactive commands (commandp)
+  (list ...)  -- exactly these named symbols, flat output in given order
+
+Additional symbol kinds are controlled by `include-kinds':
+  'variables -- defvar / defconst / defvar-local
+  'customs   -- defcustom
+#+END_COMMENT
+
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+  (require 'org-docsgen)
+  (org-docsgen-run :scope 'autoloaded
+                   :include-kinds '(customs)
+                   :namespace "magit-dash")
+#+END_SRC
+
+#+RESULTS:
+** magit-dash-gh-actions-fetch-for-pr
+
+Fetch GitHub Actions CI logs for PR-NUMBER using REPO-DIR as the working directory. PR-NUMBER is an integer.  REPO-DIR must be a local checkout of the repository so that ‘gh’ can resolve the remote when listing and downloading runs.
+
+** magit-dash-gh-actions-fetch :command:
+
+Download GitHub Actions CI logs for the current branch. When RUN-ID is non-nil, fetch that specific run without prompting. Otherwise list recent runs and prompt for a selection.
+
+Creates an artifact directory under plans/ containing: run-info.json        — full run metadata run-logs.ghlog       — complete step logs (opens in ‘magit-dash-gh-actions-log-mode’) run-failed-logs.ghlog — failed-step logs (when ‘magit-dash-gh-actions-include-failed-log’) index.json           — collection summary
+
+** magit-dash-gh-ci-open-last-run
+
+Open the URL of the most recent CI run for REPO in the browser. Does nothing when no CI status is cached for REPO.
+
+** magit-dash-ci-dispatch-fix-operation
+
+Download the latest CI run’s artifacts for REPO and dispatch a fix-CI prompt. Uses REPO’s cached :ci-status when present; otherwise fetches it first via ‘magit-dash-gh-ci-fetch’ before proceeding, so this can be called without a prior manual CI-status fetch.  Signals ‘user-error’ when REPO does not have :include-ci set, or when no CI run is found for it even after fetching.
+
+** magit-dash-gh-pr-fetch :command:
+
+Download comments and review threads for PR-NUMBER (or the current branch’s PR). When PR-NUMBER is nil, auto-detects the PR for the current branch.
+
+Creates an artifact directory under plans/ containing: pr-info.json            — PR metadata and review decision pr-review-threads.json  — all review threads with resolved status pr-issue-comments.json  — top-level (non-review) comments index.json              — collection summary with per-thread creator/last-commentor
+
+** magit-dash-gh-pr-dashboard-open :command:
+
+Open the pull request dashboard buffer.
+
+** magit-dash-gh-prune-merged-branches :command:
+
+Open a menu to prune local branches whose PRs are merged or closed.
+
+Per-repo cache (candidates + marked list) lives on the unified global cache keyed by repository toplevel. The menu loops until you select ‘exit menu’. The menu offers:
+
+  - exit menu
+  - refresh
+  - prune all branches (no prompt)
+  - prune all branches (with prompt)
+  - mark branch for pruning
+  - prune marked branches (when any are marked)
+  - prune: BRANCH [marked]   (one entry per candidate)
+
+** magit-dash-gh-prune-prefetch
+
+Seed the in-memory closed-PR cache from disk for the current repo. Makes no GitHub API calls; safe to call on status load. Skips silently when caching is disabled, not in a git repo, or the in-memory cache is already populated.
+
+** magit-dash-gh-auth-switch :command:
+
+Switch the active ‘gh’ CLI account. When more than two accounts are configured, prompt to select which to switch to via ‘annotated-completing-read’. Otherwise switch directly to the other configured account.
+
+** magit-dash-open-repo :command:
+
+Select a repository and open its magit status buffer.
+
+Context-aware collection: - In a magit-status buffer: scans from the parent of the current repo and merges ‘~/’ at depth 1, so sibling repos and home-level repos appear together. - In a directory that is itself a git repo: only the repo’s worktrees and submodules are offered (use a prefix arg to override and scan subdirs). - Otherwise: scans subdirectories of ‘default-directory’.
+
+Live magit-status buffers are always included and marked "[open]"; selecting one switches to it directly without reopening it.
+
+With a prefix argument, prompt for ROOT and scan it normally regardless of the above context rules.
+
+** magit-dash-sync-repo :command:
+
+Select a repository interactively and run its configured auto-sync operations.
+
+** magit-dash-open-other-window
+
+Open the repository dashboard buffer in another window. Signals ‘user-error’ when ‘magit-dash-repo-list’ is empty.
+
+** magit-dash-open :command:
+
+Open the repository dashboard buffer in another window. Signals ‘user-error’ when ‘magit-dash-repo-list’ is empty.
+
+
+* License
+Copyright (C) sam kleinman. GPL-3.0 or later. See the source file header
+for the full license text.
