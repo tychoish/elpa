@@ -1,0 +1,542 @@
+#+TITLE: xtdlib.el -- e(x)tended s(t)an(d)ard Emacs Lisp Library
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+Extensions and additions for [[https://github.com/rejeep/f.el][f.el]] and [[https://github.com/magnars/s.el][s.el]], plus [[https://github.com/Wilfred/ht.el][ht.el]]- and [[https://github.com/magnars/dash.el][dash.el]]-style list/table helpers (implemented on built-in ~map.el~/~seq.el~, with no real dependency on those two packages), and utility macros and functions for hooks to support common patterns and improved code ergonomics.
+* Contents                                                       :TOC:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#package-vcel][package-vc.el]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#use-package][Use Package]]
+  - [[#manual][Manual]]
+- [[#api-reference][API Reference]]
+  - [[#lists][Lists]]
+  - [[#dashel][`dash.el']]
+  - [[#options][Options]]
+  - [[#fel][`f.el']]
+  - [[#htel-style-accessors-on-top-of-mapel][`ht.el' Style Accessors, On Top Of `map.el']]
+  - [[#slow-op][Slow Op]]
+  - [[#utility-macros][Utility Macros]]
+  - [[#project-context][Project Context]]
+  - [[#misc][Misc]]
+  - [[#strings][Strings]]
+- [[#license][License]]
+
+* Installation
+** package-vc.el
+
+Requires Emacs 29.1+.  Run once to clone and register the package:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install '(xtdlib
+                      :url "https://github.com/tychoish/xtdlib.el"))
+#+END_SRC
+
+** use-package with VC
+
+Requires Emacs 30+.  Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package xtdlib
+  :vc (:url "https://github.com/tychoish/xtdlib.el")
+  :demand t)
+#+END_SRC
+
+** Use Package
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/xtdlib.el ~/path/to/xtdlib.el
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(use-package xtdlib
+  :load-path "~/path/to/xtdlib.el"
+  :demand t)
+#+END_SRC
+
+#+RESULTS:
+
+This works with any Emacs version that has =use-package= (28+) and does not require network access at startup.
+
+** Manual
+
+Clone the repository and add it to your =load-path=:
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/xtdlib.el ~/path/to/xtdlib.el
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/path/to/xtdlib.el")
+(require 'xtdlib)
+#+END_SRC
+
+#+RESULTS:
+: xtdlib
+
+* API Reference
+
+#+BEGIN_COMMENT
+Generated from docstrings across all .el files in xtdlib. To regenerate: open
+this file in Emacs with xtdlib on your load-path, place point in the source
+block below, and run C-c C-c (or M-x org-babel-execute-buffer).
+Do not edit the #+RESULTS: block by hand — it will be overwritten on the next run.
+
+Scope is controlled by the `scope' variable at the top of the source block:
+  'exported   -- all non-private public symbols (no -- in name)  [default]
+  'autoloaded -- only ;;;###autoload-annotated symbols
+  'interactive -- all interactive commands (commandp)
+  (list ...)  -- exactly these named symbols, flat output in given order
+
+Additional symbol kinds are controlled by `include-kinds':
+  'variables -- defvar / defconst / defvar-local
+  'customs   -- defcustom
+#+END_COMMENT
+
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+  (require 'org-docsgen)
+
+  (org-docsgen-run
+   :scope 'exported
+   :include-kinds '(customs)
+   :namespace "xtdlib")
+#+END_SRC
+
+#+RESULTS:
+** Lists
+
+*** larger
+
+Return the larger value. If either FIRST or SECOND are not numbers, treat them as 0.
+
+*** smaller
+
+Return the smaller value. If either FIRST or SECOND are not numbers, treat them as 0.
+
+*** make-add-to-list-fn
+
+: (fn LIST &optional &key APPEND)
+
+Return a lambda that appends ITEM to LIST via ‘add-to-list’. LIST may be a bare symbol or a quoted symbol.
+
+** `dash.el'
+
+*** -distinct-by-car
+
+: (fn CELL &optional &key (TEST #'equal))
+
+Take a list of cons cells and return a new list that contains only the elements that have unique car values, ignoring the cdr entirely. Compare values using the test function, which defaults to ‘equal’.
+
+*** -distinct-by-alist-key
+
+: (fn KEY CELL &optional &key (TEST #'equal))
+
+Compare a list of alists, and return a new list that contains only the alists that have distinct values for a specific key. Compare values using the test function, which defaults to ‘equal’.
+
+*** -unwind
+
+Flatten LIST by exactly one level, collecting nested list items into a single list. Unlike ‘-flatten’, which recurses fully, ‘-unwind’ only removes one layer of nesting.
+
+*** -flat-map
+
+‘-flat-map’ applies (maps) a function, which returns a list, to each item in a list. The lists that result from the map operation are then concatenated or joined. This provides a dash.el conforming API for the ‘mapcan’ operation.
+
+*** -mapc
+
+: (fn FUNCTION SEQUENCE)
+
+Apply FUNCTION to each element of SEQUENCE for side effects only. Unlike ‘mapcar’, don’t accumulate the results.  Return SEQUENCE. SEQUENCE may be a list, a vector, a bool-vector, or a string.
+
+*** -join
+
+: (fn &rest LISTS)
+
+Concatenate any number of lists by altering them. Only the last argument is not altered, and need not be a list.
+
+*** -append
+
+: (fn &rest SEQUENCES)
+
+Concatenate all the arguments and make the result a list. The result is a list whose elements are the elements of all the arguments. Each argument may be a list, vector or string.
+
+All arguments except the last argument are copied.  The last argument is just used as the tail of the new list.  If the last argument is not a list, this results in a dotted list.
+
+As an exception, if all the arguments except the last are nil, and the last argument is not a list, the return value is that last argument unaltered, not a list.
+
+*** -reverse
+
+: (fn SEQ)
+
+Reverse order of items in a list, vector or string SEQ. If SEQ is a list, it should be nil-terminated. This function may destructively modify SEQ to produce the value.
+
+*** -sparse
+
+Return LIST with all nil elements removed.
+
+*** -c
+
+: (fn CAR CDR)
+
+Create a new cons, give it CAR and CDR as components, and return it.
+
+*** -l
+
+: (fn &rest OBJECTS)
+
+Return a newly created list with specified arguments as elements. Allows any number of arguments, including zero.
+
+*** -strings
+
+Return INPUT as a flat list, optionally coercing non-string elements. A trailing ‘:options OPT’ pair in INPUT selects how non-strings are handled: ‘filter’ drops them, ‘stringify’ formats them with ‘format’. OPT may be a list combining these symbols. When ‘:options’ is not provided or its value is nil, INPUT is returned as-is without coercion. A ‘user-error’ is signaled only when OPT is some other, unrecognized value.
+
+*** -sparse-append
+
+Append ITEMS and remove all nil values from the concatenated result.
+
+*** -map-in-place
+
+Apply the ‘mapper’ function to every item in the list ‘items’ and replace the items in the original list with the results of the function, returning the list. This is a destructive operation.
+
+*** -in-place
+
+Destructively apply MAPPER to every item in ITEMS, replacing each element in place. Returns the count of elements processed. Use this when you need the element count rather than the list itself; prefer ‘-map-in-place’ when you need the modified list back.
+
+*** -map-uniq
+
+: (fn MAPPER INPUT &optional &key (TEST #'equal))
+
+Apply the ‘mapper’ function to every item in the ‘input’ list, returning a new list that contains the unique output of the list. Comparisons use the ‘test’ function, which defaults to ‘equal’.
+
+*** --mapc
+
+Apply the form (with the current element avalible as the variable ‘it’) to all item in the list, primarily for side effects. Returns the input list. This is an anaphoric equivalent to ‘mapc’. As opposed to ‘--each’ and ‘-each’, which return nil, ‘-mapc’ returns the input list.
+
+This is the anaphoric counterpart to ‘-mapc’.
+
+*** --flat-map
+
+‘--flat-map’ evaluates a form for very item in ‘input-list’ with the item bound to ‘it’. The form must return a list, and the returned lists are then concatenated or joined into a single flattened list. This provides a dash.el conforming API for the ‘mapcan’ operation.
+
+This is the anaphoric counterpart to ‘-flat-map’.
+
+*** --map-in-place
+
+Apply the form, (with the current element as ‘it’) to each item in the list, distructively setting the return value of the form to the value in the list.
+
+This is the anaphoric counterpart to ‘-map-in-place’.
+
+*** --in-place
+
+Take a list and replace each element in the list with the result of evaluating ‘FORM’ for that element. The original element is accessable in the ‘FORM’ as ‘it‘. Returns the number of items in the list. This is a destructive operation.
+
+This is the anaphoric counterpart to ‘-in-place’.
+
+*** --map-uniq
+
+Apply ‘FORM’ to every item in the input list, available as ‘it’, and collect the UNIQUE results, and returning them as a list. Items are compared for uniqueness with ‘equal’.
+
+This is the anaphoric counterpart to ‘-map-uniq’.
+
+** Options
+
+*** option-set-p
+
+Return non-nil if OPT is present in OPTIONS. OPTIONS may be a single symbol or a list of symbols.
+
+*** -filter-s-trim
+
+Return STRS with non-strings removed and remaining strings trimmed of whitespace. Empty strings and strings that are entirely whitespace are excluded from the result.
+
+** `f.el'
+
+*** f-mtime
+
+Return the modification time of FILENAME as a time value.
+
+*** f-atime
+
+Return the access time of FILENAME as a time value.
+
+*** f-make-slug
+
+Turn a string, S, into a hyphen-seperated slug for filename.
+
+*** f-filename-is-p
+
+Return non-nil if the filename component of path ENTRY equals NAME.
+
+*** f-when-file-exists
+
+Return PATH if it exists on the filesystem, otherwise nil.
+
+*** f-distinct
+
+Return SEQUENCE with duplicate paths removed using ‘f-equal-p’ for comparison. Handles paths that differ only in trailing slashes or relative vs. absolute form when the filesystem resolves them to the same location.
+
+*** f-distinct-paths
+
+Return SEQUENCE with duplicate paths removed using ‘f-equal-p’ for comparison. Handles paths that differ only in trailing slashes or relative vs. absolute form when the filesystem resolves them to the same location.
+
+*** f-directories-containing-file-with-extension-function
+
+Define ‘f-EXT-file-p’ and ‘f-directories-containing-file-with-extension-EXT’ for EXTENSION.
+
+*** f-files-in-directory
+
+Return a flat list of all files under PATH. PATH may be a directory, a file (returns siblings), or a list of paths.
+
+*** f-recursive-directories-containing
+
+Return a list of directories under PATH that contain a file named FILENAME. Searches recursively. PATH defaults to ‘default-directory’ when nil.
+
+*** f-directories-containing-file-function
+
+Define helper predicates and a search function for directories containing FILENAME. Also accepts additional FILES as alternate names to match.
+
+*** f-collapse-homedir
+
+Replace the expanded home directory prefix in PATH with ‘~/’.
+
+*** f-visually-compress-path
+
+Truncate each component of PATH to at most NUM characters, preserving the separator.
+
+*** f-visual-compression-function
+
+Define ‘f-visually-compress-to-NAME’ that truncates each path component to NUM characters.
+
+** `ht.el' Style Accessors, On Top Of `map.el'
+
+*** ht-get-lambda
+
+Return a lambda of one argument KEY that looks up KEY in TABLE.
+
+*** ht-set-lambda
+
+Return a lambda of two arguments KEY and VALUE that sets KEY to VALUE in TABLE.
+
+*** ht-contains-p-lambda
+
+Return a lambda of one argument KEY that tests whether KEY is present in TABLE.
+
+*** TODO ht-get-function
+
+*no docstring*
+
+*** TODO ht-set-function
+
+*no docstring*
+
+*** TODO ht-contains-p-function
+
+*no docstring*
+
+*** ht-make-named-table
+
+: (fn NAME &optional &key (TEST #'equal))
+
+Define a named hash table variable and named accessor functions. Creates ‘ht-NAME-get’, ‘ht-NAME-set’, and ‘ht-NAME-contains-p’. TEST defaults to ‘equal’.
+
+** Slow Op
+
+*** with-slow-op-timer
+
+Send a message the BODY operation of NAME takes longer to execute than a hardcoded threshold.
+
+** Utility Macros
+
+*** disabled
+
+Wrap BODY so it never executes. Keeps code byte-compilable while effectively commenting it out.
+
+*** with-force-write
+
+Temporarily clear ‘buffer-read-only’, evaluate BODY, then restore it to t.
+
+*** pos-arg
+
+Allow positional arguments to have annotated call-sites.
+
+*** pa
+
+Allow positional arguments to have annotated call-sites.
+
+*** add-lazy-init
+
+: (fn &key NAME OPERATION (DELAY 1))
+
+*** add-one-shot-hook
+
+: (fn &key NAME HOOK FUNCTION RESULT BODY FORM OPERATION (ARGS nil) (LOCAL nil) (PERSIST nil) (COUNT 1) (DEPTH 0) (MAKE-UNIQUE nil) (CLEANUP nil) (IDLE-TIMER nil))
+
+Register a self-removing hook function named NAME on HOOK. The hook body is specified via one of: FUNCTION (a symbol or lambda), FORM (an expression), BODY (a list of forms), RESULT (evaluated at expansion time), or OPERATION (called via funcall/apply with optional ARGS).
+
+After firing COUNT times (default 1) the hook removes itself. Set PERSIST to t to keep the hook active indefinitely. When IDLE-TIMER is a number, the body runs in an idle timer of that many seconds rather than directly in the hook.
+
+HOOK may be a symbol, a list of symbols, or the special sentinel ‘after-first-frame-created’, which routes to ‘window-setup-hook’ in non-daemon sessions and ‘server-after-make-frame-hook’ in daemon sessions. This is resolved at call time via ‘xtd--resolve-hooks’, not at macro-expansion time.
+
+DEPTH controls hook insertion depth (default 0). LOCAL makes the hook buffer-local. MAKE-UNIQUE generates an uninterned symbol to avoid name collisions. CLEANUP uninterns the generated symbol after the hook fires.
+
+*** make-run-hooks-function-for
+
+Define a zero-argument function ‘run-hooks-for-MODE’ that runs ‘MODE-hook’.
+
+*** create-toggle-functions
+
+: (fn VALUE &optional &key SHORT-NAME LOCAL KEYMAP KEY)
+
+Define turn-on, turn-off, and toggle interactive commands for variable VALUE. Use SHORT-NAME to override the generated name. LOCAL makes commands use ‘setq-local’. Optionally bind the toggle to KEY in KEYMAP.
+
+*** make-read-extended-command-for-prefix
+
+: (fn PREFIX &optional &key BIND-MAP BIND-KEY KEY-ALIAS)
+
+Define an interactive command that runs ‘execute-extended-command’ filtered to PREFIX. Only commands whose names begin with PREFIX are offered for completion. Optionally bind the command to BIND-KEY in BIND-MAP with KEY-ALIAS as the which-key label.
+
+*** with-toggle-once
+
+Define a function NAME that executes BODY only the first time it is called. Subsequent calls are no-ops. Uses an auto-generated toggle variable to guard execution.
+
+*** with-prefix-arg
+
+Evaluate BODY with ‘current-prefix-arg’ bound to ARG.
+
+*** with-default-directory
+
+Run the body with ‘default-directory’ set to the path provided
+
+*** with-silence
+
+Totally suppress message from either the minibuffer or the *Messages* buffer..
+
+*** with-quiet
+
+Suppress any messages from appearing in the minibuffer area.
+
+*** with-temp-keymap
+
+Bind MAP to a fresh sparse keymap, evaluate BODY, and return the keymap. Use this to build a keymap programmatically and return it in one expression.
+
+*** setq-when-nil
+
+: (fn VARIABLE VALUE &optional &key LOCAL)
+
+Set VARIABLE to VALUE only if VARIABLE is currently nil. Use :local t for ‘setq-local’.
+
+*** with-timer
+
+Report on NAME and the time taken to execute BODY.
+
+*** merge-predicate-functions
+
+Return a lambda that applies each predicate in PREDS to its argument with ‘and’. Short-circuits on the first predicate that returns nil, consistent with ‘and’ semantics.
+
+*** build-symbol-name
+
+Join PARTS into a single hyphen-separated string suitable for a symbol name. Non-string PARTS are dropped. Each remaining part has internal whitespace collapsed and common separator punctuation (spaces, ‘=’, ‘+’, ‘_’, quotes, slashes) replaced with hyphens, then all parts are joined with ‘-’. Runs of three or more hyphens in the final result are collapsed to one, so a part’s own ‘--’ (e.g. a private-symbol prefix) survives, but pileups from concatenation don’t.
+
+** Project Context
+
+*** buffer-derived-mode-p
+
+Returns t when the major-mode of ‘buffer’ is or is derived from ‘mode.’
+
+*** mode-buffers-for-project
+
+: (fn &optional &key (MODE major-mode))
+
+Return buffers in the current project whose major mode derives from MODE. MODE defaults to ‘major-mode’ of the calling buffer. Uses ‘approximate-project-buffers’ to determine project membership.
+
+*** mode-buffers
+
+: (fn &optional (MODE major-mode))
+
+Return all live buffers whose major mode derives from MODE. MODE defaults to ‘major-mode’ of the calling buffer. Searches across all buffers, not just the current project.
+
+*** approximate-project-root
+
+Return the current project root, falling back to ‘default-directory’.
+
+*** approximate-project-name
+
+Return the current project name, falling back to the directory basename.
+
+*** approximate-project-buffers
+
+Return buffers belonging to the current project.
+
+** Misc
+
+*** compile-buffer-name
+
+Return a function suitable for ‘compilation-buffer-name-function’ that always returns NAME. The returned function accepts one optional argument (the compilation mode) and ignores it.
+
+** Strings
+
+*** s-equal
+
+: (fn S1 S2)
+
+Return t if two strings have identical contents. Case is significant, but text properties are ignored. Symbols are also allowed; their print names are used instead.
+
+See also ‘string-equal-ignore-case’.
+
+*** s-empty-p
+
+: (fn STRING)
+
+Check whether STRING is empty.
+
+*** TODO s-plural-for
+
+*no docstring*
+
+*** TODO resolve-plural-form
+
+*no docstring*
+
+*** s-or-char-equal
+
+Return t when CHAR equals VALUE, where VALUE may be a character or single-char string.
+
+*** s-define-join-string-function
+
+: (fn CHAR &optional &key USE-JARGON-NAMES SPACE-PADDING)
+
+Define a function ‘s-join-with-NAME’ that joins non-empty strings with CHAR as separator. NAME is derived from CHAR via ‘xtdlib--join-char-names’, falling back to the Unicode character name. When USE-JARGON-NAMES is non-nil, the alternate jargon name is used (e.g. kebab vs hyphen). When SPACE-PADDING is non-nil, the separator is surrounded by spaces.
+
+*** s-shortest
+
+Return the shorter of strings A and B. When equal in length, return A.
+
+*** s-collapse-hyphens
+
+Replace runs of three or more consecutive hyphens in STR with a single hyphen.
+
+*** s-normalize-symbol-name
+
+Normalize NAME to a clean hyphen-separated string suitable for use as a symbol name. Trims outer whitespace, collapses internal whitespace, replaces common punctuation with hyphens, and collapses runs of three or more hyphens.
+
+*** s-trimmed-or-nil
+
+Return VALUE trimmed of surrounding whitespace, or nil if VALUE is not a string or is empty after trimming.
+
+*** s-trim-non-word-chars
+
+Trim leading and trailing non-word characters from VALUE. Return nil if VALUE is not a string or is empty after trimming.
+
+*** s-blank-p
+
+Return t when VALUE is a string that is empty or consists entirely of whitespace. Returns nil for non-strings, non-empty strings, and strings with non-whitespace content. Use this to guard against blank user input or empty configuration values.
+
+*** s-contains-whitespace-p
+
+Return t when VALUE is a string that is empty or consists entirely of whitespace. Returns nil for non-strings, non-empty strings, and strings with non-whitespace content. Use this to guard against blank user input or empty configuration values.
+
+*** s-default
+
+Return DEFAULT when INPUT is nil or an empty string, otherwise return INPUT.
+
+* License
+
+Copyright (C) tychoish. GPL-3.0 or later. See the source file header
+for the full license text.

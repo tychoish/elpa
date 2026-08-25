@@ -1,0 +1,301 @@
+;;; elpaish-css.el --- CSS-as-sexp stylesheets for ELPAish generated pages -*- lexical-binding: t; -*-
+
+;; Author: tychoish
+;; Keywords: maint, tools, elpa, package
+
+;;; Commentary:
+;; Represents the CSS used by the generated GitHub Pages catalog as plain
+;; Lisp data (mirroring how `elpaish-website.el' represents HTML as `dom'
+;; sexps) instead of as opaque string literals, so shared values like colors
+;; and font stacks live in one place and rules can be composed/inspected
+;; like any other Lisp data.
+;;
+;; A stylesheet is a list of rules.  Each rule is (SELECTOR . DECLARATIONS),
+;; where DECLARATIONS is an alist of (PROPERTY . VALUE) strings, e.g.:
+;;
+;;   ((body (font-family . "sans-serif") (margin . "0"))
+;;    (".card" (border . "1px solid #c6c6c6")))
+;;
+;; `elpaish-css-render' turns a stylesheet into a single minified CSS string
+;; suitable for inlining into a `(style nil ...)' dom node.
+
+;;; Code:
+
+(require 'modus-themes)
+(require 'seq)
+
+;;; Theme Configuration & Design Tokens
+
+(defcustom elpaish-modus-theme 'modus-operandi
+  "Modus theme symbol to derive CSS colors from (`modus-operandi' or `modus-vivendi')."
+  :type '(choice (const :tag "Modus Operandi (Light)" modus-operandi)
+                 (const :tag "Modus Vivendi (Dark)" modus-vivendi)
+                 (symbol :tag "Other Modus Theme"))
+  :group 'elpaish)
+
+(defconst elpaish-css-font-sans
+  "'Source Sans 3','Source Sans Pro',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+  "Default body font stack for generated ELPAish pages.")
+
+(defconst elpaish-css-font-mono
+  "'Source Code Pro',ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace"
+  "Monospace font stack used for versions, code, and package archive URLs.")
+
+(defun elpaish-css-color (key &optional theme)
+  "Return rendered hex-color string for KEY directly from `modus-themes' THEME.
+THEME defaults to `elpaish-modus-theme' (or `modus-operandi').
+Signals an error if THEME is unknown or KEY is not found in the palette."
+  (let* ((th (or theme (and (boundp 'elpaish-modus-theme) elpaish-modus-theme) 'modus-operandi))
+         (val (when (fboundp 'modus-themes-get-color-value)
+                (condition-case nil
+                    (modus-themes-get-color-value key nil th)
+                  (error nil)))))
+    (if (and (stringp val)
+             (not (string= val "unspecified"))
+             (string-match-p "\\`#[0-9a-fA-F]\\{6\\}\\'" val))
+        val
+      (error "Color %S not found in modus theme %S" key th))))
+
+(defun elpaish-css-render (stylesheet)
+  "Render STYLESHEET (a list of (SELECTOR . DECLARATIONS) rules) to a CSS string.
+DECLARATIONS is an alist of (PROPERTY . VALUE) strings."
+  (mapconcat
+   (lambda (rule)
+     (let ((selector (car rule))
+           (decls (cdr rule)))
+       (format "%s{%s}"
+               (if (symbolp selector) (symbol-name selector) selector)
+               (mapconcat (lambda (decl) (format "%s:%s;" (car decl) (cdr decl)))
+                          decls ""))))
+   stylesheet ""))
+
+;;; Shared base rules
+
+(defun elpaish-css--base-rules ()
+  "Return core stylesheet rules shared across all generated pages."
+  `((html (font-family . ,elpaish-css-font-sans)
+          (color . ,(elpaish-css-color 'fg-main))
+          (background . ,(elpaish-css-color 'bg-main))
+          (line-height . "1.55")
+          ("-webkit-text-size-adjust" . "100%"))
+    (body (margin . "0 auto")
+          (max-width . "1240px")
+          (padding . "24px 28px 48px 28px")
+          (font-size . "20px"))
+    (h1 (font-size . "2.1em")
+        (font-weight . "800")
+        (margin . "0 0 12px 0")
+        (letter-spacing . "-0.02em")
+        (color . ,(elpaish-css-color 'fg-main)))
+    (h2 (font-size . "1.4em")
+        (font-weight . "700")
+        (margin . "28px 0 12px 0")
+        (letter-spacing . "-0.01em")
+        (color . ,(elpaish-css-color 'fg-main)))
+    (a (color . ,(elpaish-css-color 'fg-link))
+       (text-decoration . "none"))
+    ("a:hover" (color . ,(elpaish-css-color 'magenta))
+               (text-decoration . "underline"))
+    (code (font-family . ,elpaish-css-font-mono)
+          (font-size . "0.92em")
+          (background . ,(elpaish-css-color 'bg-dim))
+          (color . ,(elpaish-css-color 'magenta-cooler))
+          (padding . "2px 6px")
+          (border-radius . "4px")
+          (border . ,(format "1px solid %s" (elpaish-css-color 'bg-inactive))))))
+
+;;; Track index page (per-track package catalog table)
+
+(defun elpaish-css-stream-index-stylesheet ()
+  "Return stylesheet rules for a per-stream package catalog page."
+  (append
+   (elpaish-css--base-rules)
+   `((h1 (border-bottom . ,(format "2px solid %s" (elpaish-css-color 'fg-dim)))
+         (padding-bottom . "10px"))
+     (".navbar" (display . "flex")
+      (align-items . "center")
+      (gap . "18px")
+      (margin . "12px 0 24px 0")
+      (padding-bottom . "12px")
+      (border-bottom . ,(format "1px solid %s" (elpaish-css-color 'bg-inactive)))
+      (font-size . "1em"))
+     (".navbar a" (color . ,(elpaish-css-color 'fg-link))
+      (font-weight . "600"))
+     (".navbar .nav-icon" (display . "inline-flex")
+      (align-items . "center")
+      (font-size . "1.25em")
+      (color . ,(elpaish-css-color 'fg-dim)))
+     (".navbar .nav-icon:hover" (color . ,(elpaish-css-color 'fg-link)))
+     (".stream-meta" (margin-bottom . "24px")
+      (font-size . "0.95em")
+      (color . ,(elpaish-css-color 'fg-dim)))
+     (".table-wrapper" (width . "100%")
+      (overflow-x . "auto")
+      ("-webkit-overflow-scrolling" . "touch"))
+     (table (border-collapse . "collapse")
+            (width . "100%")
+            (table-layout . "fixed")
+            (font-size . "0.95em")
+            (border . ,(format "1px solid %s" (elpaish-css-color 'border))))
+     ("th,td" (padding . "10px 14px")
+      (text-align . "left")
+      (vertical-align . "top")
+      (box-sizing . "border-box"))
+     (th (background . ,(elpaish-css-color 'bg-inactive))
+         (color . ,(elpaish-css-color 'fg-main))
+         (font-weight . "700")
+         (font-size . "0.95em")
+         (border-bottom . ,(format "2px solid %s" (elpaish-css-color 'fg-dim))))
+     ("tr.pkg-row" (border-bottom . ,(format "1px solid %s" (elpaish-css-color 'bg-inactive))))
+     ("tr.pkg-row:hover" (background . "transparent"))
+     (".pkg-name-cell" (width . "300px"))
+     ("input.pkg-toggle-input" (display . "none"))
+     ("label.pkg-toggle-label" (cursor . "pointer")
+                               (display . "inline-flex")
+                               (align-items . "center")
+                               (user-select . "none")
+                               (color . ,(elpaish-css-color 'fg-main)))
+     ("label.pkg-toggle-label:hover" (color . ,(elpaish-css-color 'fg-link)))
+     ("label.pkg-toggle-label:hover b" (color . ,(elpaish-css-color 'fg-link)))
+     (".pkg-disclosure-icon" (display . "inline-block")
+                             (margin-right . "6px")
+                             (font-size . "0.75em")
+                             (color . ,(elpaish-css-color 'fg-dim))
+                             (transition . "transform 0.15s ease")
+                             ("-webkit-transition" . "-webkit-transform 0.15s ease"))
+     ("label.pkg-toggle-label b" (font-weight . "700")
+                                 (color . "inherit"))
+     (".pkg-version-cell" (width . "140px")
+                          (font-family . ,elpaish-css-font-sans)
+                          (font-size . "0.92em")
+                          (white-space . "nowrap"))
+     (".pkg-desc-cell" (width . "auto")
+                       (max-width . "100px")
+                       (font-size . "0.92em")
+                       (overflow-wrap . "break-word")
+                       (word-break . "normal")
+                       (line-height . "1.4"))
+     (".pkg-icons-cell" (width . "110px") ;; <-make this bigger the table if overflowing
+                        (white-space . "nowrap")
+                        (text-align . "center")
+                        (font-size . "1.1em"))
+     (".pkg-icons-cell .icon-link" (display . "inline-block")
+                                   (margin . "0 4px")
+                                   (color . ,(elpaish-css-color 'fg-dim))
+                                   (text-decoration . "none"))
+     (".pkg-icons-cell .icon-link:hover" (color . ,(elpaish-css-color 'fg-link)))
+     (".pkg-icons-cell .icon-disabled" (display . "inline-block")
+                                       (margin . "0 4px")
+                                       (color . ,(elpaish-css-color 'border)))
+     ("tr.pkg-detail-row" (display . "none")
+                          (border-bottom . ,(format "1px solid %s" (elpaish-css-color 'bg-inactive))))
+     ("tr:has(.pkg-toggle-input:checked) + tr.pkg-detail-row" (display . "table-row"))
+     ("tr:has(.pkg-toggle-input:checked) .pkg-disclosure-icon" (transform . "rotate(90deg)")
+                                                              ("-webkit-transform" . "rotate(90deg)"))
+     ("td.pkg-detail-cell" (padding . "4px 16px 14px 16px")
+                           (border . "none")
+                           (background . "transparent"))
+     (".pkg-detail-box" (width . "100%")
+      (padding . "0")
+      (margin . "0")
+      (background . "transparent")
+      (border . "none")
+      (font-size . "0.92em")
+      (font-weight . "normal")
+      (box-sizing . "border-box"))
+     (".detail-list" (display . "flex")
+                     (flex-direction . "column")
+                     (gap . "6px")
+                     (margin . "4px 0"))
+     (".detail-field" (display . "block")
+                      (margin . "2px 0")
+                      (line-height . "1.5"))
+     (".detail-field strong" (color . ,(elpaish-css-color 'fg-main)))
+     (".detail-hash" (font-family . ,elpaish-css-font-mono)
+      (font-size . "0.88em")
+      (word-break . "break-all")
+      (background . ,(elpaish-css-color 'bg-dim))
+      (padding . "2px 6px")
+      (border-radius . "4px")
+      (border . ,(format "1px solid %s" (elpaish-css-color 'bg-inactive)))))))
+;;; Top-level landing page (stream selection cards)
+
+(defun elpaish-css-top-index-stylesheet ()
+  "Return stylesheet rules for the top-level ELPAish landing page."
+  (append
+   (elpaish-css--base-rules)
+   `((h1 (border-bottom . ,(format "2px solid %s" (elpaish-css-color 'fg-dim)))
+         (padding-bottom . "10px"))
+     (".navbar" (display . "flex")
+      (align-items . "center")
+      (gap . "18px")
+      (margin . "12px 0 24px 0")
+      (padding-bottom . "12px")
+      (border-bottom . ,(format "1px solid %s" (elpaish-css-color 'bg-inactive)))
+      (font-size . "1em"))
+     (".navbar a" (color . ,(elpaish-css-color 'fg-link))
+      (font-weight . "600"))
+     (".navbar .nav-icon" (display . "inline-flex")
+      (align-items . "center")
+      (font-size . "1.25em")
+      (color . ,(elpaish-css-color 'fg-dim)))
+     (".navbar .nav-icon:hover" (color . ,(elpaish-css-color 'fg-link)))
+     (p (font-size . "1em")
+        (margin . "10px 0"))
+     (".stream-grid" (display . "grid")
+      (grid-template-columns . "repeat(auto-fit,minmax(320px,1fr))")
+      (gap . "20px")
+      (margin . "24px 0"))
+     (".card" (border . ,(format "1px solid %s" (elpaish-css-color 'border)))
+      (border-radius . "8px")
+      (padding . "22px")
+      (background . ,(elpaish-css-color 'bg-dim))
+      (box-shadow . "0 2px 6px rgba(0,0,0,0.06)"))
+     (".card h2" (font-size . "1.35em")
+      (font-weight . "700")
+      (margin-top . "0")
+      (margin-bottom . "10px")
+      (color . ,(elpaish-css-color 'blue-cooler)))
+     (".card p" (font-size . "0.98em")
+      (line-height . "1.55"))
+     (pre (font-family . ,elpaish-css-font-mono)
+          (font-size . "0.92em")
+          (background . ,(elpaish-css-color 'bg-dim))
+          (color . ,(elpaish-css-color 'fg-main))
+          (border . ,(format "1px solid %s" (elpaish-css-color 'border)))
+          (padding . "12px 18px")
+          (margin . "10px 0 16px 0")
+          (border-radius . "6px")
+          (overflow-x . "auto")
+          (line-height . "1.45"))
+     ("pre code" (background . "transparent")
+      (color . "inherit")
+      (padding . "0")
+      (border . "none")
+      (font-size . "1em"))
+     (".btn" (display . "inline-block")
+      (padding . "10px 20px")
+      (font-size . "0.98em")
+      (font-weight . "700")
+      (background . ,(elpaish-css-color 'blue-warmer))
+      (color . ,(elpaish-css-color 'bg-main))
+      (border-radius . "6px")
+      (text-decoration . "none")
+      (margin-top . "12px"))
+     (".btn:hover" (background . ,(elpaish-css-color 'blue-intense))
+      (color . ,(elpaish-css-color 'bg-main))
+      (text-decoration . "none"))
+     (".meta-footer" (margin-top . "36px")
+      (padding-top . "16px")
+      (border-top . ,(format "1px solid %s" (elpaish-css-color 'bg-inactive)))
+      (font-size . "0.9em")
+      (color . ,(elpaish-css-color 'fg-dim)))
+     (ul (font-size . "1em")
+         (padding-left . "24px"))
+     (li (margin . "6px 0")))))
+(provide 'elpaish-css)
+
+;; Local Variables:
+;; package-lint-main-file: "pkg/elpaish.el"
+;; End:
+;;; elpaish-css.el ends here
