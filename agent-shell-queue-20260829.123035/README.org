@@ -1,0 +1,115 @@
+#+TITLE: agent-shell-queue.el --- Persistent prompt queue for agent-shell
+#+OPTIONS: toc:3 num:nil
+
+* Overview
+A persistent prompt queue for [[https://github.com/xenodium/agent-shell][agent-shell]] sessions, supporting multi-session
+dispatch with pause, resume, and archive lifecycle management.  Queue state is
+serialized to plist, JSON, or YAML for session persistence across Emacs
+restarts.  Interactive capture, edit, and item-view buffers allow queue
+manipulation without leaving Emacs.  Fork operations split a queue across
+multiple sessions for parallel workloads.
+
+This repository also includes ~agent-shell-menu.el~: ACR-based transient menus
+for navigating and controlling agent sessions, covering permission resolution,
+action selection, command insertion, and collapse control.  The menu requires
+the queue and can be loaded separately with ~(require 'agent-shell-menu)~.
+
+* Contents                                                       :TOC_3:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#package-vc][package-vc]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#use-package][Use Package]]
+  - [[#manual][Manual]]
+  - [[#elpaish-snapshot-repository][ELPAish Snapshot Repository]]
+- [[#user-guides][User Guides]]
+- [[#api-reference][API Reference]]
+- [[#license][License]]
+
+* Installation
+** package-vc
+
+Requires Emacs 29.1+.  Run once to clone and register the package:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install '(agent-shell-queue
+                      :url "https://github.com/tychoish/agent-shell-queue"))
+#+END_SRC
+
+** use-package with VC
+
+Requires Emacs 30+.  Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package agent-shell-queue
+  :vc (:url "https://github.com/tychoish/agent-shell-queue")
+  :after agent-shell)
+#+END_SRC
+
+** Use Package
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/agent-shell-queue ~/.emacs.d/elpa/agent-shell-queue
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(use-package agent-shell-queue
+  :load-path "~/.emacs.d/elpa/agent-shell-queue"
+  :after agent-shell)
+#+END_SRC
+
+** Manual
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/agent-shell-queue ~/.emacs.d/elpa/agent-shell-queue
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/elpa/agent-shell-queue")
+(require 'agent-shell-queue)
+#+END_SRC
+
+** ELPAish Snapshot Repository
+
+agent-shell-queue is also published as a development snapshot on
+[[https://github.com/tychoish/elpaish][ELPAish]], a self-hosted, GPG-signed
+Emacs Lisp package archive.  Add the snapshot stream to
+~package-archives~ and install normally with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+(package-install 'agent-shell-queue)
+#+END_SRC
+
+To verify package signatures, import the ELPAish signing key into
+=package.el='s keyring and enable signature checking:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+* User Guides
+
+Detailed use-case guides live under [[file:docs/][docs/]]:
+
+- [[file:docs/prompt-composition-and-enqueueing.org][Prompt Composition and Enqueueing]]
+- [[file:docs/execution-control.org][Execution Control]]
+- [[file:docs/task-interjection-and-queue-inspection.org][Task Interjection and Queue Inspection]]
+- [[file:docs/parallel-workflows-and-session-forking.org][Parallel Workflows and Session Forking]]
+- [[file:docs/persistence-storage-backends-and-backups.org][Persistence, Storage Backends and Backups]]
+- [[file:docs/interactive-menus-and-input-routing.org][Interactive Menus and Input Routing]]
+
+* API Reference
+
+See [[file:docs/api.org][docs/api.org]] for the generated API reference, covering
+~agent-shell-menu~, ~agent-shell-queue~, ~agent-shell-queue-persistence~,
+~agent-shell-queue-db~, and ~agent-shell-queue-org~.
+
+* License
+
+Copyright (C) tychoish.  GPL-3.0 or later.  See the source file header
+for the full license text.
