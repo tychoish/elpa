@@ -46,6 +46,7 @@
 (require 'subr-x)
 (require 'map)
 (require 'sprite-direct)
+(require 'savehist)
 
 (declare-function annotated-completing-read "annotated-completing-read")
 
@@ -808,8 +809,6 @@ also includes sibling sprite from the same parent."
 
 
 ;;;; Global minor mode
-
-(defvar savehist-additional-variables)
 
 (defvar-keymap sprite-mode-command-map
   "c" #'sprite-create
