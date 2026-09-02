@@ -1,0 +1,123 @@
+#+title: ollama.el - Manage Ollama Models from Emacs
+
+* Summary
+
+ollama.el provides an Emacs interface to manage Ollama models, allowing you to list, pull, delete, copy, and inspect models directly from Emacs.
+
+* Why This Exists
+
+You know how we all love playing with local LLMs?
+
+We're constantly pulling models from Ollama, Hugging Face, and everywhere else.
+
+Wouldn't it be awesome to have a neat way to organize all those models right in Emacs?
+
+That's what this is all about!
+
+* Installation
+
+First, make sure you have Ollama installed on your system:
+
+- Download Ollama from https://ollama.com/download
+- Follow the installation instructions for your platform
+
+Then for Doom Emacs users, add this to your =config.el=:
+
+#+begin_src elisp
+;; In $DOOMDIR/packages.el
+(package! ollama
+  :recipe (:host github :repo "nailuoGG/ollama.el" :files "*.el"))
+#+end_src
+
+Then run:
+
+#+begin_src bash
+doom sync
+#+end_src
+
+
+* Usage
+
+** Basic Commands
+
+Start by showing the status view:
+
+```elisp
+M-x ollama-status
+```
+
+This will show a tabulated list of all available models with their details.
+
+
+[[file:./images/example.png]]
+
+
+** Keybindings in Status View
+
+When in the status buffer (`*Ollama Status*`), you can use these keybindings:
+
+| Key | Command                     | Description                          |
+|-----|-----------------------------|--------------------------------------|
+| u   | ollama-status-refresh       | Refresh the model list               |
+| p   | ollama-pull-model           | Pull a new model                     |
+| d   | ollama-delete-model-at-point| Delete model at point                |
+| c   | ollama-copy-model           | Copy model                           |
+| i   | ollama-show-model-info      | Show detailed model info             |
+| s   | tabulated-list-sort         | Sort by current column               |
+| q   | quit-window                 | Quit the status view                 |
+
+** Example Workflow
+
+1. List all models:
+```elisp
+M-x ollama-list-models
+```
+
+2. Pull a new model:
+```elisp
+M-x ollama-pull-model
+```
+
+3. Show model details:
+```elisp
+M-x ollama-show-model
+```
+
+4. Delete a model:
+```elisp
+M-x ollama-delete-model
+```
+
+5. Copy a model:
+```elisp
+M-x ollama-copy-model
+```
+
+** Evil Mode Support
+
+If you're using Evil mode, all keybindings work in Normal state.
+
+* Available Commands
+
+| Command                  | Description                                      |
+|--------------------------|--------------------------------------------------|
+| ollama-list-models       | List all available models in a tabulated view    |
+| ollama-pull-model        | Pull a new model from Ollama                     |
+| ollama-delete-model      | Delete a model (with completion)                 |
+| ollama-show-model        | Show detailed information about a model          |
+| ollama-copy-model        | Copy a model to a new name                       |
+| ollama-select-model      | Select a model with completion                   |
+
+* Customization Options
+
+| Variable            | Default Value               | Description                          |
+|---------------------|-----------------------------|--------------------------------------|
+| ollama-api-url      | "http://localhost:11434"    | Base URL for Ollama API              |
+
+* Development
+
+ -  ollama-api.el: Low-level API communication
+ -  ollama.el: Core model management commands
+ -  ollama-status.el: Status view and UI
+ -  ollama-transient.el: Quick access to common commands
+ -  ollama-utils.el: Shared utility functions
