@@ -155,29 +155,39 @@ Does nothing when no CI status is cached for REPO."
 
 (declare-function agent-shell-prompt-exec "agent-shell-prompt")
 
+(defun magit-dash-ci--repo-slug (repo)
+  "Return OWNER/NAME slug for REPO struct or path."
+  (let* ((path (magit-dash-repo-path repo))
+         (default-directory (file-name-as-directory path)))
+    (or (ignore-errors
+          (when-let* ((info (magit-dash-gh--repo-info))
+                      (o (plist-get info :owner))
+                      (r (plist-get info :repo)))
+            (format "%s/%s" o r)))
+        (magit-dash-repo-name repo))))
+
 (defun magit-dash-ci--download-and-dispatch (repo run-id)
   "Dispatch the `fix-ci' prompt library workflow for REPO and RUN-ID.
 Requires `agent-shell-prompt-exec' to be available from the `agent-shell-prompt' library."
   (if (fboundp 'agent-shell-prompt-exec)
       (let* ((path (magit-dash-repo-path repo))
-             (repo-name (magit-dash-repo-name repo))
+             (slug (magit-dash-ci--repo-slug repo))
              (default-directory (file-name-as-directory path)))
-        (agent-shell-prompt-exec 'fix-ci (list :repo repo-name :run-id run-id)))
+        (agent-shell-prompt-exec 'fix-ci (list :repo slug :run-id run-id)))
     (user-error "magit-dash fix-CI requires the agent-shell-prompt library")))
 
 ;;;###autoload
 (defun magit-dash-ci-dispatch-fix-operation (repo)
   "Dispatch the `fix-ci' prompt library workflow for REPO.
-Invokes `agent-shell-prompt-exec' with `:repo' set to REPO's name so that
-`fix-ci' automatically resolves the failing run-id or prompts via ACR."
+Invokes `agent-shell-prompt-exec' with `:repo' set to REPO's OWNER/NAME slug."
   (unless (magit-dash-repo-include-ci repo)
     (user-error "magit-dash fix-CI: %s does not have CI enabled (:include-ci)"
                 (magit-dash-repo-name repo)))
   (let* ((path (magit-dash-repo-path repo))
-         (repo-name (magit-dash-repo-name repo)))
+         (slug (magit-dash-ci--repo-slug repo)))
     (if (fboundp 'agent-shell-prompt-exec)
         (let ((default-directory (file-name-as-directory path)))
-          (agent-shell-prompt-exec 'fix-ci (list :repo repo-name)))
+          (agent-shell-prompt-exec 'fix-ci (list :repo slug)))
       (user-error "magit-dash fix-CI requires the agent-shell-prompt library"))))
 
 (provide 'magit-dash-gh-ci)
