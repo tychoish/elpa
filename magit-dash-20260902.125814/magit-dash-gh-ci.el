@@ -167,27 +167,18 @@ Requires `agent-shell-prompt-exec' to be available from the `agent-shell-prompt'
 
 ;;;###autoload
 (defun magit-dash-ci-dispatch-fix-operation (repo)
-  "Download the latest CI run's artifacts for REPO and dispatch a fix-CI prompt.
-Uses REPO's cached :ci-status when present; otherwise fetches it first via
-`magit-dash-gh-ci-fetch' before proceeding, so this can be called without a
-prior manual CI-status fetch.  Signals `user-error' when REPO does not have
-:include-ci set, or when no CI run is found for it even after fetching."
+  "Dispatch the `fix-ci' prompt library workflow for REPO.
+Invokes `agent-shell-prompt-exec' with `:repo' set to REPO's name so that
+`fix-ci' automatically resolves the failing run-id or prompts via ACR."
   (unless (magit-dash-repo-include-ci repo)
     (user-error "magit-dash fix-CI: %s does not have CI enabled (:include-ci)"
                 (magit-dash-repo-name repo)))
   (let* ((path (magit-dash-repo-path repo))
-         (cached (magit-dash-gh--cache-get path :ci-status)))
-    (if-let* ((run-id (plist-get cached :run-id)))
-        (magit-dash-ci--download-and-dispatch repo run-id)
-      (progn
-        (message "magit-dash fix-CI: fetching CI status for %s..." (magit-dash-repo-name repo))
-        (magit-dash-gh-ci-fetch
-         repo
-         (lambda (ci)
-           (if-let* ((run-id (plist-get ci :run-id)))
-               (magit-dash-ci--download-and-dispatch repo run-id)
-             (message "magit-dash fix-CI: no CI runs found for %s"
-                      (magit-dash-repo-name repo)))))))))
+         (repo-name (magit-dash-repo-name repo)))
+    (if (fboundp 'agent-shell-prompt-exec)
+        (let ((default-directory (file-name-as-directory path)))
+          (agent-shell-prompt-exec 'fix-ci (list :repo repo-name)))
+      (user-error "magit-dash fix-CI requires the agent-shell-prompt library"))))
 
 (provide 'magit-dash-gh-ci)
 ;;; magit-dash-gh-ci.el ends here

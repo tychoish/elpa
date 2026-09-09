@@ -47,6 +47,9 @@ instead of aborting the workflow."
   "Populate CTX with the output of each shell command in PAIRS.
 PAIRS is a list of (CTX-KEY COMMAND ARG...) entries; each COMMAND is run
 via `agent-shell-prompt-library--shell' and stored under CTX-KEY."
+  (dolist (pair pairs ctx)
+    (plist-put ctx (car pair) (apply #'agent-shell-prompt-library--shell (cdr pair)))))
+
 (declare-function annotated-completing-read "annotated-completing-read")
 
 (defun agent-shell-prompt-library--iso-to-seconds (iso-str)
