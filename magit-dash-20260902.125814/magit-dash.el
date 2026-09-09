@@ -65,6 +65,7 @@
 (declare-function magit-stash-clear "magit-stash")
 (declare-function agent-shell-switch-buffer "agent-shell")
 (declare-function agent-shell-menu-switch-project-session "agent-shell-menu")
+(declare-function agent-shell-prompt-menu "agent-shell-prompt-menu")
 (declare-function magit-dash-gh-ci-open "magit-dash-gh-ci")
 (declare-function magit-dash-gh-ci-fetch "magit-dash-gh-ci")
 (declare-function magit-dash-gh-workflow-run "magit-dash-gh-actions")
@@ -2936,6 +2937,9 @@ When disabled, only explicitly marked repos are targeted."
   (when-let* ((repo (ignore-errors (magit-dash--repo-at-point)))
 	      (default-directory (file-name-as-directory (magit-dash-repo-path repo))))
     (and (boundp 'agent-shell-menu-project-buffers) (agent-shell-menu-project-buffers) t)))
+(defun magit-dash--agent-shell-prompt-available-p ()
+  "Return non-nil when `agent-shell-prompt-menu' is available."
+  (fboundp 'agent-shell-prompt-menu))
 
 (transient-define-prefix magit-dash-menu ()
   "Actions for the repository at point in the repo dashboard."
@@ -2966,10 +2970,12 @@ When disabled, only explicitly marked repos are targeted."
      :inapt-if-not magit-dash--repo-at-point-p)
     ("wt"  "Toggle"          magit-dash-toggle-discovered-worktrees)]
    ["Agent Shell"
-    ("as"  "Open"     magit-dash-agent-shell
+    ("as"  "Open"           magit-dash-agent-shell
      :inapt-if-not magit-dash--agent-shell-project-buffers-p)
-    ("an"  "New"           magit-dash-agent-shell-new)
-    ("aq"  "Queue"     magit-dash-agent-shell-queue)]
+    ("an"  "New"            magit-dash-agent-shell-new)
+    ("aq"  "Queue"          magit-dash-agent-shell-queue)
+    ("ap"  "Prompt library" agent-shell-prompt-menu
+     :inapt-if-not magit-dash--agent-shell-prompt-available-p)]
    ["Cache"
     ("ci"  "Info"      magit-dash-cache-info)
     ("chr" "Reset"     magit-dash-cache-reset-at-point

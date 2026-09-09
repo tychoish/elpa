@@ -153,164 +153,17 @@ Does nothing when no CI status is cached for REPO."
 
 ;;; Fix-CI prompt dispatch
 
-(defun magit-dash-ci--build-fix-prompt (repo ctx)
-  "Return a prompt string describing the CI failure downloaded into CTX for REPO.
-CTX is the pipeline context passed to `magit-dash-gh-actions--step-finalize'
-once the run's artifacts (metadata, full log, and failed-step log when
-applicable) have been written to :dir.  The prompt links to every file in
-CTX's :files so an agent can open them for context."
-  (let* ((dir (plist-get ctx :dir))
-         (run-info (plist-get ctx :run-info))
-         (files (plist-get ctx :files))
-         (conclusion (or (map-elt run-info 'conclusion) "in_progress"))
-         (workflow (or (map-elt run-info 'workflowName) "CI"))
-         (branch (or (map-elt run-info 'headBranch) (magit-dash-repo-branch repo) ""))
-         (run-id (map-elt run-info 'databaseId)))
-    (with-temp-buffer
-      (insert (format "The `%s` GitHub Actions workflow %s on branch `%s` of %s (run #%s).\n\n"
-                      workflow
-                      (if (magit-dash-gh-actions--failure-p conclusion)
-                          "failed"
-                        "did not complete successfully")
-                      branch
-                      (magit-dash-repo-name repo)
-                      run-id))
-      (insert (format "Investigate the failure in the repository at %s and fix it.\n\n"
-                      (magit-dash-repo-path repo)))
-      (insert "The following CI artifacts were downloaded for reference:\n\n")
-      (seq-do (lambda (f)
-                (insert (format "- [%s](%s) — %s\n"
-                                (plist-get f :path)
-                                (expand-file-name (plist-get f :path) dir)
-                                (plist-get f :type))))
-              files)
-      (buffer-string))))
-
-(defun magit-dash-ci--exact-scoped-shell-buffers (dir)
-  "Return live agent-shell buffers whose `default-directory' is exactly DIR.
-Unlike `agent-shell-menu-project-buffers', this never matches a buffer
-belonging to an enclosing superproject — only a session scoped to DIR
-itself qualifies as \"open for this project\"."
-  (seq-filter (lambda (buf)
-                (with-current-buffer buf
-                  (equal (file-name-as-directory default-directory) dir)))
-              (agent-shell-buffers)))
-
-(defun magit-dash-ci--ci-buffer-name (shell-buffer project-name)
-  "Return the CI fix-it buffer name for SHELL-BUFFER's provider and PROJECT-NAME.
-Formatted as `*<agent-shell-provider-name>-ci-<project>*'."
-  (let* ((config (agent-shell-get-config shell-buffer))
-         (provider (downcase (replace-regexp-in-string
-                              " " "-" (or (map-elt config :buffer-name) "agent")))))
-    (format "*%s-ci-%s*" provider project-name)))
-
-(defun magit-dash-ci--rename-ci-buffer-when-ready (buf project-name)
-  "Rename BUF to its CI name once BUF's agent-shell session is ready.
-Renaming before the ACP handshake reaches `prompt-ready' races with
-agent-shell/shell-maker's buffer-context tracking for in-flight
-responses, which can misroute output to an unrelated agent-shell buffer.
-Mirrors the readiness check `agent-shell--insert-to-shell-buffer' uses
-before submitting to a freshly created session."
-  (if (with-current-buffer buf
-        (or (map-nested-elt agent-shell--state '(:session :id))
-            (eq agent-shell-session-strategy 'new-deferred)))
-      (with-current-buffer buf
-        (rename-buffer (generate-new-buffer-name (magit-dash-ci--ci-buffer-name buf project-name))))
-    (letrec ((token (agent-shell-subscribe-to
-                     :shell-buffer buf
-                     :event 'prompt-ready
-                     :on-event (lambda (_event)
-                                 (agent-shell-unsubscribe :subscription token)
-                                 (when (buffer-live-p buf)
-                                   (magit-dash-ci--rename-ci-buffer-when-ready buf project-name))))))
-      token)))
-
-(defun magit-dash-ci--new-shell-buffer (dir project-name)
-  "Start a new agent-shell session scoped to DIR, named for PROJECT-NAME.
-Diffs `agent-shell-buffers' before and after creation, since
-`agent-shell-menu-new-shell-in-dir' does not return the new buffer, then
-renames it to `*<agent-shell-provider-name>-ci-<project>*' once the
-session is ready (see `magit-dash-ci--rename-ci-buffer-when-ready').
-Returns the buffer."
-  (let ((before (agent-shell-buffers)))
-    (agent-shell-menu-new-shell-in-dir dir)
-    (when-let* ((buf (seq-find (lambda (b) (not (memq b before))) (agent-shell-buffers))))
-      (magit-dash-ci--rename-ci-buffer-when-ready buf project-name)
-      buf)))
-
-(defun magit-dash-ci--focus-shell-buffer (buf)
-  "Pop to and focus agent-shell buffer BUF."
-  (when (buffer-live-p buf)
-    (if (and (fboundp 'agent-shell-viewport--show-buffer)
-             (bound-and-true-p agent-shell-prefer-viewport-interaction))
-        (agent-shell-viewport--show-buffer :shell-buffer buf)
-      (if (fboundp 'agent-shell--display-buffer)
-          (agent-shell--display-buffer buf)
-        (pop-to-buffer buf)))))
-
-(defun magit-dash-ci--focus-on-turn-complete (shell-buffer)
-  "Subscribe to `turn-complete' on SHELL-BUFFER to focus it once the turn completes."
-  (when (and shell-buffer (fboundp 'agent-shell-subscribe-to))
-    (letrec ((token (agent-shell-subscribe-to
-                     :shell-buffer shell-buffer
-                     :event 'turn-complete
-                     :on-event (lambda (_event)
-                                 (agent-shell-unsubscribe :subscription token)
-                                 (magit-dash-ci--focus-shell-buffer shell-buffer)))))
-      token)))
-
-(defun magit-dash-ci--dispatch-prompt (repo prompt)
-  "Send PROMPT to an agent for REPO.
-When an agent-shell session already open, scoped exactly to REPO's own
-path (not any enclosing superproject), offers to reuse it.  Otherwise, or
-if declined, starts a new session scoped to REPO's path, named
-`*<agent-shell-provider-name>-ci-<project>*'.  Falls back to
-`agent-shell-queue-add-unassigned' when agent-shell-menu isn't loaded.  As a
-last resort (neither is loaded), copies PROMPT to the kill ring so it can be
-pasted manually."
-  (let* ((default-directory (file-name-as-directory (magit-dash-repo-path repo)))
-         (project-name (magit-dash-repo-name repo))
-         (existing (and (fboundp 'agent-shell-buffers)
-                        (magit-dash-ci--exact-scoped-shell-buffers default-directory))))
-    (cond
-     ((and existing
-           (y-or-n-p (format "magit-dash fix-CI: reuse open agent-shell %s for %s? "
-                             (buffer-name (car existing)) project-name)))
-      (let ((shell-buffer (car existing)))
-        (magit-dash-ci--focus-on-turn-complete shell-buffer)
-        (agent-shell-insert :text prompt :submit t :shell-buffer shell-buffer)
-        (message "magit-dash fix-CI: sent to %s" (buffer-name shell-buffer))))
-     ((fboundp 'agent-shell-menu-new-shell-in-dir)
-      (if-let* ((shell-buffer (magit-dash-ci--new-shell-buffer default-directory project-name)))
-          (progn
-            (magit-dash-ci--focus-on-turn-complete shell-buffer)
-            (agent-shell-insert :text prompt :submit t :shell-buffer shell-buffer)
-            (message "magit-dash fix-CI: started %s" (buffer-name shell-buffer)))
-        (message "magit-dash fix-CI: new agent-shell for %s did not initialize" project-name)))
-     ((fboundp 'agent-shell-queue-add-unassigned)
-      (agent-shell-queue-add-unassigned prompt)
-      (message "magit-dash fix-CI: queued (agent-shell-menu not available for %s)" project-name))
-     (t
-      (kill-new prompt)
-      (message "magit-dash fix-CI: agent-shell not available — prompt copied to kill ring")))))
+(declare-function agent-shell-prompt-exec "agent-shell-prompt")
 
 (defun magit-dash-ci--download-and-dispatch (repo run-id)
-  "Download RUN-ID's artifacts for REPO and dispatch a fix-CI prompt.
-Reuses the download pipeline from `magit-dash-gh-actions.el' to fetch run
-metadata, the full log, and (when the run failed) the failed-step-only log
-into a directory under plans/, then builds and dispatches a fix-it prompt
-linking those files via `magit-dash-ci--dispatch-prompt'."
-  (let ((path (magit-dash-repo-path repo)))
-    (magit-dash-gh--check-gh)
-    (magit-dash-gh-actions--step-run-info
-     (list :run-id run-id
-           :root path
-           :repo-dir path
-           :branch (magit-dash-repo-branch repo)
-           :files nil
-           :on-complete (lambda (ctx)
-                          (magit-dash-ci--dispatch-prompt
-                           repo (magit-dash-ci--build-fix-prompt repo ctx)))))))
+  "Dispatch the `fix-ci' prompt library workflow for REPO and RUN-ID.
+Requires `agent-shell-prompt-exec' to be available from the `agent-shell-prompt' library."
+  (if (fboundp 'agent-shell-prompt-exec)
+      (let* ((path (magit-dash-repo-path repo))
+             (repo-name (magit-dash-repo-name repo))
+             (default-directory (file-name-as-directory path)))
+        (agent-shell-prompt-exec 'fix-ci (list :repo repo-name :run-id run-id)))
+    (user-error "magit-dash fix-CI requires the agent-shell-prompt library")))
 
 ;;;###autoload
 (defun magit-dash-ci-dispatch-fix-operation (repo)
