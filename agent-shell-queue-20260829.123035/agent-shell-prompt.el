@@ -298,21 +298,41 @@ declares but ARGS omits is collected interactively.  TARGET and SUBMIT
 override the spec's defaults when supplied."
   (let* ((spec (or (agent-shell-prompt-get id)
                    (error "Agent-shell-prompt: unknown prompt %s" id)))
+         (context-repo (or (plist-get args :repo)
+                           (ignore-errors
+                             (and (fboundp 'magit-dash--repo-at-point)
+                                  (when-let* ((r (magit-dash--repo-at-point)))
+                                    (magit-dash-repo-name r))))
+                           (and (fboundp 'project-current)
+                                (when-let* ((proj (project-current)))
+                                  (file-name-nondirectory (directory-file-name (project-root proj)))))))
+         (context-dir (or (ignore-errors
+                            (and (fboundp 'magit-dash--repo-at-point)
+                                 (when-let* ((r (magit-dash--repo-at-point)))
+                                   (file-name-as-directory (magit-dash-repo-path r)))))
+                          default-directory))
+         (args (if (and context-repo (not (plist-member args :repo)))
+                   (plist-put (copy-sequence args) :repo context-repo)
+                 args))
          (full-args (agent-shell-prompt--collect-args spec args))
          (ctx (list :prompt-id id
                     :args full-args
-                    :directory default-directory
+                    :directory context-dir
                     :target (or target (agent-shell-prompt-spec-target spec))
                     :submit (if submit-supplied-p
                                 submit
                               (agent-shell-prompt-spec-submit spec)))))
-    (agent-shell-prompt-exec-pre
-     spec ctx
-     (lambda (updated-ctx)
-       (let* ((rendered (agent-shell-prompt-render
-                         (agent-shell-prompt-spec-template spec) updated-ctx))
-              (final-ctx (plist-put (copy-sequence updated-ctx) :rendered-prompt rendered)))
-         (agent-shell-prompt--dispatch-rendered spec final-ctx))))))
+    (let ((default-directory context-dir))
+      (agent-shell-prompt-exec-pre
+       spec ctx
+       (lambda (updated-ctx)
+         (let* ((rendered (agent-shell-prompt-render
+                           (agent-shell-prompt-spec-template spec) updated-ctx))
+                (final-ctx (plist-put (copy-sequence updated-ctx) :rendered-prompt rendered)))
+           (agent-shell-prompt--dispatch-rendered spec final-ctx)))))))
+
+;;;###autoload
+(defalias 'agent-shell-prompt-exec #'agent-shell-prompt-dispatch)
 
 ;; Queue integration
 
