@@ -25,6 +25,10 @@
 (require 'projectile)
 
 (require 'annotated-completing-read)
+(declare-function magit-dash-worktree-dispatch "magit-dash-worktree")
+(declare-function magit-dash--repo-at-point "magit-dash")
+(declare-function magit-dash-repo-path "magit-dash")
+
 
 ;;; Configuration
 
@@ -329,6 +333,44 @@ the above context rules."
         (if existing
             (switch-to-buffer existing)
           (magit-status-setup-buffer full-path))))))
+
+;;;###autoload
+(defun magit-dash-open-worktree-dispatch (&optional dir)
+  "Select a repository using context-aware completion and dispatch a worktree task.
+If DIR is non-nil, dispatches in DIR directly.
+If point is on a repository in `magit-dash-mode', operates on that repository.
+Otherwise, prompts for repository selection via `annotated-completing-read'."
+  (interactive)
+  (let ((target-dir (or dir
+                        (when (and (bound-and-true-p magit-dash-mode)
+                                   (derived-mode-p 'magit-dash-mode))
+                          (ignore-errors
+                            (magit-dash-repo-path (magit-dash--repo-at-point)))))))
+    (if target-dir
+        (magit-dash-worktree-dispatch target-dir)
+      (let* ((open-buffers (magit-dash-open--open-status-buffers))
+             (entries (magit-dash-open--collect-deep default-directory magit-dash-open-scan-depth))
+             (path-map (map-into entries '(hash-table :test equal))))
+        (when (bound-and-true-p magit-dash-repo-list)
+          (dolist (r magit-dash-repo-list)
+            (let ((d (directory-file-name (expand-file-name (magit-dash-repo-path r)))))
+              (unless (map-contains-key path-map d)
+                (setf (map-elt path-map d) 'repo)))))
+        (if-let* ((selected (annotated-completing-read
+                             (map-into
+                              (map-apply
+                               (lambda (path kind)
+                                 (let ((display (abbreviate-file-name path))
+                                       (annotation (magit-dash-open--annotation path kind)))
+                                   (cons display (cons annotation path))))
+                               path-map)
+                              '(hash-table :test equal))
+                             :prompt "Worktree dispatch repo: "
+                             :require-match t
+                             :category 'file)))
+            (magit-dash-worktree-dispatch selected)
+          (user-error "No repository selected"))))))
+
 
 (provide 'magit-dash-open)
 ;;; magit-dash-open.el ends here

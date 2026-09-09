@@ -27,6 +27,13 @@
 (require 'magit-process)
 (require 'magit-worktree)
 (require 'magit-dash-gh)
+(require 'agent-shell-queue nil t)
+
+(declare-function asq-worktree-create "agent-shell-queue")
+(declare-function asq-worktree-dispatch-task "agent-shell-queue")
+(declare-function asq-worktree-generate-name "agent-shell-queue")
+(declare-function asq-worktree-git-repo-root "agent-shell-queue")
+(declare-function annotated-completing-read "annotated-completing-read")
 
 ;; Forward declarations for magit-dash core functions and variables
 (declare-function magit-dash-repo-name "magit-dash")
@@ -249,6 +256,51 @@ Signals `user-error' when the current row is not a worktree."
     (magit-dash-gh--with-repo-dir (magit-dash-repo-path repo)
       (call-interactively #'magit-worktree-delete))
     (magit-dash-refresh)))
+
+;;;###autoload
+(defun magit-dash-worktree-dispatch (&optional dir)
+  "Create an agent worktree under DIR and dispatch a task.
+Prompts for task prompt, worktree short name, and target dispatch mode.
+Establishes configured symlinks for the new worktree."
+  (interactive)
+  (let* ((repo-root (or (and (fboundp 'asq-worktree-git-repo-root)
+                             (asq-worktree-git-repo-root dir))
+                        (magit-dash-worktree-main-dir dir)
+                        (user-error "Not in a git repository")))
+         (prompt (read-string "Task prompt (empty for worktree only): "))
+         (default-name (if (fboundp 'asq-worktree-generate-name)
+                          (asq-worktree-generate-name prompt)
+                        "worktree"))
+         (name (read-string (format "Worktree short name (default %s): " default-name)
+                            nil nil default-name))
+         (name (if (string-empty-p name) default-name name))
+         (choices '(("i: interactive agent-shell" . "Start an interactive agent-shell session")
+                    ("q: asq queue" . "Enqueue prompt in directory task queue")
+                    ("w: worktree only" . "Create git worktree without dispatching agent task")))
+         (mode-choice (if (fboundp 'annotated-completing-read)
+                          (annotated-completing-read
+                           choices
+                           :prompt "Dispatch target: "
+                           :require-match t
+                           :history 'magit-dash-worktree-dispatch-history)
+                        (completing-read "Dispatch target: " '("interactive" "queue" "worktree") nil t)))
+         (mode (cond
+                ((string-prefix-p "i" mode-choice) "interactive")
+                ((string-prefix-p "q" mode-choice) "queue")
+                ((string-prefix-p "w" mode-choice) "worktree")
+                (t mode-choice)))
+         (wt-info (if (fboundp 'asq-worktree-create)
+                      (asq-worktree-create :repo-root repo-root :name name :prompt prompt)
+                    (let ((path (expand-file-name (concat ".wt/" name) repo-root)))
+                      (make-directory (file-name-directory path) t)
+                      (call-process "git" nil nil nil "-C" repo-root "worktree" "add" "-b" (concat "wt/" name) path "HEAD")
+                      (list :repo-root repo-root :name name :branch (concat "wt/" name) :path path))))
+         (wt-path (plist-get wt-info :path)))
+    (when wt-path
+      (magit-dash-worktree-symlink-worktree wt-path repo-root)
+      (if (fboundp 'asq-worktree-dispatch-task)
+          (asq-worktree-dispatch-task prompt :target-dir wt-path :mode mode :name name)
+        wt-path))))
 
 (provide 'magit-dash-worktree)
 ;;; magit-dash-worktree.el ends here

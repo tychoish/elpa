@@ -106,6 +106,81 @@
   "List of `magit-dash-repo' structs registered for dashboard display.
 Use `magit-dash-register' to add entries.")
 
+;;;; Operation registry and in-flight guarding
+
+(cl-defstruct (magit-dash-operation (:constructor magit-dash-operation--make) (:copier nil))
+  "Record of a repository operation."
+  id
+  repo-name
+  repo-path
+  label
+  status        ; :running, :ok, :skipped, :error, :cancelled
+  started-at    ; float-time
+  finished-at   ; float-time or nil
+  process       ; process object or nil
+  error-text)
+
+(defvar magit-dash--active-operations (make-hash-table :test #'equal)
+  "Hash table mapping expanded repo path to active `magit-dash-operation' struct.")
+
+(defvar magit-dash--operation-history nil
+  "List of completed or cancelled `magit-dash-operation' structs.")
+
+(defvar magit-dash--operation-counter 0
+  "Monotonic counter for generating operation IDs.")
+
+(defun magit-dash--op-running-p (repo-path)
+  "Return non-nil if an operation is currently running for REPO-PATH."
+  (when-let* ((key (expand-file-name repo-path))
+              (op (gethash key magit-dash--active-operations)))
+    (eq (magit-dash-operation-status op) :running)))
+
+(defun magit-dash--op-start (repo label &optional proc)
+  "Start tracking an operation for REPO with LABEL.
+If an operation is already running for REPO, log a message and return nil (guard triggered).
+Otherwise, create a `magit-dash-operation' struct, store it in `magit-dash--active-operations',
+and return the struct."
+  (let* ((path (expand-file-name (magit-dash-repo-path repo)))
+         (name (magit-dash-repo-name repo)))
+    (if (magit-dash--op-running-p path)
+        (progn
+          (message "magit-dash: %s operation already in progress for %s, skipping re-request" label name)
+          nil)
+      (cl-incf magit-dash--operation-counter)
+      (let ((op (magit-dash-operation--make
+                 :id (format "op-%d" magit-dash--operation-counter)
+                 :repo-name name
+                 :repo-path path
+                 :label label
+                 :status :running
+                 :started-at (float-time)
+                 :finished-at nil
+                 :process proc
+                 :error-text nil)))
+        (puthash path op magit-dash--active-operations)
+        op))))
+
+(defun magit-dash--op-finish (op status &optional error-text)
+  "Mark operation OP as finished with STATUS and optional ERROR-TEXT."
+  (when op
+    (setf (magit-dash-operation-status op) status)
+    (setf (magit-dash-operation-finished-at op) (float-time))
+    (setf (magit-dash-operation-error-text op) error-text)
+    (remhash (magit-dash-operation-repo-path op) magit-dash--active-operations)
+    (push op magit-dash--operation-history)
+    (when (> (length magit-dash--operation-history) 50)
+      (setq magit-dash--operation-history (seq-take magit-dash--operation-history 50)))))
+
+(defun magit-dash--guarded-op-run (repo label op-fn on-complete)
+  "Run OP-FN for REPO with operation guard LABEL.
+If an operation is already running for REPO, invoke ON-COMPLETE with `skipped'
+and skip execution."
+  (if-let* ((op (magit-dash--op-start repo label)))
+      (funcall op-fn repo
+               (lambda (status &optional text)
+                 (magit-dash--op-finish op status text)
+                 (funcall on-complete status text)))
+    (funcall on-complete 'skipped "operation already in progress")))
 (defmacro with-magit-dash (&rest body)
   "Execute BODY in the `magit-dash' buffer.
 Refreshes the dashboard and ensures `magit-dash-mode' is active."
@@ -693,28 +768,31 @@ not via a thrown error."
             (funcall on-error msg 1)
           (message "magit-dash: git %s failed: %s" (car args) msg)))
     (let* ((default-directory path)
-           (proc-buf (generate-new-buffer " *magit-dash-gh-git*")))
+           (proc-buf (generate-new-buffer " *magit-dash-gh-git*"))
+           (proc (make-process
+                  :name "magit-dash-gh-git"
+                  :buffer proc-buf
+                  :command (cons magit-git-executable args)
+                  :connection-type 'pipe
+                  :noquery t
+                  :sentinel
+                  (lambda (proc _event)
+                    (when (memq (process-status proc) '(exit signal))
+                      (let ((output (with-current-buffer (process-buffer proc)
+                                      (string-trim-right (buffer-string))))
+                            (code (process-exit-status proc)))
+                        (kill-buffer (process-buffer proc))
+                        (if (= code 0)
+                            (funcall on-success output)
+                          (if on-error
+                              (funcall on-error output code)
+                            (message "magit-dash: git %s failed (%d): %s"
+                                     (car args) code output)))))))))
       (with-current-buffer proc-buf
         (setq default-directory path))
-      (make-process
-       :name "magit-dash-gh-git"
-       :buffer proc-buf
-       :command (cons magit-git-executable args)
-       :connection-type 'pipe
-       :noquery t
-       :sentinel
-       (lambda (proc _event)
-         (when (memq (process-status proc) '(exit signal))
-           (let ((output (with-current-buffer (process-buffer proc)
-                           (string-trim-right (buffer-string))))
-                 (code (process-exit-status proc)))
-             (kill-buffer (process-buffer proc))
-             (if (= code 0)
-                 (funcall on-success output)
-               (if on-error
-                   (funcall on-error output code)
-                 (message "magit-dash: git %s failed (%d): %s"
-                          (car args) code output))))))))))
+      (when-let* ((active-op (gethash (expand-file-name path) magit-dash--active-operations)))
+        (setf (magit-dash-operation-process active-op) proc))
+      proc)))
 
 (defun magit-dash--fetch-async (repo on-complete)
   "Run git fetch for REPO asynchronously.
@@ -984,6 +1062,51 @@ Run global then repo hooks (or repo then global for `:post') with the
 aggregate status."
   (magit-dash--run-hook-chain repo phase (magit-dash--hooks-for repo op phase) on-complete))
 
+(defun magit-dash--default-sync-async (repo on-complete)
+  "Run safe default sync (fetch, safe pull, safe push) for REPO.
+Calls ON-COMPLETE with `ok', `skipped', or `error'."
+  (if (not (magit-dash--branch-allowed-p repo))
+      (funcall on-complete 'skipped
+               (format "branch %s not in sync-branches"
+                       (magit-dash--current-branch (magit-dash-repo-path repo))))
+    (let ((path (magit-dash-repo-path repo)))
+      (magit-dash--fetch-async
+       repo
+       (lambda (status &optional err)
+         (if (eq status 'error)
+             (funcall on-complete 'error (format "fetch failed: %s" err))
+           (magit-dash--run-git
+            path '("status" "--porcelain" "-uno")
+            (lambda (dirty-tracked)
+              (let ((clean-tracked (string-empty-p dirty-tracked)))
+                (magit-dash--run-git
+                 path '("rev-parse" "--abbrev-ref" "@{upstream}")
+                 (lambda (upstream)
+                   (if (string-empty-p upstream)
+                       (funcall on-complete 'skipped "no upstream branch configured")
+                     (magit-dash--default-sync-pull-push repo path clean-tracked on-complete)))
+                 (lambda (&rest _)
+                   (funcall on-complete 'skipped "no remote tracking branch")))))
+            (lambda (err-msg code)
+              (funcall on-complete 'error (format "git status failed (%d): %s" code err-msg))))))))))
+
+(defun magit-dash--default-sync-pull-push (repo _path clean-tracked on-complete)
+  "Execute pull and push steps for REPO when CLEAN-TRACKED is non-nil."
+  (let ((do-pull (lambda (then-push)
+                   (if clean-tracked
+                       (magit-dash--pull-async
+                        repo
+                        (lambda (p-status &optional p-err)
+                          (if (eq p-status 'error)
+                              (funcall on-complete 'error (format "pull failed: %s" p-err))
+                            (funcall then-push))))
+                     (funcall then-push))))
+        (do-push (lambda ()
+                   (if clean-tracked
+                       (magit-dash--push-async repo on-complete)
+                     (funcall on-complete 'ok)))))
+    (funcall do-pull do-push)))
+
 (defun magit-dash--default-operation (op)
   "Return the default implementation function for OP."
   (pcase op
@@ -991,8 +1114,8 @@ aggregate status."
     (:pull   #'magit-dash--auto-pull-async)
     (:commit #'magit-dash--auto-commit-async)
     (:push   #'magit-dash--auto-push-async)
+    (:default-sync #'magit-dash--default-sync-async)
     (:sync   #'magit-dash--auto-sync-pipeline-async)))
-
 (defun magit-dash--resolve-operation (repo op)
   "Return the (REPO ON-COMPLETE) function that implements OP for REPO:
 REPO's `:operation' override when set, otherwise OP's default implementation."
@@ -1082,13 +1205,17 @@ resolved and wrapped through its own `:hooks' entry.  Call ON-COMPLETE with
       (magit-dash--run-op-chain repo ops on-complete))))
 
 (defun magit-dash--auto-sync-async (repo on-complete)
-  "Run REPO's configured `:sync' operation asynchronously.
+  "Run REPO's configured `:sync' operation asynchronously with operation guarding.
 This executes its `:hooks' `:sync' `:operation' override (which replaces
 the default pipeline entirely, including its own fetch/pull/commit/push
 settings) or, absent that, the default pipeline of fetch/pull/commit/push
 per REPO's auto-* flags — wrapped by `:sync''s own `:pre'/`:post' hooks.
 Call ON-COMPLETE with `ok', `skipped', or `error'."
-  (magit-dash--run-operation repo :sync on-complete))
+  (magit-dash--guarded-op-run
+   repo "sync"
+   (lambda (r cb)
+     (magit-dash--run-operation r :sync cb))
+   on-complete))
 
 (defun magit-dash--log-operation (repo-name operation status &optional error-text)
   "Log REPO-NAME OPERATION with STATUS to *Messages*.
@@ -1135,7 +1262,7 @@ ON-ALL-DONE with an alist of (NAME . STATUS)."
                       (funcall on-all-done results)))))))
          (condition-case err
              (magit-dash--with-repo repo
-               (funcall op-fn repo callback))
+               (magit-dash--guarded-op-run repo label op-fn callback))
            (error (funcall callback 'error (error-message-string err))))))
      repos)))
 
@@ -1613,7 +1740,8 @@ When both together exceed the available window space they split it proportionall
     (define-key m (kbd "T")   #'magit-dash-toggle-column)
     (define-key m (kbd "u")   #'magit-dash-pull)
     (define-key m (kbd "U")   #'magit-dash-pull-all)
-    (define-key m (kbd "w")   #'magit-dash-worktree-add)
+    (define-key m (kbd "w")   #'magit-dash-open-worktree-dispatch)
+    (define-key m (kbd "W")   #'magit-dash-worktree-add)
     (define-key m (kbd "x")   #'magit-dash-run-command)
     (define-key m (kbd "X")   #'magit-dash-run-command-background)
     (define-key m (kbd "B")   #'magit-dash-bootstrap-repo)
@@ -2714,18 +2842,27 @@ Signals `user-error' when `magit-dash-repo-list' is empty."
                  tabulated-list-entries))
   (tabulated-list-print t))
 
+(defun magit-dash--batch-all-active-p ()
+  "Return non-nil when batch mode is active for all visible repos.
+Returns nil when repositories are marked (since marked repos take precedence)
+or when `magit-dash--batch-all' is nil."
+  (and (not (magit-dash--has-marks-p)) magit-dash--batch-all))
+
 (defun magit-dash--effective-repos ()
-  "Return marked repos if any are marked, else all repos currently in the table.
+  "Return marked repos if any are marked; if none are marked and `magit-dash--batch-all' is set, return all visible repos; otherwise return nil.
 Falls back to `magit-dash-repo-list' when not in a dashboard buffer."
   (let ((all (if (derived-mode-p 'magit-dash-mode)
                  (seq-map #'car tabulated-list-entries)
                magit-dash-repo-list)))
-    (if magit-dash--marked-paths
-        (seq-filter (lambda (r)
-                      (member (magit-dash-repo-path r)
-                              magit-dash--marked-paths))
-                    all)
-      all)))
+    (cond
+     (magit-dash--marked-paths
+      (seq-filter (lambda (r)
+                    (member (magit-dash-repo-path r)
+                            magit-dash--marked-paths))
+                  all))
+     (magit-dash--batch-all
+      all)
+     (t nil))))
 
 (defun magit-dash--has-marks-p ()
   "Return non-nil when at least one repository is marked."
@@ -2819,6 +2956,8 @@ When disabled, only explicitly marked repos are targeted."
     ("cw"  "Trigger workflow" magit-dash-gh-workflow-run
      :inapt-if-not magit-dash--repo-has-ci-p)]
    ["Worktree"
+    ("wp"  "Dispatch task"   magit-dash-open-worktree-dispatch
+     :inapt-if-not magit-dash--repo-at-point-p)
     ("wa"  "Add"             magit-dash-worktree-add
      :inapt-if-not magit-dash--can-add-worktree-p)
     ("wd"  "Delete"          magit-dash-worktree-delete
@@ -2866,7 +3005,7 @@ When disabled, only explicitly marked repos are targeted."
     ("u"   "Clear marks"     magit-dash-unmark-all
      :inapt-if-not magit-dash--has-marks-p
      :transient t)
-    ("ma"   (lambda () (if magit-dash--batch-all "Batch: all [on]" "Batch: all [off]"))
+    ("ma"   (lambda () (if (magit-dash--batch-all-active-p) "Batch: all [on]" "Batch: all [off]"))
      magit-dash-toggle-batch-all
      :transient t)
     ("fa"  "Fetch all"       magit-dash-fetch-all
@@ -2891,6 +3030,9 @@ When disabled, only explicitly marked repos are targeted."
      :inapt-if-not magit-dash--has-auto-commit-p)
     ("sy"  "Sync one"        magit-dash-sync
      :inapt-if-not magit-dash--has-auto-sync-p)
+    ("ds"  "Default sync"    magit-dash-default-sync)
+    ("vo"  "View operations" magit-dash-view-operations)
+    ("so"  "Stop operations" magit-dash-stop-operations)
     ("cl"  "Clone repo"      magit-dash-clone-repo
      :inapt-if-not magit-dash--repo-at-point-p)
     ("cm"  "Clone missing"   magit-dash-clone-all-missing
@@ -2919,6 +3061,87 @@ When disabled, only explicitly marked repos are targeted."
     ("M-s" "Toggle submodules" magit-dash-toggle-discovered-submodules)
     ("gg"  "Refresh"         magit-dash-refresh)
     ("q"   "Quit"            quit-window)]])
+
+(defun magit-dash-default-sync ()
+  "Run safe default sync (fetch, safe pull, safe push) for target repo(s)."
+  (interactive)
+  (let ((repos (or (magit-dash--effective-repos)
+                   (when-let* ((r (ignore-errors (magit-dash--repo-at-point))))
+                     (list r)))))
+    (unless repos
+      (user-error "No repositories selected for default sync"))
+    (magit-dash--batch-run
+     repos
+     #'magit-dash--default-sync-async
+     "magit-dash default sync"
+     (lambda (_) (magit-dash--maybe-refresh)))))
+
+(defun magit-dash-view-operations ()
+  "Display active and recent magit-dash operations in a buffer."
+  (interactive)
+  (let ((buf (get-buffer-create "*magit-dash-operations*")))
+    (with-current-buffer buf
+      (read-only-mode -1)
+      (erase-buffer)
+      (insert "=== Magit Dash Operations ===\n\n")
+      (insert "ACTIVE OPERATIONS:\n")
+      (if (= 0 (hash-table-count magit-dash--active-operations))
+          (insert "  (none)\n")
+        (maphash
+         (lambda (_path op)
+           (let ((elapsed (- (float-time) (magit-dash-operation-started-at op))))
+             (insert (format "  [%s] %s: %s (running for %.1fs)\n"
+                             (magit-dash-operation-id op)
+                             (magit-dash-operation-repo-name op)
+                             (magit-dash-operation-label op)
+                             elapsed))))
+         magit-dash--active-operations))
+      (insert "\nRECENT OPERATION HISTORY:\n")
+      (if (null magit-dash--operation-history)
+          (insert "  (none)\n")
+        (dolist (op (seq-take magit-dash--operation-history 20))
+          (let* ((duration (if (magit-dash-operation-finished-at op)
+                              (- (magit-dash-operation-finished-at op)
+                                 (magit-dash-operation-started-at op))
+                            0.0))
+                 (detail (or (magit-dash-operation-error-text op) "")))
+            (insert (format "  [%s] %s: %s → %s (%.1fs)%s\n"
+                            (magit-dash-operation-id op)
+                            (magit-dash-operation-repo-name op)
+                            (magit-dash-operation-label op)
+                            (symbol-name (magit-dash-operation-status op))
+                            duration
+                            (if (string-empty-p detail) "" (format " (%s)" detail)))))))
+      (special-mode))
+    (display-buffer buf)))
+
+(defun magit-dash-stop-operations ()
+  "Stop and cancel all currently running magit-dash operations."
+  (interactive)
+  (let ((count 0))
+    (maphash
+     (lambda (_path op)
+       (when (eq (magit-dash-operation-status op) :running)
+         (cl-incf count)
+         (when-let* ((proc (magit-dash-operation-process op)))
+           (when (process-live-p proc)
+             (delete-process proc)))
+         (setf (magit-dash-operation-status op) :cancelled)
+         (setf (magit-dash-operation-finished-at op) (float-time))
+         (setf (magit-dash-operation-error-text op) "stopped by user")
+         (push op magit-dash--operation-history)))
+     magit-dash--active-operations)
+    (clrhash magit-dash--active-operations)
+    (message "magit-dash: stopped %d running operation(s)" count)))
+
+(defun magit-dash-reset-operations ()
+  "Reset all operation state, stopping active operations and clearing history."
+  (interactive)
+  (magit-dash-stop-operations)
+  (clrhash magit-dash--active-operations)
+  (setq magit-dash--operation-history nil)
+  (setq magit-dash--operation-counter 0)
+  (message "magit-dash: operation state reset"))
 
 
 
