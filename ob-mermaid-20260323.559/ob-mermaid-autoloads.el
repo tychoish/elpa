@@ -12,6 +12,7 @@
 ;;; Generated autoloads from ob-mermaid.el
 
 (register-definition-prefixes "ob-mermaid" '("ob-mermaid-" "org-babel-"))
+
 
 ;;; End of scraped data
 
