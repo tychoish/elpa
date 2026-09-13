@@ -1,0 +1,129 @@
+#+TITLE: gen.el
+#+AUTHOR: sam kleinman
+#+EMAIL: sam@tychoish.com
+#+LANGUAGE: en
+#+OPTIONS: toc:2 num:nil
+
+Generator iterators as lazy seq.el sequences in Emacs Lisp.
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=gen.el= extends the standard =seq.el= library to support lazy generator iterators
+produced by =generator.el= (=iter-lambda=, =iter-defun=, =iter-make=).
+
+Raw generator iterators are closures and cannot be dispatched on directly by
+=cl-generic=. =gen-wrap= encapsulates an iterator in a =gen= struct, enabling
+lazy streaming transformations (=seq-map=, =seq-filter=, =seq-take=) and
+eager draining operations (=seq-reduce=, =seq-into=, =seq-length=).
+
+** Features
+- Full =seq.el= polymorphism for generator iterators.
+- Fully lazy pipelining: transformations only pull elements as demanded.
+- Short-circuiting for search operations (=seq-find=, =seq-some=, =seq-every-p=).
+- Infinite generator support with safeguard warnings on unbounded drain operations.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish Installation
+Add =gen= to your ELPAish bootstrap packages:
+
+#+begin_src emacs-lisp
+(elpaish-install-add-bootstrap-packages '(gen))
+#+end_src
+
+** Manual Installation
+Clone this repository and add it to your =load-path=:
+
+#+begin_src bash
+git clone https://github.com/tychoish/gen.el.git ~/src/gen.el
+#+end_src
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/gen.el")
+(require 'gen)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+#+begin_src emacs-lisp
+(use-package gen
+  :ensure t
+  :defer t)
+#+end_src
+
+* Workflows
+:PROPERTIES:
+:CUSTOM_ID: workflows
+:END:
+
+** Wrapping a Generator
+#+begin_src emacs-lisp
+(require 'gen)
+(require 'generator)
+
+;; Create an iterator and wrap it
+(setq my-gen (gen-wrap (iter-make (iter-yield 1) (iter-yield 2) (iter-yield 3))))
+
+;; Lazily transform and collect into a list
+(seq-into (seq-map (lambda (x) (* x 10)) my-gen) 'list)
+;; => (10 20 30)
+#+end_src
+
+** Working with Infinite Streams
+#+begin_src emacs-lisp
+;; An infinite generator of integers
+(setq natural-numbers
+      (gen-wrap
+       (iter-make
+        (let ((n 1))
+          (while t
+            (iter-yield n)
+            (setq n (1+ n)))))
+       t)) ; Mark as infinite
+
+;; Lazily take first 5 even squares
+(seq-into
+ (seq-take
+  (seq-filter #'cl-evenp
+              (seq-map (lambda (x) (* x x)) natural-numbers))
+  5)
+ 'list)
+;; => (4 16 36 64 100)
+#+end_src
+
+* Commands & API
+:PROPERTIES:
+:CUSTOM_ID: commands
+:END:
+
+| Function           | Summary                                                      |
+|--------------------+--------------------------------------------------------------|
+| =gen-wrap=         | Wrap an iterator closure in a =gen= struct for =seq.el=.     |
+| =gen-p=            | Return non-nil if object is a wrapped =gen= generator.       |
+
+* Development
+:PROPERTIES:
+:CUSTOM_ID: development
+:END:
+
+Run the test suite locally:
+
+#+begin_src bash
+emacs --batch -L . -l test/test-gen.el -f ert-run-tests-batch-and-exit
+#+end_src
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See =LICENSE= for details.

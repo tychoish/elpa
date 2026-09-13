@@ -1,0 +1,499 @@
+#+TITLE: arch.el -- Arch Linux package management UI, package sets, and ELPA manager in Emacs
+#+OPTIONS: toc:2 num:nil
+
+[[https://github.com/tychoish/arch.el/actions][https://github.com/tychoish/arch.el/actions/workflows/ci.yml/badge.svg]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=arch= is an ergonomic package management interface for Arch Linux and GNU Emacs. It integrates local system package administration, AUR helpers, reproducible YAML-based package sets, and an ELPA/MELPA manager with a unified user experience.
+
+Key capabilities:
+- *Pluggable Backend Registry*: Built-in support for =pacman= and =yay=, with extensible backend dispatch for search, installation, removal, and metadata queries.
+- *Tabulated Package Management*: Dedicated package list buffers with filtering, marking, batch actions, and background compilation buffers.
+- *AUR Source Builds*: Direct ABS / AUR source build, clone, pull, and rebuild workflows without leaving Emacs.
+- *Portable Package Sets*: Export explicitly installed packages to machine-independent YAML files, cross-reference them against any host, and batch-install missing packages.
+- *Integrated ELPA Manager*: Mirror the =arch= tabulated-list interface for GNU ELPA, MELPA, and NonGNU ELPA packages.
+- *Transient Menus*: Fast keyboard access via =arch-dispatch= and mode-specific transient menus.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#elpaish-recommended][ELPAish (Recommended)]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#core-workflows--examples][Core Workflows & Examples]]
+  - [[#package-browsing-and-management][Package Browsing and Management]]
+  - [[#aur-source-builds-and-rebuilds][AUR Source Builds and Rebuilds]]
+  - [[#package-set-management][Package Set Management]]
+  - [[#elpa-package-interface][ELPA Package Interface]]
+  - [[#dispatch-transient-menu][Dispatch Transient Menu]]
+- [[#api-reference][API Reference]]
+  - [[#arch-dispatch][arch-dispatch]]
+  - [[#arch-list][arch-list]]
+  - [[#arch-search][arch-search]]
+  - [[#arch-search-aur][arch-search-aur]]
+  - [[#arch-find-package][arch-find-package]]
+  - [[#arch-show-info][arch-show-info]]
+  - [[#arch-install][arch-install]]
+  - [[#arch-remove][arch-remove]]
+  - [[#arch-upgrade][arch-upgrade]]
+  - [[#arch-upgrade-all][arch-upgrade-all]]
+  - [[#arch-upgrade-all-yay][arch-upgrade-all-yay]]
+  - [[#arch-upgrade-system][arch-upgrade-system]]
+  - [[#arch-abs-install][arch-abs-install]]
+  - [[#arch-abs-rebuild][arch-abs-rebuild]]
+  - [[#arch-sync][arch-sync]]
+  - [[#arch-sync-force][arch-sync-force]]
+  - [[#arch-switch-to-buffer][arch-switch-to-buffer]]
+  - [[#arch-kill-buffers][arch-kill-buffers]]
+  - [[#arch-register-backend][arch-register-backend]]
+  - [[#arch-sets-export-file][arch-sets-export-file]]
+  - [[#arch-sets-import-file][arch-sets-import-file]]
+  - [[#arch-sets-open-file][arch-sets-open-file]]
+  - [[#arch-elpa-list][arch-elpa-list]]
+  - [[#arch-elpa-search][arch-elpa-search]]
+  - [[#arch-elpa-install][arch-elpa-install]]
+  - [[#arch-elpa-list-upgrade-all][arch-elpa-list-upgrade-all]]
+- [[#related-packages][Related Packages]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+Add the ELPAish repository to ~package-archives~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+#+END_SRC
+
+Install with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'arch)
+#+END_SRC
+
+To verify package signatures, import the ELPAish signing key into
+=package.el='s keyring and enable signature checking:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+Requires Emacs 30+. Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package arch
+  :vc (:url "https://github.com/tychoish/arch.el"))
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository to your local load path:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/arch.el ~/.emacs.d/site-lisp/arch.el
+#+END_SRC
+
+Load the package in your initialization file:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/arch.el")
+(require 'arch)
+(require 'arch-sets)
+(require 'arch-elpa)
+#+END_SRC
+
+With Emacs 29.1+, you can also use ~package-vc-install~:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install '(arch :url "https://github.com/tychoish/arch.el"))
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Below is a complete ~use-package~ configuration block setting useful options with explicit defaults and keybindings:
+
+#+BEGIN_SRC emacs-lisp
+(use-package arch
+  :ensure t
+  :defer t
+  :commands (arch-dispatch
+             arch-list
+             arch-search
+             arch-find-package
+             arch-install
+             arch-remove
+             arch-sets-export-file
+             arch-sets-import-file
+             arch-sets-open-file
+             arch-elpa-list)
+  :bind (("C-c a d" . arch-dispatch)
+         ("C-c a l" . arch-list)
+         ("C-c a s" . arch-search)
+         ("C-c a e" . arch-elpa-list))
+  :config
+  ;; Customization options and explicit defaults
+  (setq arch-aur-backend "yay")                       ; default: "yay" (AUR helper backend name)
+  (setq arch-default-install-method nil)              ; default: nil (prompt; 'direct, 'abs, or 'rebuild)
+  (setq arch-bury-progress-buffers nil)               ; default: nil (display compile/progress buffer)
+  (setq arch-sets-directory "~/sync/arch-sets")       ; default: nil (directory for package set YAML files)
+
+  ;; Completion and notification hooks
+  (add-hook 'arch-after-install-hook
+            (lambda (pkg)
+              (message "Installed package %s" (arch-pkg-name pkg))))
+  (add-hook 'arch-after-upgrade-hook
+            (lambda (pkg)
+              (message "Upgraded package %s" (arch-pkg-name pkg))))
+  (add-hook 'arch-after-remove-hook
+            (lambda (pkg)
+              (message "Removed package %s" (arch-pkg-name pkg)))))
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+- *AUR Backend*: ~arch-aur-backend~ (string, default: ~"yay"~) sets the registered backend used for AUR search and full upgrade operations.
+- *Default Install Method*: ~arch-default-install-method~ (symbol or nil, default: ~nil~) determines installation dispatch strategy (~'direct~ for package manager CLI, ~'abs~ for source clone/build, ~'rebuild~ for existing clone). If nil, prompts when multiple methods exist.
+- *Progress Buffers*: ~arch-bury-progress-buffers~ (boolean, default: ~nil~) keeps install progress buffers buried instead of immediately popping up a window.
+- *Package Sets Directory*: ~arch-sets-directory~ (directory path or nil, default: ~nil~) defines the default folder for exporting and importing reproducible package set YAML files.
+- *Post-Operation Hooks*: ~arch-after-install-hook~, ~arch-after-upgrade-hook~, ~arch-after-remove-hook~, and ~arch-after-upgrade-all-hook~ execute callbacks with the corresponding package metadata struct.
+
+* Core Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: core-workflows--examples
+:END:
+
+** Package Browsing and Management
+:PROPERTIES:
+:CUSTOM_ID: package-browsing-and-management
+:END:
+
+Launch the interactive package list via =M-x arch-list= or ~arch-dispatch~ (~l~).
+
+Keybindings in ~arch-list-mode~:
+- ~i~: Install package at point.
+- ~r~: Remove package at point.
+- ~u~: Upgrade package at point.
+- ~U~: Upgrade all packages across the active backend.
+- ~s~: ABS install / build from source.
+- ~b~: ABS rebuild existing source clone.
+- ~f~: Filter package list by criteria (upgradeable, AUR, explicit, dependency, orphan).
+- ~F~: Clear active filter.
+- ~w~: Toggle wide view (installed only vs all sync database packages).
+- ~SPC~: Toggle mark on package.
+- ~m~: Mark package and advance line.
+- ~DEL~: Unmark package and move back.
+- ~M~: Unmark all packages.
+- ~x~: Install marked packages as a batch.
+- ~D~: Remove marked packages.
+- ~RET~: Open metadata detail view with dependencies, size, and package URLs.
+- ~?~: Open transient action menu (~arch-list-menu~).
+
+** AUR Source Builds and Rebuilds
+:PROPERTIES:
+:CUSTOM_ID: aur-source-builds-and-rebuilds
+:END:
+
+When installing AUR packages from source via ABS:
+1. =M-x arch-abs-install= clones the AUR repository into your local ABS directory (e.g. =~/.cache/pacman/abs/<pkg>=) or pulls upstream changes if already cloned.
+2. Invokes ~makepkg -sric~ in a dedicated compilation buffer named =*arch:<pkg>*=.
+3. Output accumulates continuously across rebuilds. To rebuild without re-pulling, invoke =M-x arch-abs-rebuild=.
+
+** Package Set Management
+:PROPERTIES:
+:CUSTOM_ID: package-set-management
+:END:
+
+Package sets allow synchronizing installed software configurations across workstations:
+- *Export*: =M-x arch-sets-export-file= writes all explicitly installed packages to a YAML file containing package names, sources (=pacman=, =aur=, =db=), host name, and version format.
+- *Inspect*: =M-x arch-sets-open-file= opens the YAML definition in ~arch-set-mode~, cross-referencing each listed entry against the local machine's database and highlighting packages as *installed* or *missing*.
+- *Install*: In ~arch-set-mode~, press ~i~ on any missing row or ~I~ to install all missing packages in batched groups.
+- *Headless Import*: =M-x arch-sets-import-file= directly installs missing entries without opening the viewer.
+
+** ELPA Package Interface
+:PROPERTIES:
+:CUSTOM_ID: elpa-package-interface
+:END:
+
+Manage Emacs Lisp packages through the same keyboard conventions:
+- =M-x arch-elpa-list= displays installed, upgradeable, and available ELPA/MELPA packages.
+- Use ~m~ and ~SPC~ to mark multiple packages, then ~x~ to install or ~D~ to delete in batch.
+- Filter by status with ~f~ (upgradeable, installed, available, built-in).
+- Press ~U~ (=arch-elpa-list-upgrade-all=) to upgrade all outdated ELPA packages in one stroke.
+
+** Dispatch Transient Menu
+:PROPERTIES:
+:CUSTOM_ID: dispatch-transient-menu
+:END:
+
+Invoke =M-x arch-dispatch= to view all top-level operations in an ergonomic popup menu:
+- *Search*: ~s~ (Search), ~S~ (Search AUR)
+- *View*: ~l~ (List installed), ~fp~ (Find package), ~i~ (Package info), ~b~ (Switch buffer), ~ki~ (Kill buffers)
+- *Install*: ~xp~ (Install package)
+- *System*: ~y~ (Sync databases), ~xf~ (Force sync), ~p~ (Upgrade installed), ~u~ (Full upgrade), ~xa~ (Full upgrade with AUR skipped)
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command                                                   | Kind     | Description                                                         |
+|--------------------------------------------------------------------+----------+---------------------------------------------------------------------|
+| [[#arch-dispatch][~arch-dispatch~]]                               | Command  | Central transient entry point for package operations                |
+| [[#arch-list][~arch-list~]]                                       | Command  | Open tabulated package list showing installed and sync packages     |
+| [[#arch-search][~arch-search~]]                                   | Command  | Search registered backends for query with ACR completion           |
+| [[#arch-search-aur][~arch-search-aur~]]                           | Command  | Search the AUR only via configured AUR backend                     |
+| [[#arch-find-package][~arch-find-package~]]                       | Command  | ACR selection across all sync packages to show info                 |
+| [[#arch-show-info][~arch-show-info~]]                             | Command  | Display detailed metadata, dependencies, and file list for package  |
+| [[#arch-install][~arch-install~]]                                 | Command  | Install package via default backend with ACR completion             |
+| [[#arch-remove][~arch-remove~]]                                   | Command  | Remove package via default backend with ACR completion              |
+| [[#arch-upgrade][~arch-upgrade~]]                                 | Command  | Upgrade a specific package                                          |
+| [[#arch-upgrade-all][~arch-upgrade-all~]]                         | Command  | Upgrade all pacman-managed packages                                 |
+| [[#arch-upgrade-all-yay][~arch-upgrade-all-yay~]]                 | Command  | Upgrade pacman packages via AUR helper                              |
+| [[#arch-upgrade-system][~arch-upgrade-system~]]                   | Command  | Upgrade installed packages without syncing database (-Su)           |
+| [[#arch-abs-install][~arch-abs-install~]]                         | Command  | Install or upgrade package from AUR source repository               |
+| [[#arch-abs-rebuild][~arch-abs-rebuild~]]                         | Command  | Rebuild package from existing local AUR source clone                 |
+| [[#arch-sync][~arch-sync~]]                                       | Command  | Sync pacman databases (-Sy)                                         |
+| [[#arch-sync-force][~arch-sync-force~]]                           | Command  | Force sync all pacman databases (-Syy)                              |
+| [[#arch-switch-to-buffer][~arch-switch-to-buffer~]]               | Command  | ACR-select and switch among open arch buffers                       |
+| [[#arch-kill-buffers][~arch-kill-buffers~]]                       | Command  | Kill idle progress and metadata inspection buffers                  |
+| [[#arch-register-backend][~arch-register-backend~]]               | Function | Register an engine struct in the arch backend registry              |
+| [[#arch-sets-export-file][~arch-sets-export-file~]]               | Command  | Export explicitly installed packages to a YAML file                 |
+| [[#arch-sets-import-file][~arch-sets-import-file~]]               | Command  | Batch install missing packages specified in a YAML package set      |
+| [[#arch-sets-open-file][~arch-sets-open-file~]]                   | Command  | Open package set YAML file in interactive review buffer             |
+| [[#arch-elpa-list][~arch-elpa-list~]]                             | Command  | Open tabulated package manager for ELPA/MELPA packages              |
+| [[#arch-elpa-search][~arch-elpa-search~]]                         | Command  | Search ELPA package archives via ACR completion                     |
+| [[#arch-elpa-install][~arch-elpa-install~]]                       | Command  | Prompt and install an ELPA package                                  |
+| [[#arch-elpa-list-upgrade-all][~arch-elpa-list-upgrade-all~]]     | Command  | Upgrade all outdated ELPA packages in one operation                 |
+
+** arch-dispatch
+:PROPERTIES:
+:CUSTOM_ID: arch-dispatch
+:END:
+
+Transient menu providing central access to package search, browsing, installation, buffer management, and system upgrade commands.
+
+** arch-list
+:PROPERTIES:
+:CUSTOM_ID: arch-list
+:END:
+
+Open the tabulated arch package list showing currently installed packages, with support for wide sync database view, filters, marks, and batch operations.
+
+** arch-search
+:PROPERTIES:
+:CUSTOM_ID: arch-search
+:END:
+
+Prompt for a search query, query registered backends, and display matching packages grouped by repository using ACR completion.
+
+** arch-search-aur
+:PROPERTIES:
+:CUSTOM_ID: arch-search-aur
+:END:
+
+Query the AUR backend directly for a search string and display results in ACR.
+
+** arch-find-package
+:PROPERTIES:
+:CUSTOM_ID: arch-find-package
+:END:
+
+Select any package from the synchronized databases using ACR with inline metadata annotations (repo, status, version, description) and open its info buffer.
+
+** arch-show-info
+:PROPERTIES:
+:CUSTOM_ID: arch-show-info
+:END:
+
+Display formatted metadata, dependencies, URLs, and file listings for a package in a read-only buffer.
+
+** arch-install
+:PROPERTIES:
+:CUSTOM_ID: arch-install
+:END:
+
+Select a package to install using ACR and execute installation through the configured default install method.
+
+** arch-remove
+:PROPERTIES:
+:CUSTOM_ID: arch-remove
+:END:
+
+Select an installed package using ACR and remove it via the active backend.
+
+** arch-upgrade
+:PROPERTIES:
+:CUSTOM_ID: arch-upgrade
+:END:
+
+Prompt for a package and upgrade it via the default backend.
+
+** arch-upgrade-all
+:PROPERTIES:
+:CUSTOM_ID: arch-upgrade-all
+:END:
+
+Perform a full system upgrade via the pacman backend (=pacman -Syu=).
+
+** arch-upgrade-all-yay
+:PROPERTIES:
+:CUSTOM_ID: arch-upgrade-all-yay
+:END:
+
+Run full system upgrade using the AUR helper backend, logging warnings for foreign packages.
+
+** arch-upgrade-system
+:PROPERTIES:
+:CUSTOM_ID: arch-upgrade-system
+:END:
+
+Upgrade installed packages without database refresh (=pacman -Su=).
+
+** arch-abs-install
+:PROPERTIES:
+:CUSTOM_ID: arch-abs-install
+:END:
+
+Clone or pull the AUR source repository for a package and compile it via makepkg in an asynchronous progress buffer.
+
+** arch-abs-rebuild
+:PROPERTIES:
+:CUSTOM_ID: arch-abs-rebuild
+:END:
+
+Rebuild a package from an existing local ABS clone without re-pulling upstream changes.
+
+** arch-sync
+:PROPERTIES:
+:CUSTOM_ID: arch-sync
+:END:
+
+Synchronize pacman package databases (=pacman -Sy=).
+
+** arch-sync-force
+:PROPERTIES:
+:CUSTOM_ID: arch-sync-force
+:END:
+
+Force synchronization of all pacman package databases (=pacman -Syy=).
+
+** arch-switch-to-buffer
+:PROPERTIES:
+:CUSTOM_ID: arch-switch-to-buffer
+:END:
+
+Select and switch among open arch-related buffers (lists, info pages, compilation buffers) using ACR grouping.
+
+** arch-kill-buffers
+:PROPERTIES:
+:CUSTOM_ID: arch-kill-buffers
+:END:
+
+Close all arch metadata and completed progress buffers while leaving active compilation processes untouched.
+
+** arch-register-backend
+:PROPERTIES:
+:CUSTOM_ID: arch-register-backend
+:END:
+
+Register an ~arch-backend~ struct instance in the global registry, defining custom search, info, list, and install operations.
+
+** arch-sets-export-file
+:PROPERTIES:
+:CUSTOM_ID: arch-sets-export-file
+:END:
+
+Export the explicitly installed packages on the current host to a portable YAML package set file.
+
+** arch-sets-import-file
+:PROPERTIES:
+:CUSTOM_ID: arch-sets-import-file
+:END:
+
+Import a YAML package set file, resolving backends and batch-installing missing packages.
+
+** arch-sets-open-file
+:PROPERTIES:
+:CUSTOM_ID: arch-sets-open-file
+:END:
+
+Open a YAML package set file in ~arch-set-mode~, displaying package status (installed vs missing) with interactive installation controls.
+
+** arch-elpa-list
+:PROPERTIES:
+:CUSTOM_ID: arch-elpa-list
+:END:
+
+Open the tabulated ELPA package management buffer with batch marking, filtering, and package upgrading.
+
+** arch-elpa-search
+:PROPERTIES:
+:CUSTOM_ID: arch-elpa-search
+:END:
+
+Search configured package archives (GNU ELPA, MELPA, NonGNU ELPA) with ACR completion and open package descriptions.
+
+** arch-elpa-install
+:PROPERTIES:
+:CUSTOM_ID: arch-elpa-install
+:END:
+
+Prompt and install an ELPA package using ACR selection.
+
+** arch-elpa-list-upgrade-all
+:PROPERTIES:
+:CUSTOM_ID: arch-elpa-list-upgrade-all
+:END:
+
+Upgrade all outdated ELPA packages in a single batch operation.
+
+* Related Packages
+:PROPERTIES:
+:CUSTOM_ID: related-packages
+:END:
+
+- [[https://github.com/tychoish/annotated-completing-read][annotated-completing-read]]: Rich annotations and grouping for ~completing-read~.
+- [[https://github.com/magit/transient][transient]]: Display dispatch menus and transient keyboard interfaces.
+- [[https://github.com/zkry/yaml.el][yaml]]: Fast YAML parser and encoder for Emacs Lisp.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0 or later. See the source file headers for the full license text.

@@ -1,0 +1,105 @@
+#+TITLE: eglot-test-at-point.el
+#+AUTHOR: sam kleinman
+#+EMAIL: sam@tychoish.com
+#+LANGUAGE: en
+#+OPTIONS: toc:2 num:nil
+
+Test discovery and test runner at point for Eglot in Emacs.
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=eglot-test-at-point= provides LSP-driven test discovery and execution for =eglot=.
+Using LSP code lenses (e.g. =gopls=, =rust-analyzer=) and document symbols (Python =pyright=/=pylance=),
+it determines the nearest test to point or provides an interactive completion buffer of
+all tests in the current buffer.
+
+** Supported Languages
+- *Go*: via =gopls= code lenses (=eglot-test-at-point-setup-go=).
+- *Rust*: via =rust-analyzer= code lenses (=eglot-test-at-point-setup-rust=).
+- *Python*: via document symbols (=eglot-test-at-point-setup-python=).
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish Installation
+Add =eglot-test-at-point= to your ELPAish bootstrap packages:
+
+#+begin_src emacs-lisp
+(elpaish-install-add-bootstrap-packages '(eglot-test-at-point))
+#+end_src
+
+** Manual Installation
+#+begin_src bash
+git clone https://github.com/tychoish/eglot-test-at-point.git ~/src/eglot-test-at-point
+#+end_src
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/eglot-test-at-point")
+(require 'eglot-test-at-point)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Hooks for major modes are configured automatically upon loading.
+
+#+begin_src emacs-lisp
+(use-package eglot-test-at-point
+  :ensure t
+  :defer t
+  :bind
+  (:map eglot-mode-map
+   ("C-c l t" . eglot-test-at-point)
+   ("C-c l T" . eglot-test-at-point-select)))
+#+end_src
+
+* Workflows
+:PROPERTIES:
+:CUSTOM_ID: workflows
+:END:
+
+** Running Test at Point
+Place point inside a test or benchmark function and invoke =M-x eglot-test-at-point=.
+The test command executes in an asynchronous compilation buffer named =*<project>-test-<directory>*=.
+
+** Selecting a Test Interactively
+Invoke =M-x eglot-test-at-point-select= to choose from all tests discovered in the current buffer
+using =annotated-completing-read=.
+
+* Commands & API
+:PROPERTIES:
+:CUSTOM_ID: commands
+:END:
+
+| Command                         | Summary                                                      |
+|---------------------------------+--------------------------------------------------------------|
+| =eglot-test-at-point=           | Run test nearest point in dedicated compilation buffer.     |
+| =eglot-test-at-point-select=    | Interactively select and run a test from current buffer.    |
+| =eglot-test-at-point-setup-go=  | Configure buffer-local test discovery for Go.                |
+| =eglot-test-at-point-setup-rust=| Configure buffer-local test discovery for Rust.              |
+| =eglot-test-at-point-setup-python=| Configure buffer-local test discovery for Python.          |
+
+* Development
+:PROPERTIES:
+:CUSTOM_ID: development
+:END:
+
+Run the ERT test suite:
+
+#+begin_src bash
+emacs --batch -L . -l test/test-eglot-test-at-point.el -f ert-run-tests-batch-and-exit
+#+end_src
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See =LICENSE= for details.

@@ -1,0 +1,372 @@
+#+TITLE: telega-bot.el -- Bot engine in Emacs with Telega
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=telega-bot= is an event-driven Telegram bot framework for GNU Emacs built on top of [[https://github.com/zevlg/telega.el][telega.el]] (TDLib). It provides declarative macro-based handler definitions for slash commands, inline keyboard callback queries, regex/fuzzy matching, conversation finite state machines (FSM), and direct [[https://github.com/jwiegley/alert][alert.el]] push notifications.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#elpaish-recommended][ELPAish (Recommended)]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#core-workflows--examples][Core Workflows & Examples]]
+  - [[#defining-a-bot][Defining a Bot]]
+  - [[#slash-commands][Slash Commands]]
+  - [[#inline-keyboards--callbacks][Inline Keyboards & Callbacks]]
+  - [[#interactive-yesno-prompts][Interactive Yes/No Prompts]]
+  - [[#multi-step-conversation-fsm][Multi-Step Conversation FSM]]
+  - [[#alertel-backend-integration][Alert.el Backend Integration]]
+- [[#api-reference][API Reference]]
+  - [[#make-telega-bot][make-telega-bot]]
+  - [[#telega-bot-register-handler][telega-bot-register-handler]]
+  - [[#telega-bot-activate][telega-bot-activate]]
+  - [[#telega-bot-deactivate][telega-bot-deactivate]]
+  - [[#telega-bot-send-response][telega-bot-send-response]]
+  - [[#telega-bot-send-keyboard][telega-bot-send-keyboard]]
+  - [[#telega-bot-ask-yes-or-no][telega-bot-ask-yes-or-no]]
+  - [[#telega-bot-set-state][telega-bot-set-state]]
+  - [[#telega-bot-get-state][telega-bot-get-state]]
+  - [[#telega-bot-clear-state][telega-bot-clear-state]]
+  - [[#telega-bot-alert-register-target][telega-bot-alert-register-target]]
+  - [[#telega-bot-alert][telega-bot-alert]]
+- [[#related-packages][Related Packages]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+Add the ELPAish repository to ~package-archives~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+#+END_SRC
+
+Install with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'telega-bot)
+#+END_SRC
+
+To verify package signatures, import the ELPAish signing key into
+=package.el='s keyring and enable signature checking:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+Requires Emacs 30+. Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package telega-bot
+  :vc (:url "https://github.com/tychoish/telega-bot")
+  :after telega)
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/telega-bot ~/.emacs.d/site-lisp/telega-bot
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/telega-bot")
+(require 'telega-bot)
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Below is a complete ~use-package~ configuration block registering a bot and configuring alert targets:
+
+#+BEGIN_SRC emacs-lisp
+(use-package telega-bot
+  :ensure t
+  :after telega
+  :config
+  ;; Define bot instance
+  (defvar my-emacs-bot
+    (make-telega-bot
+     :name "EmacsBot"
+     :token "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"))
+
+  ;; Register alert.el delivery target
+  (require 'telega-bot-alert)
+  (telega-bot-alert-register-target
+   :name "alerts"
+   :bot 'EmacsBot
+   :chat-id 12345678))
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+- *Registry*: ~telega-bot-registry~ contains an alist of active bot instances keyed by name.
+- *Alert Targets*: ~telega-bot-alert-targets~ contains an alist of named delivery targets for ~alert.el~.
+- *Default Alert Targets*: ~telega-bot-alert-default-targets~ lists default target names used when no specific target is provided to ~telega-bot-alert~.
+
+* Core Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: core-workflows--examples
+:END:
+
+** Defining a Bot
+:PROPERTIES:
+:CUSTOM_ID: defining-a-bot
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(defvar my-bot
+  (make-telega-bot
+   :name "MyBot"
+   :token "123456789:ABC..."))
+#+END_SRC
+
+** Slash Commands
+:PROPERTIES:
+:CUSTOM_ID: slash-commands
+:END:
+
+Slash commands are O(1) indexed and automatically strip username qualifiers like ~/ping@MyBot~:
+
+#+BEGIN_SRC emacs-lisp
+(telega-bot-register-handler ping-cmd 'MyBot
+  :operation :command
+  :pattern "/ping"
+  (send-response "pong"))
+#+END_SRC
+
+** Inline Keyboards & Callbacks
+:PROPERTIES:
+:CUSTOM_ID: inline-keyboards--callbacks
+:END:
+
+Send inline keyboard rows and attach callback handlers:
+
+#+BEGIN_SRC emacs-lisp
+(telega-bot-register-handler menu-cmd 'MyBot
+  :operation :command
+  :pattern "/menu"
+  (send-keyboard "Choose an action:"
+    '((("Status" . "btn:status")
+       ("Help"   . "btn:help")))))
+
+(telega-bot-register-handler status-cb 'MyBot
+  :operation :callback
+  :pattern "btn:status"
+  (send-response (format "Uptime: %s" (emacs-uptime))))
+#+END_SRC
+
+** Interactive Yes/No Prompts
+:PROPERTIES:
+:CUSTOM_ID: interactive-yesno-prompts
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(telega-bot-register-handler restart-cmd 'MyBot
+  :operation :command
+  :pattern "/restart"
+  (ask-yes-or-no "Restart server now?"
+    :on-yes (lambda () (send-response "Restarting..."))
+    :on-no  (lambda () (send-response "Canceled."))))
+#+END_SRC
+
+** Multi-Step Conversation FSM
+:PROPERTIES:
+:CUSTOM_ID: multi-step-conversation-fsm
+:END:
+
+Track per-user, per-chat conversation states across multiple messages:
+
+#+BEGIN_SRC emacs-lisp
+(telega-bot-register-handler start-signup 'MyBot
+  :operation :command
+  :pattern "/signup"
+  (send-response "What is your username?")
+  (set-state 'awaiting-username))
+
+(telega-bot-register-handler handle-username 'MyBot
+  :operation :step
+  :state awaiting-username
+  :args (&key text)
+  (send-response (format "Registered %s! Now enter email:" text))
+  (set-state 'awaiting-email :data (list :username text)))
+#+END_SRC
+
+** Alert.el Backend Integration
+:PROPERTIES:
+:CUSTOM_ID: alertel-backend-integration
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(require 'telega-bot-alert)
+
+(telega-bot-alert-register-target
+ :name "ops"
+ :bot 'MyBot
+ :chat-id 987654321)
+
+;; Send via alert.el style
+(alert "Deploy completed successfully" :style 'telega-bot :title "Deploy")
+
+;; Or directly via telega-bot-alert
+(telega-bot-alert "Database backup finished" :title "Backup" :targets '("ops"))
+#+END_SRC
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command                                                | Kind     | Description                                                          |
+|-----------------------------------------------------------------+----------+----------------------------------------------------------------------|
+| [[#make-telega-bot][~make-telega-bot~]]                               | Function | Create and register a new telega bot instance                        |
+| [[#telega-bot-register-handler][~telega-bot-register-handler~]]           | Macro    | Declarative handler registration for commands, callbacks, and states |
+| [[#telega-bot-activate][~telega-bot-activate~]]                           | Function | Activate a bot and start listening to updates                        |
+| [[#telega-bot-deactivate][~telega-bot-deactivate~]]                       | Function | Deactivate a bot instance                                            |
+| [[#telega-bot-send-response][~telega-bot-send-response~]]                   | Function | Send a reply within an active handler execution context              |
+| [[#telega-bot-send-keyboard][~telega-bot-send-keyboard~]]                   | Function | Send an inline keyboard reply within an active context               |
+| [[#telega-bot-ask-yes-or-no][~telega-bot-ask-yes-or-no~]]                   | Function | Send a confirmation prompt with Yes and No callback buttons          |
+| [[#telega-bot-set-state][~telega-bot-set-state~]]                           | Function | Transition the sender to an FSM conversation state                   |
+| [[#telega-bot-get-state][~telega-bot-get-state~]]                           | Function | Query current conversation state for a user/chat pair                |
+| [[#telega-bot-clear-state][~telega-bot-clear-state~]]                       | Function | Clear active conversation state for a user/chat pair                 |
+| [[#telega-bot-alert-register-target][~telega-bot-alert-register-target~]]       | Function | Register a named delivery target for alert.el notifications          |
+| [[#telega-bot-alert][~telega-bot-alert~]]                                   | Function | Dispatch an alert directly to telega-bot delivery targets            |
+
+** make-telega-bot
+:PROPERTIES:
+:CUSTOM_ID: make-telega-bot
+:END:
+
+Create a new ~telega-bot~ structure and register it in ~telega-bot-registry~.
+Key arguments: ~:name~ (string identifier), ~:token~ (Telegram API token string), ~:fallback~ (catch-all handler function), ~:active~ (boolean).
+
+** telega-bot-register-handler
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-register-handler
+:END:
+
+Macro to declare and attach a handler function to a bot. Supported operations:
+- ~:command~: Matches slash commands (specified by ~:pattern~).
+- ~:callback~: Matches inline button callback queries (specified by ~:pattern~).
+- ~:fuzzy~ / ~:fuzzymatch~: Matches messages by regular expression (specified by ~:pattern~).
+- ~:step~ / ~:state~: Matches incoming messages when the sender is in a given conversation state (specified by ~:state~).
+- ~:fallback~: Catch-all handler when no other pattern matches.
+
+** telega-bot-activate
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-activate
+:END:
+
+Activate ~BOT-OR-NAME~ and connect to the Telegram network using Telega.
+
+** telega-bot-deactivate
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-deactivate
+:END:
+
+Deactivate ~BOT-OR-NAME~ and cease processing events.
+
+** telega-bot-send-response
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-send-response
+:END:
+
+Send text message response to the current incoming chat or specified ~:chat-id~.
+
+** telega-bot-send-keyboard
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-send-keyboard
+:END:
+
+Send a text message with an inline button keyboard to the current chat or specified ~:chat-id~.
+
+** telega-bot-ask-yes-or-no
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-ask-yes-or-no
+:END:
+
+Send a confirmation prompt with "Yes" and "No" inline buttons and execute ~:on-yes~ or ~:on-no~ handlers upon click.
+
+** telega-bot-set-state
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-set-state
+:END:
+
+Set the FSM state of a user and chat to ~STATE~, with optional metadata in ~:data~.
+
+** telega-bot-get-state
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-get-state
+:END:
+
+Retrieve the current ~(state-sym . data)~ cons cell for the user and chat, or nil.
+
+** telega-bot-clear-state
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-clear-state
+:END:
+
+Remove the active conversation state for a user and chat.
+
+** telega-bot-alert-register-target
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-alert-register-target
+:END:
+
+Register an alert target under ~NAME~ for ~BOT~ delivering to ~CHAT-ID~ and optional ~THREAD-ID~.
+
+** telega-bot-alert
+:PROPERTIES:
+:CUSTOM_ID: telega-bot-alert
+:END:
+
+Deliver a notification message via ~alert.el~ using the ~telega-bot~ style, optionally targeting a specific subset of registered targets.
+
+* Related Packages
+:PROPERTIES:
+:CUSTOM_ID: related-packages
+:END:
+
+- [[https://github.com/zevlg/telega.el][telega.el]]: Emacs client for Telegram Messenger built on TDLib.
+- [[https://github.com/jwiegley/alert][alert.el]]: Growl-like notification system for Emacs.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+Copyright (C) 2026 sam kleinman. Distributed under the GNU General Public License v3.0 or later.

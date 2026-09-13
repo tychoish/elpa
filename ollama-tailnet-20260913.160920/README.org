@@ -1,0 +1,398 @@
+#+TITLE: ollama-tailnet.el -- Ollama tailnet orchestration and model management in Emacs
+#+OPTIONS: toc:2 num:nil
+
+[[https://github.com/tychoish/ollama-tailnet/actions][https://github.com/tychoish/ollama-tailnet/actions/workflows/ci.yml/badge.svg]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=ollama-tailnet= coordinates Ollama inference hosts across Tailscale tailnets and local environments for GNU Emacs. It provides:
+
+- Dynamic host registration and reachability checking across local and remote nodes.
+- First-class [[https://github.com/karthink/gptel][gptel]] integration: resolve host/model specs (e.g. ~derrida/default~ or ~laptop/gemma4:2b~), generate backend objects, and switch contexts globally or buffer-locally.
+- An interactive model dashboard (~M-x ollama-tailnet-models~) with digest-level upgrade checking against the Ollama registry, pulling, and deletion.
+- In-Emacs library search (~M-x ollama-tailnet-search-model~) with direct pull dispatch.
+- Systemd service lifecycle management (~systemctl --user~) over local processes and SSH.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#elpaish-recommended][ELPAish (Recommended)]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#core-workflows--examples][Core Workflows & Examples]]
+  - [[#host-registration][Host Registration]]
+  - [[#gptel-backend-integration][Gptel Backend Integration]]
+  - [[#model-management-dashboard][Model Management Dashboard]]
+  - [[#library-model-search][Library Model Search]]
+  - [[#remote-service-control][Remote Service Control]]
+  - [[#hud-keymap-integration][HUD Keymap Integration]]
+- [[#api-reference][API Reference]]
+  - [[#ollama-tailnet-register-host][ollama-tailnet-register-host]]
+  - [[#ollama-tailnet-get-host][ollama-tailnet-get-host]]
+  - [[#ollama-tailnet-list-hosts][ollama-tailnet-list-hosts]]
+  - [[#ollama-tailnet-setup-laptop-presets][ollama-tailnet-setup-laptop-presets]]
+  - [[#ollama-tailnet-models][ollama-tailnet-models]]
+  - [[#ollama-tailnet-search-model][ollama-tailnet-search-model]]
+  - [[#ollama-tailnet-resolve-model][ollama-tailnet-resolve-model]]
+  - [[#ollama-tailnet-get-gptel-backend][ollama-tailnet-get-gptel-backend]]
+  - [[#ollama-tailnet-set-gptel-backend][ollama-tailnet-set-gptel-backend]]
+  - [[#ollama-tailnet-probe-host-default][ollama-tailnet-probe-host-default]]
+  - [[#ollama-tailnet-service-restart][ollama-tailnet-service-restart]]
+  - [[#ollama-tailnet-service-status][ollama-tailnet-service-status]]
+  - [[#ollama-tailnet-pull-model][ollama-tailnet-pull-model]]
+  - [[#ollama-tailnet-status][ollama-tailnet-status]]
+  - [[#ollama-tailnet-bind-hud-keys][ollama-tailnet-bind-hud-keys]]
+- [[#related-packages][Related Packages]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+Add the ELPAish repository to ~package-archives~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+#+END_SRC
+
+Install with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'ollama-tailnet)
+#+END_SRC
+
+To verify package signatures, import the ELPAish signing key into
+=package.el='s keyring and enable signature checking:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+Requires Emacs 30+. Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package ollama-tailnet
+  :vc (:url "https://github.com/tychoish/ollama-tailnet")
+  :after gptel)
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/ollama-tailnet ~/.emacs.d/site-lisp/ollama-tailnet
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/ollama-tailnet")
+(require 'ollama-tailnet)
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(use-package ollama-tailnet
+  :after gptel
+  :custom
+  ;; Fallback strategy when host in spec is unreachable or unknown (:prompt, :auto-local, :error)
+  (ollama-tailnet-fallback-strategy :prompt)
+  ;; Default port when port is omitted in host address
+  (ollama-tailnet-default-port 11434)
+  :config
+  ;; Optionally register preset hosts (e.g. derrida on tailnet and local host)
+  (ollama-tailnet-setup-laptop-presets)
+
+  ;; Or register custom hosts explicitly:
+  (ollama-tailnet-register-host 'workstation
+    :host "workstation.tailnet:11434"
+    :default-model "llama3:70b"
+    :models '("llama3:70b" "codellama:34b")
+    :local-p nil)
+
+  ;; Bind quick HUD keys if hud-robot is active
+  (ollama-tailnet-bind-hud-keys))
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+- ~ollama-tailnet-fallback-strategy~: Strategy to apply when an unresolvable host is requested. Options are ~:prompt~ (interactive completion), ~:auto-local~ (fallback to local host), or ~:error~.
+- ~ollama-tailnet-default-port~: Default TCP port (11434) used during host reachability probes and connection setups.
+- ~ollama-tailnet-hosts~: Hash table storing registered host configurations indexed by symbol.
+
+* Core Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: core-workflows--examples
+:END:
+
+** Host Registration
+:PROPERTIES:
+:CUSTOM_ID: host-registration
+:END:
+
+Hosts can be declared dynamically with address, default model, and candidate model lists:
+
+#+BEGIN_SRC emacs-lisp
+(ollama-tailnet-register-host 'gpu-rig
+  :host "gpu-rig.tailnet:11434"
+  :default-model "qwen2.5-coder:32b"
+  :models '("qwen2.5-coder:32b" "deepseek-coder-v2:16b")
+  :local-p nil)
+#+END_SRC
+
+To query active hosts and their status:
+
+#+BEGIN_SRC emacs-lisp
+(ollama-tailnet-list-hosts)
+#+END_SRC
+
+** Gptel Backend Integration
+:PROPERTIES:
+:CUSTOM_ID: gptel-backend-integration
+:END:
+
+Resolve specs and configure ~gptel~ backends interactively or programmatically:
+
+#+BEGIN_SRC emacs-lisp
+;; Switch gptel default backend and model globally
+(ollama-tailnet-set-gptel-backend "gpu-rig/qwen2.5-coder:32b")
+
+;; Or set buffer-locally with prefix arg
+(ollama-tailnet-set-gptel-backend "laptop/default" t)
+#+END_SRC
+
+** Model Management Dashboard
+:PROPERTIES:
+:CUSTOM_ID: model-management-dashboard
+:END:
+
+Launch the tabulated dashboard with =M-x ollama-tailnet-models=.
+
+Keybindings in ~ollama-tailnet-models-mode~:
+
+- ~u~: Upgrade model at point (re-pulls latest manifest tag).
+- ~d~: Delete model at point from target host.
+- ~c~: Check whether model at point has an update available in the upstream registry.
+- ~C~: Check update status for all models listed.
+- ~s~: Search official Ollama library.
+- ~g~: Refresh dashboard across reachable hosts.
+- ~RET~: Show detailed model metadata.
+- ~?~: Open transient control menu.
+- ~q~: Quit dashboard window.
+
+** Library Model Search
+:PROPERTIES:
+:CUSTOM_ID: library-model-search
+:END:
+
+Run =M-x ollama-tailnet-search-model= to search the official Ollama library directly from Emacs with live completion and prompt to pull to any registered host.
+
+** Remote Service Control
+:PROPERTIES:
+:CUSTOM_ID: remote-service-control
+:END:
+
+Manage systemd user services locally or across SSH:
+
+#+BEGIN_SRC emacs-lisp
+;; Restart systemd ollama service on host
+(ollama-tailnet-service-restart "gpu-rig")
+
+;; Inspect systemd service logs / status
+(ollama-tailnet-service-status "gpu-rig")
+#+END_SRC
+
+** HUD Keymap Integration
+:PROPERTIES:
+:CUSTOM_ID: hud-keymap-integration
+:END:
+
+If using ~hud-robot-ollama-tailnet-map~:
+
+- ~s~: Prompt and set gptel backend (~ollama-tailnet-set-gptel-backend~)
+- ~d~: Probe remote host tags (~ollama-tailnet-probe-host-default~)
+- ~p~: Pull model on host (~ollama-tailnet-pull-model~)
+- ~r~: Restart systemd service (~ollama-tailnet-service-restart~)
+- ~t~: Inspect systemd service status (~ollama-tailnet-service-status~)
+- ~b~: Show overall tailnet status (~ollama-tailnet-status~)
+- ~l~: Open model dashboard (~ollama-tailnet-models~)
+- ~S~: Search library model (~ollama-tailnet-search-model~)
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command                                                                  | Kind     | Description                                                          |
+|-----------------------------------------------------------------------------------+----------+----------------------------------------------------------------------|
+| [[#ollama-tailnet-register-host][~ollama-tailnet-register-host~]]                 | Function | Register a new tailnet or local Ollama host                          |
+| [[#ollama-tailnet-get-host][~ollama-tailnet-get-host~]]                             | Function | Retrieve host configuration struct by symbol or string name          |
+| [[#ollama-tailnet-list-hosts][~ollama-tailnet-list-hosts~]]                         | Function | Return a list of all registered host structs                         |
+| [[#ollama-tailnet-setup-laptop-presets][~ollama-tailnet-setup-laptop-presets~]]     | Function | Initialize standard derrida and local laptop host presets            |
+| [[#ollama-tailnet-models][~ollama-tailnet-models~]]                                 | Command  | Open model dashboard across reachable tailnet hosts                  |
+| [[#ollama-tailnet-search-model][~ollama-tailnet-search-model~]]                     | Command  | Search official Ollama library models and pull to target host        |
+| [[#ollama-tailnet-resolve-model][~ollama-tailnet-resolve-model~]]                   | Function | Resolve host/model spec string or symbol to ~(host . model)~ cons    |
+| [[#ollama-tailnet-get-gptel-backend][~ollama-tailnet-get-gptel-backend~]]           | Function | Retrieve or instantiate cached gptel backend for host/model spec     |
+| [[#ollama-tailnet-set-gptel-backend][~ollama-tailnet-set-gptel-backend~]]           | Command  | Set gptel backend and model globally or buffer-locally               |
+| [[#ollama-tailnet-probe-host-default][~ollama-tailnet-probe-host-default~]]         | Function | Query remote Ollama tags endpoint asynchronously                     |
+| [[#ollama-tailnet-service-restart][~ollama-tailnet-service-restart~]]               | Command  | Restart systemd ollama.service on host via local systemctl or SSH    |
+| [[#ollama-tailnet-service-status][~ollama-tailnet-service-status~]]                 | Command  | Check systemd ollama.service status on host                          |
+| [[#ollama-tailnet-pull-model][~ollama-tailnet-pull-model~]]                         | Command  | Pull model on host via Ollama REST API with progress reporting       |
+| [[#ollama-tailnet-status][~ollama-tailnet-status~]]                                 | Command  | Display status summary buffer for all registered hosts               |
+| [[#ollama-tailnet-bind-hud-keys][~ollama-tailnet-bind-hud-keys~]]                   | Function | Bind commands to ~hud-robot-ollama-tailnet-map~                      |
+
+** ollama-tailnet-register-host
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-register-host
+:END:
+
+Register host ~NAME~ (symbol or string) in the global host registry.
+Keyword arguments:
+- ~:host~: Address string (e.g. ~"derrida.tailnet:11434"~ or ~"127.0.0.1:11434"~).
+- ~:default-model~: String identifier of default model for this host.
+- ~:models~: List of model name strings installed on host.
+- ~:local-p~: Boolean indicating if host is the local machine.
+
+** ollama-tailnet-get-host
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-get-host
+:END:
+
+Retrieve the ~ollama-tailnet-host~ structure for ~NAME~ (symbol or string), or nil if not registered.
+
+** ollama-tailnet-list-hosts
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-list-hosts
+:END:
+
+Return a list of all currently registered ~ollama-tailnet-host~ structures.
+
+** ollama-tailnet-setup-laptop-presets
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-setup-laptop-presets
+:END:
+
+Convenience helper registering standard presets: ~'derrida~ (~"derrida:11434"~) with default model ~"gemma4:27b"~, and ~'laptop~ (~"127.0.0.1:11434"~) with default model ~"gemma4:2b"~.
+
+** ollama-tailnet-models
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-models
+:END:
+
+Interactive command. Populates and displays the =*ollama-tailnet-models*= dashboard buffer listing all models installed across reachable hosts.
+
+** ollama-tailnet-search-model
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-search-model
+:END:
+
+Interactive command. Searches the official Ollama library for ~QUERY~ and prompts to pull chosen model to a selected registered host.
+
+** ollama-tailnet-resolve-model
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-resolve-model
+:END:
+
+Resolve ~HOST-MODEL-SPEC~ string or symbol (e.g. ~"derrida/default"~, ~"derrida/gemma4:32b"~, or ~'derrida/default~) to a cons cell ~(HOST-STRUCT . MODEL-NAME)~. Applies ~ollama-tailnet-fallback-strategy~ if the host is unreachable or not found.
+
+** ollama-tailnet-get-gptel-backend
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-get-gptel-backend
+:END:
+
+Return a cached or newly instantiated ~gptel~ backend struct corresponding to ~HOST-MODEL-SPEC~.
+
+** ollama-tailnet-set-gptel-backend
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-set-gptel-backend
+:END:
+
+Interactive command. Set ~gptel-backend~ and ~gptel-model~ for ~HOST-MODEL-SPEC~. If ~LOCAL~ is non-nil (prefix argument), sets buffer-locally; otherwise sets globally.
+
+** ollama-tailnet-probe-host-default
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-probe-host-default
+:END:
+
+Query remote Ollama ~/api/tags~ endpoint for ~HOST-NAME~ asynchronously. Updates host models list and default model when available.
+
+** ollama-tailnet-service-restart
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-service-restart
+:END:
+
+Interactive command. Restarts systemd user service ~ollama.service~ on ~HOST-NAME~ via local ~systemctl~ or SSH.
+
+** ollama-tailnet-service-status
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-service-status
+:END:
+
+Interactive command. Inspects systemd user service status for ~ollama.service~ on ~HOST-NAME~ in a dedicated buffer.
+
+** ollama-tailnet-pull-model
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-pull-model
+:END:
+
+Interactive command. Pull ~MODEL-NAME~ on ~HOST-NAME~ using the Ollama REST API with streaming progress updates.
+
+** ollama-tailnet-status
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-status
+:END:
+
+Interactive command. Displays a status overview buffer summarizing reachable hosts, addresses, local flags, and available models.
+
+** ollama-tailnet-bind-hud-keys
+:PROPERTIES:
+:CUSTOM_ID: ollama-tailnet-bind-hud-keys
+:END:
+
+Binds standard quick keys into ~hud-robot-ollama-tailnet-map~.
+
+* Related Packages
+:PROPERTIES:
+:CUSTOM_ID: related-packages
+:END:
+
+- [[https://github.com/karthink/gptel][gptel]]: A simple LLM client for Emacs.
+- [[https://github.com/tychoish/annotated-completing-read][annotated-completing-read]]: Enhanced metadata-annotated completions for Emacs.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+Copyright (C) 2026 sam kleinman. Distributed under the GNU General Public License v3.0 or later.

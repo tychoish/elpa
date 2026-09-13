@@ -1,0 +1,310 @@
+#+TITLE: org-docsgen -- Generate org API documentation from Emacs Lisp source files
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=org-docsgen= is an Emacs Lisp documentation generator designed to maintain
+accurate, synchronized API reference sections within Org-mode documents. By
+evaluating an ~org-docsgen-run~ block inside an Org buffer or via interactive
+commands, =org-docsgen= extracts functions, macros, variables, and custom options
+directly from local source files, formats formal argument lists, converts docstring
+symbol references into Org code spans, emphasizes arguments, and renders
+standard Org links back to source definitions.
+
+Key capabilities include:
+
+- *In-Buffer Generation*: Execute ~org-docsgen-run~ from an ~emacs-lisp~ src block
+  to replace the child subtree with rendered docstrings and property drawers.
+- *Context DWIM Automation*: Interactively regenerate documentation with
+  ~org-docsgen-dwim~, ~org-docsgen-regenerate-file~, or ~org-docsgen-regenerate-directory~.
+- *Native Org Navigation*: Emits native Org file links (=file:path.el::123=) that jump
+  directly to definitions within Emacs while remaining valid in external viewers.
+- *Rich Docstring Flow*: Automatically structures signature lines (~: (fn ...)~),
+  flows prose paragraphs, emphasizes parameters, and converts curly-quoted symbols
+  to code spans (~=symbol=~ or =~symbol~=).
+- *Flexible Scoping & Filtering*: Filter definitions by exported symbols, autoloaded
+  cookies, interactive commands, or explicit symbol lists; partition outputs by
+  source file or prefix groupings.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#elpaish-recommended][ELPAish (Recommended)]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#workflows--examples][Workflows & Examples]]
+  - [[#embedding-in-org-files][Embedding in Org Files]]
+  - [[#regenerating-documentation][Regenerating Documentation]]
+  - [[#automated-regeneration-and-tooling][Automated Regeneration and Tooling]]
+- [[#api-reference][API Reference]]
+  - [[#org-docsgen-dwim][org-docsgen-dwim]]
+  - [[#org-docsgen-regenerate-dwim][org-docsgen-regenerate-dwim]]
+  - [[#org-docsgen-regenerate-file][org-docsgen-regenerate-file]]
+  - [[#org-docsgen-regenerate-directory][org-docsgen-regenerate-directory]]
+  - [[#org-docsgen-run][org-docsgen-run]]
+  - [[#org-docsgen-link-style][org-docsgen-link-style]]
+  - [[#org-docsgen-link-implementation][org-docsgen-link-implementation]]
+  - [[#org-docsgen-doc-filter-function][org-docsgen-doc-filter-function]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+=org-docsgen= is distributed through the ELPAish package repository.
+Add the archive to your ~package-archives~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+#+END_SRC
+
+Install with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'org-docsgen)
+#+END_SRC
+
+To verify signed packages, import the ELPAish keyring:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+On Emacs 30+, install directly from GitHub using ~:vc~:
+
+#+BEGIN_SRC emacs-lisp
+(use-package org-docsgen
+  :vc (:url "https://github.com/tychoish/org-docsgen"))
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository to your local system and add it to your ~load-path~:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/org-docsgen.git ~/.emacs.d/site-lisp/org-docsgen
+#+END_SRC
+
+Then require it in your configuration:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/org-docsgen")
+(require 'org-docsgen)
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+A recommended ~use-package~ setup:
+
+#+BEGIN_SRC emacs-lisp
+(use-package org-docsgen
+  :ensure t
+  :defer t
+  :custom
+  (org-docsgen-link-style 'org)                      ; default: 'org
+  (org-docsgen-link-implementation t)                ; default: t
+  (org-docsgen-doc-filter-function #'org-docsgen--default-doc-filter)) ; default: #'org-docsgen--default-doc-filter
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+| Option | Type | Default | Description |
+|--------+------+---------+-------------|
+| ~org-docsgen-link-style~ | Choice | ~'org~ | Source link format: ~'org~ (=file:path.el::10=), ~'github~ (=file:path.el#L10=), or ~'file~ (=file:path.el=) |
+| ~org-docsgen-link-implementation~ | Choice | ~t~ | Placement of links: ~t~ or ~'heading~ (in heading title), ~'below~ (metadata list item), or ~nil~ (disabled) |
+| ~org-docsgen-doc-filter-function~ | Function | ~#'org-docsgen--default-doc-filter~ | Function to annotate prose paragraphs (converts symbol quotes to code spans, italicizes args) |
+
+* Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: workflows--examples
+:END:
+
+** Embedding in Org Files
+:PROPERTIES:
+:CUSTOM_ID: embedding-in-org-files
+:END:
+
+Place an ~org-docsgen-run~ source block under your API Reference headline. When
+executed with =C-c C-c= or regenerated via command, the block deletes all existing
+child headings and emits formatted definitions in place:
+
+#+BEGIN_SRC org
+,* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+,#+BEGIN_SRC emacs-lisp :results output raw :exports none
+(org-docsgen-run :namespace "my-pkg")
+,#+END_SRC
+
+,#+RESULTS:
+#+END_SRC
+
+** Regenerating Documentation
+:PROPERTIES:
+:CUSTOM_ID: regenerating-documentation
+:END:
+
+=org-docsgen= provides several entry points to refresh documentation:
+
+- =M-x org-docsgen-dwim=: If inside an Org file containing a docsgen block, regenerates
+  the current buffer. Otherwise searches for Org documentation files under the current
+  directory or project root and regenerates them.
+- =M-x org-docsgen-regenerate-file=: Prompts for an Org file containing a docsgen
+  block and updates it.
+- =M-x org-docsgen-regenerate-directory=: Finds all Org files in a directory that contain
+  an ~org-docsgen-run~ call and executes them sequentially.
+
+** Automated Regeneration and Tooling
+:PROPERTIES:
+:CUSTOM_ID: automated-regeneration-and-tooling
+:END:
+
+External tools, build scripts, or agent hooks can trigger documentation rebuilds
+via Emacs batch mode or ~emacsclient~:
+
+#+BEGIN_SRC sh
+emacsclient --eval '(org-docsgen-regenerate-file "README.org")'
+#+END_SRC
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command | Kind | Description |
+|------------------+------+-------------|
+| [[#org-docsgen-dwim][~org-docsgen-dwim~]] | Command | Context-aware regeneration entry point for current buffer, directory, or project |
+| [[#org-docsgen-regenerate-dwim][~org-docsgen-regenerate-dwim~]] | Command | Target of the ~org-docsgen-dwim~ alias |
+| [[#org-docsgen-regenerate-file][~org-docsgen-regenerate-file~]] | Command | Execute docsgen block in a specified Org file and save the buffer |
+| [[#org-docsgen-regenerate-directory][~org-docsgen-regenerate-directory~]] | Command | Execute docsgen blocks in all top-level Org files within a directory |
+| [[#org-docsgen-run][~org-docsgen-run~]] | Function | Extract docstrings, format signatures, and render Org API documentation |
+| [[#org-docsgen-link-style][~org-docsgen-link-style~]] | Option | Format style for implementation source links (~'org~, ~'github~, or ~'file~) |
+| [[#org-docsgen-link-implementation][~org-docsgen-link-implementation~]] | Option | Placement mode for source implementation links (~t~, ~'heading~, ~'below~, or ~nil~) |
+| [[#org-docsgen-doc-filter-function][~org-docsgen-doc-filter-function~]] | Option | Function used to annotate docstring prose paragraphs for Org rendering |
+
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+(org-docsgen-run
+ :scope '("org-docsgen-dwim"
+          "org-docsgen-regenerate-dwim"
+          "org-docsgen-regenerate-file"
+          "org-docsgen-regenerate-directory"
+          "org-docsgen-run"
+          "org-docsgen-link-style"
+          "org-docsgen-link-implementation"
+          "org-docsgen-doc-filter-function")
+ :link-style 'org)
+#+END_SRC
+
+#+RESULTS:
+** [[file:org-docsgen.el::653][org-docsgen-dwim]] :command:
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-dwim
+:END:
+
+Regenerate docsgen docs for the current context. When the current buffer visits a file with an ~org-docsgen-run~ block, regenerate that buffer in place.  Otherwise find and regenerate every docsgen block among the ‘.org’ files directly in ~default-directory~, recursively under ~default-directory~ (e.g. docs/api.org), or falling back to ~approximate-project-root~.
+
+** [[file:org-docsgen.el::653][org-docsgen-regenerate-dwim]] :command:
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-regenerate-dwim
+:END:
+
+Regenerate docsgen docs for the current context. When the current buffer visits a file with an ~org-docsgen-run~ block, regenerate that buffer in place.  Otherwise find and regenerate every docsgen block among the ‘.org’ files directly in ~default-directory~, recursively under ~default-directory~ (e.g. docs/api.org), or falling back to ~approximate-project-root~.
+
+** [[file:org-docsgen.el::620][org-docsgen-regenerate-file]] :command:
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-regenerate-file
+:END:
+
+Regenerate the ~org-docsgen-run~ block in FILE and save it. FILE may be any org file containing such a block -- a README, a file under a docs/ directory, or anything else; there is nothing README-specific about this command. Interactively, defaults to the current buffer’s file when it already has a docsgen block, otherwise prompts with completion over ‘.org’ files found anywhere under ~default-directory~.  Intended for use by agent skills via emacsclient: emacsclient --eval '(org-docsgen-regenerate-file "docs/api.org")'
+
+** [[file:org-docsgen.el::637][org-docsgen-regenerate-directory]] :command:
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-regenerate-directory
+:END:
+
+Regenerate every docsgen block among the ‘.org’ files directly in DIR. DIR defaults to ~default-directory~.  Only files directly in DIR are considered, not subdirectories -- use ~org-docsgen-regenerate-file~ with its recursive completion, or call this once per directory, to cover a whole tree.  Signals a ~user-error~ when DIR has no ‘.org’ file with an ~org-docsgen-run~ block.
+
+** [[file:org-docsgen.el::483][org-docsgen-run]]
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-run
+:END:
+
+: (fn &key EL-FILES (SCOPE 'exported) (INCLUDE-KINDS '(variables customs)) NAMESPACE (SECTION-STYLE 'ruler) GROUP-BY (DOC-FILTER :default) (LINK-IMPL t) (LINK-STYLE 'org))
+
+Generate org-mode API documentation and princ it to stdout.
+
+/EL-FILES/ is a list of .el paths to document; defaults to all non-test .el files in the directory of the current buffer.
+
+SCOPE controls which definitions are included: ‘exported’    -- all public symbols (no -- in name) ‘autoloaded’  -- only ;;;###autoload-annotated symbols ~interactive~ -- all interactive commands A list        -- explicit symbol names, emitted in order
+
+INCLUDE-KINDS lists additional kinds beyond what SCOPE selects: ‘variables’ -- defvar / defconst / defvar-local ‘customs’   -- defcustom
+
+/NAMESPACE/ is a string prefix (e.g. "sprite").  A ‘(defvar NAME nil)’ form whose NAME does not start with /NAMESPACE/ is treated as a foreign forward declaration and excluded.
+
+SECTION-STYLE is ‘ruler’ (default: long ;;;;... lines) or ‘triple-semi’ (;;; Section Name headers used by agent-shell-queue).
+
+DOC-FILTER overrides ~org-docsgen-doc-filter-function~ for this run; pass nil to emit docstring prose verbatim, unannotated.
+
+** org-docsgen-link-style
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-link-style
+:END:
+
+Style to use for implementation links in generated org documentation. Can be ‘org’ (‘file:path::<line>’, standard Org-mode, jumps to line in Emacs), ‘github’ (‘file:path#L<line>’, GitHub URI anchor format), or ‘file’ (‘file:path’, file only without line numbers).
+
+** org-docsgen-link-implementation
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-link-implementation
+:END:
+
+Whether and how to link symbol implementations in generated org documentation. If ‘heading’ or t, the heading itself links to the source location. If ‘below’, emits an "- Implementation: ..." link below the properties drawer. If nil, do not include implementation links.
+
+** org-docsgen-doc-filter-function
+:PROPERTIES:
+:CUSTOM_ID: org-docsgen-doc-filter-function
+:END:
+
+Function used to annotate docstring prose for org rendering. Called with two arguments, TEXT (a paragraph of already-flowed docstring prose, excluding the "(fn ...)" signature paragraph) and ARG-NAMES (the symbol’s formal parameter names, or nil), and must return the annotated string.  Set to nil to disable annotation and emit docstring prose verbatim.  Override with ~org-docsgen-run~’s ~:doc-filter~ to use a different filter for one generation run.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+This package is licensed under the GNU General Public License, version 3 or later.
+See [[file:LICENSE][LICENSE]] for full terms.

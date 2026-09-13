@@ -1,0 +1,114 @@
+#+TITLE: tailscale.el
+#+AUTHOR: sam kleinman
+#+EMAIL: sam@tychoish.com
+#+LANGUAGE: en
+#+OPTIONS: toc:2 num:nil
+
+Tailscale CLI integration and network status control for Emacs.
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=tailscale.el= provides an interactive interface to the Tailscale CLI directly
+within Emacs. It allows you to inspect current tailnet status, copy node IPs,
+send files via Taildrop, and control daemon connection state without leaving your editor.
+
+** Features
+- Interactive network status overview buffer (=tailscale-status=).
+- Quick daemon control (=tailscale-connect=, =tailscale-disconnect=).
+- Node IP completion and kill-ring copying (=tailscale-copy-ip=).
+- Asynchronous Taildrop file dispatch (=tailscale-file-send=).
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish Installation
+Add =tailscale= to your ELPAish bootstrap packages:
+
+#+begin_src emacs-lisp
+(elpaish-install-add-bootstrap-packages '(tailscale))
+#+end_src
+
+** Manual Installation
+Clone this repository and add it to your =load-path=:
+
+#+begin_src bash
+git clone https://github.com/tychoish/tailscale.el.git ~/src/tailscale.el
+#+end_src
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/tailscale")
+(require 'tailscale)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Basic =use-package= setup:
+
+#+begin_src emacs-lisp
+(use-package tailscale
+  :ensure t
+  :defer t
+  :custom
+  (tailscale-cli-executable "tailscale"))
+#+end_src
+
+* Workflows
+:PROPERTIES:
+:CUSTOM_ID: workflows
+:END:
+
+** Inspecting Tailnet Status
+Run =M-x tailscale-status= to open the =*Tailscale Status*= buffer showing your
+current node, online status, IP addresses, and active peers.
+
+Keybindings available in =tailscale-mode=:
+| Key | Command                   | Description                   |
+|-----+---------------------------+-------------------------------|
+| =g= | =tailscale-status=        | Refresh status buffer         |
+| =c= | =tailscale-connect=       | Connect daemon (~tailscale up~) |
+| =d= | =tailscale-disconnect=    | Disconnect (~tailscale down~)   |
+| =y= | =tailscale-copy-ip=       | Copy node IP to kill ring     |
+| =f= | =tailscale-file-send=     | Send file via Taildrop        |
+
+** Sending Files with Taildrop
+Invoke =M-x tailscale-file-send= to choose a file and select an online peer.
+The transfer proceeds asynchronously in the background.
+
+* Commands & API
+:PROPERTIES:
+:CUSTOM_ID: commands
+:END:
+
+| Command                 | Summary                                                      |
+|-------------------------+--------------------------------------------------------------|
+| =tailscale-status=      | Display interactive network status buffer.                   |
+| =tailscale-connect=     | Connect Tailscale daemon (~tailscale up~).                     |
+| =tailscale-disconnect=  | Disconnect Tailscale daemon (~tailscale down~).               |
+| =tailscale-copy-ip=     | Prompt for a node and copy its IP address to the kill ring.  |
+| =tailscale-file-send=   | Send file to a peer node via Taildrop asynchronously.        |
+
+* Development
+:PROPERTIES:
+:CUSTOM_ID: development
+:END:
+
+Run the ERT test suite locally:
+
+#+begin_src bash
+emacs --batch -L . -l test/test-tailscale.el -f ert-run-tests-batch-and-exit
+#+end_src
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See =LICENSE= for details.

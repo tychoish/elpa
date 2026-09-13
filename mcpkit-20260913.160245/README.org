@@ -1,0 +1,445 @@
+#+TITLE: mcpkit.el -- Model Context Protocol (MCP) service framework for Emacs
+#+OPTIONS: toc:2 num:nil
+
+[[https://github.com/tychoish/mcpkit.el/actions][https://github.com/tychoish/mcpkit.el/actions/workflows/ci.yml/badge.svg]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=mcpkit= is a registration-based framework for defining Model Context Protocol (MCP) services and tools in GNU Emacs and exposing them over HTTP JSON-RPC 2.0 using =web-server.el=.
+
+Key capabilities:
+- *Declarative Service and Tool Definitions*: Easily construct services and register tools with JSON schema metadata, documentation, and parameter decoders.
+- *Synchronous and Asynchronous Execution*: Tool handlers can return immediate values or accept a completion callback for asynchronous operations.
+- *Custom Serialization Pipelines*: Built-in MCP content packaging with hooks for customized input decoding and output encoding.
+- *Flexible Multi-Service Routing*: Host multiple logical MCP services on a shared HTTP server instance with configurable collision policies (=namespace= prefixing or strict =error= checking).
+- *Tabulated Interactive Dashboard*: Full-featured =tabulated-list-mode= interface (=mcpkit-list-services=) to inspect, start, stop, and monitor registered services.
+- *Human-in-the-Loop Extension*: Bundled =mcpkit-ask= companion library for exposing `agent-shell-ask` question queues directly to external AI agents.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#elpaish-recommended][ELPAish (Recommended)]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#core-workflows--examples][Core Workflows & Examples]]
+  - [[#defining-a-service-and-synchronous-tool][Defining a Service and Synchronous Tool]]
+  - [[#defining-an-asynchronous-tool][Defining an Asynchronous Tool]]
+  - [[#custom-argument-decoding-and-result-encoding][Custom Argument Decoding and Result Encoding]]
+  - [[#starting-services-and-tool-collision-management][Starting Services and Tool Collision Management]]
+  - [[#managing-services-via-tabulated-ui][Managing Services via Tabulated UI]]
+  - [[#human-in-the-loop-ask-queue-mcpkit-ask][Human-in-the-Loop Ask Queue (mcpkit-ask)]]
+- [[#api-reference][API Reference]]
+  - [[#mcpkit-define-service][mcpkit-define-service]]
+  - [[#mcpkit-register-service][mcpkit-register-service]]
+  - [[#mcpkit-get-service][mcpkit-get-service]]
+  - [[#mcpkit-remove-service][mcpkit-remove-service]]
+  - [[#mcpkit-register-tool][mcpkit-register-tool]]
+  - [[#mcpkit-start-service][mcpkit-start-service]]
+  - [[#mcpkit-stop-service][mcpkit-stop-service]]
+  - [[#mcpkit-list-services][mcpkit-list-services]]
+  - [[#mcpkit-service-list-mode][mcpkit-service-list-mode]]
+  - [[#mcpkit-service-list-refresh][mcpkit-service-list-refresh]]
+  - [[#mcpkit-service-list-start-at-point][mcpkit-service-list-start-at-point]]
+  - [[#mcpkit-service-list-stop-at-point][mcpkit-service-list-stop-at-point]]
+  - [[#mcpkit-register-ask-tools][mcpkit-register-ask-tools]]
+  - [[#mcpkit-log-verbose][mcpkit-log-verbose]]
+- [[#related-packages][Related Packages]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+Add the ELPAish repository to ~package-archives~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+#+END_SRC
+
+Install with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'mcpkit)
+#+END_SRC
+
+To verify package signatures, import the ELPAish signing key into
+=package.el='s keyring and enable signature checking:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+Requires Emacs 30+. Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package mcpkit
+  :vc (:url "https://github.com/tychoish/mcpkit.el"))
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository to your local load path:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/mcpkit.el.git ~/.emacs.d/site-lisp/mcpkit
+#+END_SRC
+
+Then require it in your Emacs configuration:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/mcpkit")
+(require 'mcpkit)
+#+END_SRC
+
+With Emacs 29.1+, you can also use ~package-vc-install~:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install '(mcpkit :url "https://github.com/tychoish/mcpkit.el.git"))
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Standard production configuration using ~use-package~:
+
+#+BEGIN_SRC emacs-lisp
+(use-package mcpkit
+  :ensure t
+  :commands (mcpkit-define-service
+             mcpkit-register-tool
+             mcpkit-start-service
+             mcpkit-stop-service
+             mcpkit-list-services)
+  :custom
+  (mcpkit-log-verbose nil) ; default: nil, non-nil logs full request/response payloads
+  :config
+  ;; Optionally register agent-shell-ask human-in-the-loop queue tools
+  (when (require 'mcpkit-ask nil t)
+    (mcpkit-register-ask-tools)))
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+- ~mcpkit-log-verbose~: When set to ~t~, log the full decoded request and response JSON payloads to the service's log buffer. Default is ~nil~.
+
+* Core Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: core-workflows--examples
+:END:
+
+** Defining a Service and Synchronous Tool
+:PROPERTIES:
+:CUSTOM_ID: defining-a-service-and-synchronous-tool
+:END:
+
+Define a service and attach synchronous tools using ~mcpkit-register-tool~:
+
+#+BEGIN_SRC emacs-lisp
+(defvar my-math-service
+  (mcpkit-define-service 'math
+    :port 8765
+    :description "Mathematical utility service"))
+
+(mcpkit-register-tool add my-math-service
+  :description "Add two numbers together."
+  :input-schema '(:type "object"
+                  :properties (:a (:type "number" :description "First number")
+                               :b (:type "number" :description "Second number"))
+                  :required ["a" "b"])
+  (+ (plist-get args :a) (plist-get args :b)))
+#+END_SRC
+
+** Defining an Asynchronous Tool
+:PROPERTIES:
+:CUSTOM_ID: defining-an-asynchronous-tool
+:END:
+
+Pass ~:async t~ when the handler needs to perform non-blocking I/O or background processing. In async mode, ~done~ is bound in the macro body:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-register-tool fetch-data my-math-service
+  :description "Fetch remote data asynchronously."
+  :async t
+  (run-with-timer 0.5 nil
+                  (lambda ()
+                    (funcall done nil "Fetched remote content"))))
+#+END_SRC
+
+** Custom Argument Decoding and Result Encoding
+:PROPERTIES:
+:CUSTOM_ID: custom-argument-decoding-and-result-encoding
+:END:
+
+You can supply ~:decode~ and ~:encode~ hooks to customize parameter transformations and response formatting:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-register-tool transform-text my-math-service
+  :description "Transform text string with custom codec."
+  :decode (lambda (plist) (plist-get plist :text))
+  :encode (lambda (result)
+            (list (list :type "text" :text (format "TRANSFORMED: %s" result))))
+  (upcase args))
+#+END_SRC
+
+** Starting Services and Tool Collision Management
+:PROPERTIES:
+:CUSTOM_ID: starting-services-and-tool-collision-management
+:END:
+
+Start a service with ~mcpkit-start-service~. When multiple services share a server instance, specify ~:on-collision~:
+
+#+BEGIN_SRC emacs-lisp
+;; Automatically namespaces colliding tools as `<service-name>__<tool-name>'
+(mcpkit-start-service 'math :on-collision 'namespace)
+
+;; Alternatively, signal an error if tool names clash:
+;; (mcpkit-start-service 'math :on-collision 'error)
+#+END_SRC
+
+To stop a running service:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-stop-service 'math)
+#+END_SRC
+
+** Managing Services via Tabulated UI
+:PROPERTIES:
+:CUSTOM_ID: managing-services-via-tabulated-ui
+:END:
+
+Run =M-x mcpkit-list-services= to open the interactive services buffer:
+
+#+BEGIN_EXAMPLE
+Service               Status      Port      Tools     Description
+-----------------------------------------------------------------------------------------
+math                  active      8765      2         Mathematical utility service
+agent-shell-ask       inactive    8766      5         Human-in-the-Loop Question Queue Service
+#+END_EXAMPLE
+
+In this buffer, you can use:
+- ~s~: Start the service at point.
+- ~k~: Stop the service at point.
+- ~g~: Refresh the service list.
+
+** Human-in-the-Loop Ask Queue (mcpkit-ask)
+:PROPERTIES:
+:CUSTOM_ID: human-in-the-loop-ask-queue-mcpkit-ask
+:END:
+
+The optional ~mcpkit-ask~ package registers tools that expose Emacs `agent-shell-ask` question queues to external AI agents:
+
+#+BEGIN_SRC emacs-lisp
+(require 'mcpkit-ask)
+(mcpkit-register-ask-tools)
+(mcpkit-start-service 'agent-shell-ask :port 8766)
+#+END_SRC
+
+Exposed MCP tools:
+- ~ask_user~: Post a question and receive a unique question ID.
+- ~poll_question~: Poll question resolution and user answer.
+- ~get_next_question~: Iterative cursor-based question polling.
+- ~list_pending_questions~: Enumerate pending questions awaiting human response.
+- ~cancel_question~: Abort a pending question.
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command                                                   | Kind      | Description                                                    |
+|--------------------------------------------------------------------+-----------+----------------------------------------------------------------|
+| [[#mcpkit-define-service][~mcpkit-define-service~]]                         | Function  | Define and register a new MCP service                          |
+| [[#mcpkit-register-service][~mcpkit-register-service~]]                     | Function  | Register a service struct instance under a symbol name         |
+| [[#mcpkit-get-service][~mcpkit-get-service~]]                               | Function  | Lookup a registered service by symbol, string, or instance     |
+| [[#mcpkit-remove-service][~mcpkit-remove-service~]]                         | Function  | Remove a service from the central registry                     |
+| [[#mcpkit-register-tool][~mcpkit-register-tool~]]                             | Macro     | Register a tool on a service with schema and handler           |
+| [[#mcpkit-start-service][~mcpkit-start-service~]]                             | Command   | Start or activate a service on an HTTP server                  |
+| [[#mcpkit-stop-service][~mcpkit-stop-service~]]                               | Command   | Stop an active service and stop server when empty              |
+| [[#mcpkit-list-services][~mcpkit-list-services~]]                             | Command   | Open tabulated list buffer of all registered services          |
+| [[#mcpkit-service-list-mode][~mcpkit-service-list-mode~]]                     | Mode      | Major mode for browsing and managing MCP services              |
+| [[#mcpkit-service-list-refresh][~mcpkit-service-list-refresh~]]                 | Command   | Refresh the contents of the service list buffer                |
+| [[#mcpkit-service-list-start-at-point][~mcpkit-service-list-start-at-point~]]   | Command   | Start the service under point in the list buffer               |
+| [[#mcpkit-service-list-stop-at-point][~mcpkit-service-list-stop-at-point~]]     | Command   | Stop the service under point in the list buffer                |
+| [[#mcpkit-register-ask-tools][~mcpkit-register-ask-tools~]]                     | Command   | Register agent-shell-ask human-in-the-loop tools               |
+| [[#mcpkit-log-verbose][~mcpkit-log-verbose~]]                                 | Option    | Custom variable controlling payload logging verbosity          |
+
+** mcpkit-define-service
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-define-service
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-define-service NAME &key (PORT 8765) (DESCRIPTION ""))
+#+END_SRC
+
+Define a new service ~NAME~ (a symbol) and register it in ~mcpkit-registry~. Returns the created ~mcpkit-service~ struct.
+
+** mcpkit-register-service
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-register-service
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-register-service SERVICE &optional NAME)
+#+END_SRC
+
+Register ~SERVICE~ in ~mcpkit-registry~ under ~NAME~. ~NAME~ defaults to the service's name symbol.
+
+** mcpkit-get-service
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-get-service
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-get-service NAME-OR-SERVICE)
+#+END_SRC
+
+Retrieve registered service by name (symbol or string), or returns ~NAME-OR-SERVICE~ if already a service struct.
+
+** mcpkit-remove-service
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-remove-service
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-remove-service NAME-OR-SERVICE)
+#+END_SRC
+
+Remove service by name or instance from ~mcpkit-registry~.
+
+** mcpkit-register-tool
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-register-tool
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-register-tool NAME SERVICE-OR-NAME &rest REST &key DESCRIPTION INPUT-SCHEMA DECODE ENCODE ASYNC &allow-other-keys)
+#+END_SRC
+
+Register a tool ~NAME~ on ~SERVICE-OR-NAME~ with implementation ~BODY~.
+- ~DESCRIPTION~: Human-readable documentation string.
+- ~INPUT-SCHEMA~: JSON schema plist literal.
+- ~DECODE~: Function to decode raw arguments plist before invoking handler.
+- ~ENCODE~: Function to encode handler return value into an MCP content list.
+- ~ASYNC~: If non-nil, ~BODY~ handles calling ~done~ callback asynchronously.
+
+** mcpkit-start-service
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-start-service
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-start-service NAME-OR-SERVICE &key (ON-COLLISION 'namespace) PORT)
+#+END_SRC
+
+Start or merge ~SERVICE~ into the active services set. ~ON-COLLISION~ specifies how tool name collisions are resolved:
+- ~'namespace~: Prefixes tool names with ~<service-name>__~.
+- ~'error~: Signals a ~user-error~ if an un-namespaced tool name collides with an existing active tool.
+
+** mcpkit-stop-service
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-stop-service
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(mcpkit-stop-service NAME-OR-SERVICE)
+#+END_SRC
+
+Stop ~SERVICE~ by removing it from the active services list. If no active services remain, closes the underlying HTTP server socket.
+
+** mcpkit-list-services
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-list-services
+:END:
+
+Display a tabulated list of registered MCP services in buffer ~*mcpkit-services*~.
+
+** mcpkit-service-list-mode
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-service-list-mode
+:END:
+
+Major mode derived from ~tabulated-list-mode~ for browsing and managing MCP services.
+
+** mcpkit-service-list-refresh
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-service-list-refresh
+:END:
+
+Refresh the contents and status display of the MCP service list buffer.
+
+** mcpkit-service-list-start-at-point
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-service-list-start-at-point
+:END:
+
+Start the MCP service on the current line in the service list buffer.
+
+** mcpkit-service-list-stop-at-point
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-service-list-stop-at-point
+:END:
+
+Stop the MCP service on the current line in the service list buffer.
+
+** mcpkit-register-ask-tools
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-register-ask-tools
+:END:
+
+Register ~agent-shell-ask~ question queue tools on dedicated service ~'agent-shell-ask~.
+
+** mcpkit-log-verbose
+:PROPERTIES:
+:CUSTOM_ID: mcpkit-log-verbose
+:END:
+
+Custom boolean variable. When non-nil, log full decoded arguments and encoded results in the service log buffer.
+
+* Related Packages
+:PROPERTIES:
+:CUSTOM_ID: related-packages
+:END:
+
+- [[https://github.com/skeeto/emacs-web-server][web-server]]: Extensible HTTP and WebSocket server for Emacs.
+- [[https://github.com/tychoish/agent-shell][agent-shell]]: Process-driven multi-agent execution shell for Emacs.
+- [[https://github.com/tychoish/agent-shell-queue][agent-shell-queue]]: Queue engine and human-in-the-loop asking facilities for agent-shell.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0 or later.
