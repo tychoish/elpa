@@ -1,0 +1,82 @@
+#+TITLE: Futures, Async/Await, and Fleet Coordination
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=sprite-future.el= and =sprite-fleet.el= provide modern asynchronous programming abstractions for Emacs. =sprite-future= implements composable, backend-agnostic futures with promise-style chaining and coroutine-style async/await syntax. =sprite-fleet= layers distributed collection combinators over multiple subordinate daemon workers.
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+- *Unified Future Abstraction*: Represents background computations regardless of whether they execute via direct sockets or =emacsclient= subprocesses.
+- *Async/Await Syntax*: Write asynchronous Elisp that looks sequential using ~sprite-future-async-defun~ and ~sprite-future-await~.
+- *Fleet Parallelism*: Scatter/gather data processing across worker daemons with ~sprite-fleet-mapcar~ and ~sprite-fleet-let~.
+
+* Key Functions and Macros
+:PROPERTIES:
+:CUSTOM_ID: key-functions-and-macros
+:END:
+
+- [[file:api.org::#sprite-future-eval][~sprite-future-eval~]]: Dispatch an asynchronous evaluation to a sprite, returning a future.
+- [[file:api.org::#sprite-future-then][~sprite-future-then~]]: Attach resolve and reject callbacks to a future.
+- [[file:api.org::#sprite-future-wait][~sprite-future-wait~]]: Block the current execution until a future resolves or times out.
+- [[file:api.org::#sprite-future-await][~sprite-future-await~]]: Coroutine await operator inside an async function.
+- [[file:api.org::#sprite-future-async-defun][~sprite-future-async-defun~]]: Define an asynchronous function that yields on awaited futures.
+- [[file:api.org::#sprite-fleet-mapcar][~sprite-fleet-mapcar~]]: Map a function or expression across a list of items distributed over a fleet of sprites.
+- [[file:api.org::#sprite-fleet-mapc][~sprite-fleet-mapc~]]: Execute an expression across multiple sprites for side effects.
+- [[file:api.org::#sprite-fleet-let][~sprite-fleet-let~]]: Evaluate bindings concurrently across sprite daemons.
+
+* Examples
+:PROPERTIES:
+:CUSTOM_ID: examples
+:END:
+
+** Composing Futures with Callbacks
+
+#+BEGIN_SRC emacs-lisp
+(require 'sprite-future)
+
+(let ((fut (sprite-future-eval "tychoish.0.worker" '(+ 20 22))))
+  (sprite-future-then
+   fut
+   (lambda (result)
+     (message "Computation finished: %s" result))
+   (lambda (err)
+     (message "Computation failed: %s" err))))
+#+END_SRC
+
+** Async / Await Coroutines
+
+#+BEGIN_SRC emacs-lisp
+(sprite-future-async-defun compute-pipeline ()
+  (let* ((fut1 (sprite-future-eval "tychoish.0.worker" '(get-initial-data)))
+         (data (sprite-future-await fut1))
+         (fut2 (sprite-future-eval "tychoish.1.worker" `(transform-data ',data)))
+         (res  (sprite-future-await fut2)))
+    (message "Pipeline completed with %S" res)))
+#+END_SRC
+
+** Distributed Fleet Mapping
+
+#+BEGIN_SRC emacs-lisp
+(require 'sprite-fleet)
+
+;; Distribute file compilation across 4 sprite daemons
+(sprite-fleet-mapcar
+ (lambda (file)
+   (byte-compile-file file))
+ '("~/src/pkg/a.el" "~/src/pkg/b.el" "~/src/pkg/c.el" "~/src/pkg/d.el")
+ :fleet-size 4)
+#+END_SRC
+
+* Reference
+:PROPERTIES:
+:CUSTOM_ID: reference
+:END:
+
+See the [[file:api.org][Sprite API Reference]] for all future and fleet operations.

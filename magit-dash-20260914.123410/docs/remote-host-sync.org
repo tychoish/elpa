@@ -1,0 +1,53 @@
+#+TITLE: Declarative Remote Host Sync
+
+* Features
+
+- *Multi-Host Synchronization Over SSH*: Synchronize repositories across multiple workstations
+  or remote development servers via declarative SSH pipelines.
+- *Automated Pipeline Generation*: =magit-dash= dynamically generates per-host =sync-HOST=
+  commands in the repository action picker (e.g. =sync-deleuze=, =sync-spinoza=).
+- *Four-Stage Convergence Pipeline*:
+  1. *Remote SSH*: Stage, fetch, and rebase (or merge) on target branch on the remote host, commit, and push.
+  2. *Local*: Stage, fetch, rebase/merge, clean deleted files, commit, and push from local workspace.
+  3. *Remote SSH*: Second pass on remote host to integrate newly pushed local commits.
+  4. *Local*: Final fetch and rebase/merge to ensure complete parity.
+- *Flexible Integration Strategy*: Support either rebase-driven (=:merge-method 'rebase=, default)
+  or merge-commit workflows (=:merge-method 'merge=).
+
+* Key Options and Syntax
+
+Configured via =:remote-sync= keyword in [[file:api.org::#magit-dash-register][~magit-dash-register~]]:
+- =:hosts=: List of remote hostnames or SSH targets (strings or symbols).
+- =:branch=: Target branch to synchronize (defaults to HEAD branch).
+- =:path=: Remote destination path (defaults to same absolute path as local).
+- =:merge-method=: Convergence strategy, ='rebase= (default) or ='merge=.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Synchronize ~/src/blog across deleuze and spinoza hosts
+  (magit-dash-register
+   :name "blog"
+   :path "~/src/blog"
+   :repo "git@github.com:tychoish/blog.git"
+   :remote-sync '(:hosts ("deleuze" "spinoza")
+                  :branch "master"
+                  :merge-method rebase)
+   :commands '((push  . "make push")
+               (build . "make build"))
+   :sort-hint 20)
+
+  ;; Trigger remote sync automatically during repo sync
+  (magit-dash-register
+   :name "mail"
+   :path "~/mail"
+   :repo "git@github.com:tychoish/mail.git"
+   :remote-sync '(:hosts ("deleuze" "spinoza")
+                  :branch "master")
+   :hooks '(:sync (:pre (magit-dash-save-project-buffers)
+                   :operation sync-deleuze)))
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for full documentation on repository registration and command dispatch.

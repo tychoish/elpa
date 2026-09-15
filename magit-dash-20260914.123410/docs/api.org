@@ -1,0 +1,1505 @@
+#+TITLE: magit-dash API Reference
+#+OPTIONS: toc:3 num:nil
+
+API documentation for the entire magit-dash package, generated from
+docstrings.
+
+* API Reference
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+  (require 'org-docsgen)
+  (let ((base (expand-file-name ".." default-directory)))
+    (org-docsgen-run
+     :el-files
+     (delq nil
+           (mapcar (lambda (f) (expand-file-name f base))
+                   '("magit-dash.el"
+                     "magit-dash-status.el"
+                     "magit-dash-open.el"
+                     "magit-dash-gh.el"
+                     "magit-dash-gh-pr.el"
+                     "magit-dash-gh-ci.el"
+                     "magit-dash-gh-actions.el"
+                     "magit-dash-worktree.el"
+                     "magit-dash-submodules.el"
+                     "magit-dash-timer.el")))
+     :scope 'exported
+     :include-kinds '(variables customs)
+     :namespace "magit-dash"
+     :section-style 'triple-semi
+     :group-by '("magit-dash"
+                 "magit-dash-status"
+                 "magit-dash-open"
+                 ("magit-dash-gh"
+                  "magit-dash-gh"
+                  "magit-dash-gh-pr"
+                  "magit-dash-gh-ci"
+                  "magit-dash-gh-actions")
+                 "magit-dash-worktree"
+                 "magit-dash-submodules"
+                 "magit-dash-timer")))
+#+END_SRC
+
+#+RESULTS:
+** magit-dash
+
+**** TODO [[file:../magit-dash.el::74][magit-dash-buffer-name]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-buffer-name
+:END:
+
+*no docstring*
+
+*** Repository Registry
+
+**** [[file:../magit-dash.el::101][magit-dash-repo-upstream-repo]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-upstream-repo
+:END:
+
+Access slot "repo" of ‘magit-dash-repo’ struct CL-X.
+
+**** [[file:../magit-dash.el::102][magit-dash-repo-upstream]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-upstream
+:END:
+
+Access slot "repo" of ‘magit-dash-repo’ struct CL-X.
+
+**** [[file:../magit-dash.el::103][magit-dash-repo-remote-url]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-remote-url
+:END:
+
+Access slot "clone-url" of ‘magit-dash-repo’ struct CL-X.
+
+**** [[file:../magit-dash.el::104][magit-dash-repo-symlinks]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-symlinks
+:END:
+
+Access slot "worktree-symlinks" of ‘magit-dash-repo’ struct CL-X.
+
+**** [[file:../magit-dash.el::106][magit-dash-repo-list]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-list
+:END:
+
+List of ‘magit-dash-repo’ structs registered for dashboard display. Use ~magit-dash-register~ to add entries.
+
+**** [[file:../magit-dash.el::185][with-magit-dash]]
+:PROPERTIES:
+:CUSTOM_ID: with-magit-dash
+:END:
+
+Execute BODY in the ‘magit-dash’ buffer. Refreshes the dashboard and ensures ~magit-dash-mode~ is active.
+
+**** [[file:../magit-dash.el::209][magit-dash-run-command-in-background]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-run-command-in-background
+:END:
+
+When non-nil, ~magit-dash-run-command~ executes commands in the background by default.
+
+**** [[file:../magit-dash.el::214][magit-dash-refresh-fetch]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-refresh-fetch
+:END:
+
+When non-nil, ~magit-dash-refresh~ performs a git fetch for eligible repositories (e.g. repos with ~:auto-fetch~, ~:auto-pull~, ~:sync-on-refresh~, or configured sync steps). Subject to ~magit-dash-refresh-fetch-min-interval~.
+
+**** [[file:../magit-dash.el::222][magit-dash-refresh-fetch-min-interval]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-refresh-fetch-min-interval
+:END:
+
+Minimum seconds between automatic fetches during ~magit-dash-refresh~ (default: 600, i.e. 10 minutes).
+
+**** [[file:../magit-dash.el::228][magit-dash-refresh-sync-min-interval]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-refresh-sync-min-interval
+:END:
+
+Minimum seconds between automatic full-syncs during ~magit-dash-refresh~ for repositories configured with ~:sync-on-refresh~ (default: 3600, i.e. 1 hour).
+
+**** [[file:../magit-dash.el::244][magit-dash-global-hooks]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-global-hooks
+:END:
+
+Plist of ~:pre~/~:post~ hooks applied to every repo’s operations. Same shape as a repo’s ~:hooks~, keyed by operation (~:fetch~/~:pull~/ ~:commit~/~:push~/~:sync~), each value a plist of ~:pre~/~:post~ target lists.  ~:operation~ is not valid here — a global operation override would replace every repo’s operation with the same thing, which is not a real use case.  Set with ~magit-dash-set-global-hooks~ so the shape is validated; do not ~setq~ directly.
+
+**** [[file:../magit-dash.el::274][magit-dash-set-global-hooks]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-set-global-hooks
+:END:
+
+Validate HOOKS and set ~magit-dash-global-hooks~ to it.
+
+**** [[file:../magit-dash.el::304][magit-dash-register]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-register
+:END:
+
+: (fn &key NAME PATH REPO INCLUDE-PRS INCLUDE-CI AUTO-FETCH AUTO-PULL AUTO-COMMIT AUTO-PUSH AUTO-SYNC-COMMAND HOOKS TAGS COMMANDS SORT-HINT WORKTREE SYNC-BRANCHES TIMER CLONE-URL REMOTE-URL WORKTREE-SYMLINKS SYMLINKS REMOTE-SYNC SYNC-ON-REFRESH AUTO-SYNC-ON-REFRESH REFRESH-SYNC FETCH-ON-REFRESH)
+
+Register or replace a repository with /NAME/ at absolute /PATH/. /REPO/ is the upstream repository path or URL for bootstrapping. /INCLUDE-PRS/, /INCLUDE-CI/, /AUTO-FETCH/, /AUTO-PULL/, /AUTO-COMMIT/, /AUTO-PUSH/, /AUTO-SYNC-COMMAND/, /HOOKS/, /TAGS/, /COMMANDS/, /SORT-HINT/, /WORKTREE/, /SYNC-BRANCHES/, /TIMER/, /CLONE-URL/, /REMOTE-URL/, /WORKTREE-SYMLINKS/, /SYMLINKS/, and /REMOTE-SYNC/ configure the repository settings. Replaces any existing entry with the same name or path.
+
+Keyword arguments: :repo           path (or URL) of upstream repository for bootstrapping. :include-prs    include in PR dashboard fetches. :include-ci     include in CI status column fetches (GitHub Actions). :auto-fetch     non-nil — run git fetch --all during auto-sync. :auto-pull      non-nil — run git pull during auto-sync (implies fetch). Respects :sync-branches. :auto-commit    nil | t | FUNCTION — stage and commit dirty working tree. FUNCTION receives the repo struct and returns a commit message string. :auto-push      non-nil — run git push during auto-sync. Respects :sync-branches. :hooks          plist keyed by operation (~:fetch~/~:pull~/~:commit~/ ~:push~/~:sync~), each value a plist of: :pre        list of targets run before the operation; a target signaling ~error~ skips the operation (reported as ‘skipped’). :post       list of targets run after the operation succeeds (‘ok’ or a no-op ‘skipped’); failures are logged but never fail sync. :operation  a single target that replaces the default implementation for that operation.  For ~:fetch~/~:pull~/~:commit~/~:push~ the step still only runs when its own auto-* flag is set; for ~:sync~ it replaces the *entire* default pipeline (fetch/pull/commit/push and their own settings are not consulted). A target is a SYMBOL (looked up as a label in :commands), a STRING (run as a shell command in the repo directory), or a FUNCTION (called with (/REPO/ ON-COMPLETE), where ON-COMPLETE accepts ‘ok’, ‘skipped’, or ~error~). See also ~magit-dash-global-hooks~ for hooks applied across every repo. :auto-sync-command  deprecated; nil | SYMBOL | STRING | FUNCTION. Equivalent to :hooks (:sync (:operation VALUE)) — replaces the entire sync pipeline for this repo.  Merged with any explicit :hooks also passed. :sync-branches  list of branch names on which auto-pull and auto-push are permitted; nil means any branch. :tags           list of symbols for filtering in the dashboard. :commands       alist of (LABEL . FUNCTION) for the repo command picker. :sort-hint      number controlling display order; lower values appear first. Repos without a sort-hint appear after all sorted repos. :worktree       non-nil when this entry represents a git worktree. :timer          plist forwarded to ~magit-dash-register-sync-timer~ (requires magit-dash-timer).  Example: '(:kind idle :idle-delay 300). :clone-url      URL to clone repository from when missing on disk. :remote-url     alias for :clone-url. :worktree-symlinks  list of relative paths to symlink from main repo to worktrees. :symlinks       alias for :worktree-symlinks. :remote-sync    plist (:hosts, :branch, :path, :merge-method) declaring remote sync mirrors. :sync-on-refresh    non-nil — run full auto-sync pipeline during dashboard refresh, subject to `magit-dash-refresh-sync-min-interval'. :auto-sync-on-refresh alias for :sync-on-refresh. :refresh-sync       alias for :sync-on-refresh. :fetch-on-refresh   non-nil — mark repository as eligible for fetch on refresh.
+
+*** Registry Helpers
+
+**** [[file:../magit-dash.el::432][magit-dash-sync-trigger]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-sync-trigger
+:END:
+
+How the current auto-sync was triggered. Bind to ‘timer’ when invoking auto-sync from a timer; defaults to ~interactive~.
+
+**** [[file:../magit-dash.el::967][magit-dash-remote-sync-target]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-remote-sync-target
+:END:
+
+: (fn &key HOST PATH BRANCH MERGE-METHOD)
+
+Return a shell command string implementing the remote sync pipeline for /HOST/. Stages, fetches/rebases (or merges when /MERGE-METHOD/ is ‘merge’) against /BRANCH/ (defaulting to current HEAD), commits, and pushes locally and remotely over SSH into /PATH/ (defaulting to ".").
+
+**** [[file:../magit-dash.el::1281][magit-dash-cache-info]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cache-info
+:END:
+
+Display cache statistics in the minibuffer.
+
+**** [[file:../magit-dash.el::1295][magit-dash-cache-reset]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cache-reset
+:END:
+
+Reset cache for REPO-PATH (or all repos if nil).
+
+**** [[file:../magit-dash.el::1305][magit-dash-cache-reset-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cache-reset-all
+:END:
+
+Clear all caches and repopulate the dashboard asynchronously.
+
+**** [[file:../magit-dash.el::1311][magit-dash-cache-reset-at-point]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cache-reset-at-point
+:END:
+
+Clear cache for repository at point, re-collect stats synchronously, and refresh.
+
+**** [[file:../magit-dash.el::1322][magit-dash-cache-diagnose]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cache-diagnose
+:END:
+
+Report cache health for all registered repos. Shows a one-line summary message and opens a detail buffer when issues are found.
+
+**** [[file:../magit-dash.el::1355][magit-dash-cache-stats]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cache-stats
+:END:
+
+Show per-repository cache status in a read-only buffer.
+
+*** Worktree Support
+
+**** [[file:../magit-dash.el::1504][magit-dash-columns]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-columns
+:END:
+
+Alist of (COLUMN-SYMBOL . ENABLED) for the repository dashboard. Persisted across sessions via ~savehist-additional-variables~.
+
+**** [[file:../magit-dash.el::1538][magit-dash-toggle-column]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-toggle-column
+:END:
+
+Toggle visibility of column COL in the dashboard and refresh.
+
+**** [[file:../magit-dash.el::1549][magit-dash-toggle-discovered-submodules]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-toggle-discovered-submodules
+:END:
+
+Toggle visibility of auto-discovered submodules in the dashboard and refresh.
+
+**** [[file:../magit-dash.el::1556][magit-dash-show-discovered-worktrees]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-show-discovered-worktrees
+:END:
+
+When non-nil, auto-discovered worktrees appear below their parent in the dashboard.
+
+**** [[file:../magit-dash.el::1559][magit-dash-toggle-discovered-worktrees]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-toggle-discovered-worktrees
+:END:
+
+Toggle visibility of auto-discovered worktrees in the dashboard and refresh.
+
+**** [[file:../magit-dash.el::1569][magit-dash-render-branch-name-as-basename]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-render-branch-name-as-basename
+:END:
+
+When non-nil, the Branch column shows only the basename of a branch. Everything up to and including the final "/" is dropped (e.g. "feature/some/thing" displays as "thing").  Purely cosmetic — git operations always use the full branch name.
+
+**** [[file:../magit-dash.el::1575][magit-dash-toggle-branch-basename]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-toggle-branch-basename
+:END:
+
+Toggle whether the Branch column displays only a branch’s basename.
+
+*** Repo Dashboard Mode
+
+**** [[file:../magit-dash.el::1712][magit-dash-mode-map]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-mode-map
+:END:
+
+Keymap for ~magit-dash-mode~.
+
+**** [[file:../magit-dash.el::1794][magit-dash-show-discovered-submodules]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-show-discovered-submodules
+:END:
+
+When non-nil, auto-discovered submodules appear below their parent in the dashboard.
+
+**** [[file:../magit-dash.el::1814][magit-dash-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-mode
+:END:
+
+Major mode for the registered repository dashboard.
+
+In addition to any hooks its parent mode ~tabulated-list-mode~ might have run, this mode runs the hook ~magit-dash-mode-hook~, as the final or penultimate step during initialization.
+
+Key             Binding
+
+TAB		forward-button RET		magit-dash-magit-status SPC		magit-dash-toggle-mark !		magit-dash-magit-dispatch *		magit-dash-unmark-all -		negative-argument 0 .. 9		digit-argument <		beginning-of-buffer >		end-of-buffer ?		magit-dash-menu A		magit-dash-commit-all B		magit-dash-bootstrap-repo C		magit-dash-clone-repo F		magit-dash-fetch-all G		magit-dash-stage-all H		magit-dash-unhide-all L		magit-dash-magit-log-full P		magit-dash-push Q		magit-dash-agent-shell-queue S		magit-dash-sync-all T		magit-dash-toggle-column U		magit-dash-pull-all W		magit-dash-worktree-add X		magit-dash-run-command-background Z		magit-dash-agent-shell-new a		magit-dash-auto-sync b		magit-dash-visit-buffer c		magit-dash-magit-commit d		magit-dash-magit-diff e		magit-dash-find-file f		magit-dash-fetch g		magit-dash-refresh h		magit-dash-hide-repo i		magit-dash-add-tag k		magit-dash-worktree-delete l		magit-dash-magit-log m		magit-dash-menu n		magit-dash-sync o		magit-dash-open-repo p		magit-gh-pr-dash q		quit-window r		magit-dash-hard-refresh s		magit-dash-magit-status t		magit-dash-filter-by-tag u		magit-dash-pull w		magit-dash-open-worktree-dispatch x		magit-dash-run-command y		magit-dash-prune-branches {		tabulated-list-narrow-current-column }		tabulated-list-widen-current-column DEL		scroll-down-command S-SPC		scroll-down-command M-<left>	tabulated-list-previous-column M-<right>	tabulated-list-next-column <backtab>	backward-button <follow-link>	mouse-face <mouse-2>	mouse-select-window
+
+M-s		magit-dash-toggle-discovered-submodules M-t		magit-dash-toggle-discovered-worktrees
+
+C-M-i		backward-button
+
+**** [[file:../magit-dash.el::1989][magit-dash-refresh]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-refresh
+:END:
+
+Refresh the dashboard, clearing all per-repo caches and re-fetching. Discovers worktrees and submodules synchronously, renders the table with the last known state, then clears :stats, :pr-counts, and :ci-status for every repo and re-fetches all three in the background, updating each row as data arrives.
+
+**** [[file:../magit-dash.el::2042][magit-dash-hard-refresh]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-hard-refresh
+:END:
+
+Clear all caches and repopulate the dashboard from scratch. Unlike ~magit-dash-refresh~, discards all cached stats so every repo is re-collected asynchronously.
+
+**** [[file:../magit-dash.el::2127][magit-dash-open-registered-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-open-registered-repo
+:END:
+
+Prompt for a registered repository from ~magit-dash-repo-list~ and open it. The picker displays repository names annotated with their paths and cached dashboard stats.
+
+**** [[file:../magit-dash.el::2164][magit-dash-clone-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-clone-repo
+:END:
+
+Clone REPO from URL (or prompt if unset) into REPO’s destination path. ON-COMPLETE is an optional callback called when cloning finishes. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2213][magit-dash-clone-all-missing]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-clone-all-missing
+:END:
+
+Clone all configured but missing repositories asynchronously.
+
+**** [[file:../magit-dash.el::2255][magit-dash-bootstrap-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bootstrap-repo
+:END:
+
+Clone REPO from its configured upstream ~:repo~ path into its destination path. REPO defaults to the repository at point or is selected interactively. ON-COMPLETE is an optional callback invoked on completion. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2278][magit-dash-bootstrap]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bootstrap
+:END:
+
+Clone REPO from its configured upstream ~:repo~ path into its destination path. REPO defaults to the repository at point or is selected interactively. ON-COMPLETE is an optional callback invoked on completion. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2279][magit-dash-clone-upstream-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-clone-upstream-repo
+:END:
+
+Clone REPO from its configured upstream ~:repo~ path into its destination path. REPO defaults to the repository at point or is selected interactively. ON-COMPLETE is an optional callback invoked on completion. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2280][magit-dash-clone-upstream]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-clone-upstream
+:END:
+
+Clone REPO from its configured upstream ~:repo~ path into its destination path. REPO defaults to the repository at point or is selected interactively. ON-COMPLETE is an optional callback invoked on completion. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2283][magit-dash-bootstrap-marked]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bootstrap-marked
+:END:
+
+Bootstrap marked missing repositories with an upstream ~:repo~ configured. When ~magit-dash--batch-all~ is enabled, targets all visible missing repositories with ~:repo~. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2306][magit-dash-bootstrap-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bootstrap-all
+:END:
+
+Bootstrap marked missing repositories with an upstream ~:repo~ configured. When ~magit-dash--batch-all~ is enabled, targets all visible missing repositories with ~:repo~. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2307][magit-dash-bootstrap-batch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bootstrap-batch
+:END:
+
+Bootstrap marked missing repositories with an upstream ~:repo~ configured. When ~magit-dash--batch-all~ is enabled, targets all visible missing repositories with ~:repo~. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2308][magit-dash-bootstrap-all-missing]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bootstrap-all-missing
+:END:
+
+Bootstrap marked missing repositories with an upstream ~:repo~ configured. When ~magit-dash--batch-all~ is enabled, targets all visible missing repositories with ~:repo~. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2309][magit-dash-clone-all-upstream]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-clone-all-upstream
+:END:
+
+Bootstrap marked missing repositories with an upstream ~:repo~ configured. When ~magit-dash--batch-all~ is enabled, targets all visible missing repositories with ~:repo~. Runs asynchronously and refreshes the dashboard on completion.
+
+**** [[file:../magit-dash.el::2325][magit-dash-magit-dispatch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-magit-dispatch
+:END:
+
+Open ~magit-dispatch~ in the context of the repository at point.
+
+**** [[file:../magit-dash.el::2331][magit-dash-magit-status]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-magit-status
+:END:
+
+Open a magit status buffer for the repository at point.
+
+**** [[file:../magit-dash.el::2337][magit-dash-magit-diff]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-magit-diff
+:END:
+
+Open a magit diff (dwim) buffer for the repository at point.
+
+**** [[file:../magit-dash.el::2343][magit-dash-magit-log]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-magit-log
+:END:
+
+Open magit log for the current branch in the repository at point.
+
+**** [[file:../magit-dash.el::2349][magit-dash-magit-log-full]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-magit-log-full
+:END:
+
+Open the full magit log menu for the repository at point.
+
+**** [[file:../magit-dash.el::2355][magit-dash-magit-commit]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-magit-commit
+:END:
+
+Open a magit commit buffer for the repository at point.
+
+**** [[file:../magit-dash.el::2361][magit-dash-fetch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-fetch
+:END:
+
+Run git fetch for the repository at point via magit.
+
+**** [[file:../magit-dash.el::2367][magit-dash-pull]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-pull
+:END:
+
+Pull from upstream for the repository at point via magit.
+
+**** [[file:../magit-dash.el::2373][magit-dash-commit]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-commit
+:END:
+
+Auto-commit modified files in the repository at point. Signals ~user-error~ when :auto-commit is not configured for this repo.
+
+**** [[file:../magit-dash.el::2385][magit-dash-stage-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-stage-all
+:END:
+
+Stage all working tree files in the repository at point.
+
+**** [[file:../magit-dash.el::2393][magit-dash-push]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-push
+:END:
+
+Push current branch to its push remote for the repository at point.
+
+**** [[file:../magit-dash.el::2399][magit-dash-sync]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-sync
+:END:
+
+Run the configured auto operations for the repository at point asynchronously. Signals ~user-error~ when no auto operations are configured for this repo.
+
+**** [[file:../magit-dash.el::2412][magit-dash-commit-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-commit-all
+:END:
+
+Auto-commit marked repos (or all if none marked) with :auto-commit configured. Uses each repo’s :auto-commit message function (or the default chore message). Displays a summary message and refreshes the dashboard when all complete.
+
+**** [[file:../magit-dash.el::2426][magit-dash-sync-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-sync-all
+:END:
+
+Run auto operations for marked repos (or all if none marked) asynchronously, then refresh.
+
+**** [[file:../magit-dash.el::2439][magit-dash-sync-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-sync-repo
+:END:
+
+Select a repository interactively and run its configured auto-sync operations.
+
+**** [[file:../magit-dash.el::2460][magit-dash-auto-sync]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-auto-sync
+:END:
+
+Run auto operations for marked repos (or all if none marked) asynchronously. Each repo’s steps (fetch, pull, commit, push) run sequentially; each step is logged individually.  Dashboard refreshes when all repos complete.
+
+**** [[file:../magit-dash.el::2474][magit-dash-run-command]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-run-command
+:END:
+
+Open an ~annotated-completing-read~ command picker for the repo at point. Invoke the selected command.  When BACKGROUND is non-nil (or with prefix argument C-u), run the command in the background without displaying its buffer.
+
+**** [[file:../magit-dash.el::2482][magit-dash-run-command-background]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-run-command-background
+:END:
+
+Open command picker for repo at point and run in the background.
+
+**** [[file:../magit-dash.el::2574][magit-dash-filter-by-tag]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-filter-by-tag
+:END:
+
+Filter the dashboard by tag using annotated completion. Select "(clear)" to show all repos; quitting leaves the current filter unchanged.
+
+**** [[file:../magit-dash.el::2584][magit-dash-add-tag]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-add-tag
+:END:
+
+Add an ephemeral session-local tag to the repository at point. The tag is stored in memory for this session and is not saved to the registry. Pick from existing tags or type a new symbol name.
+
+**** [[file:../magit-dash.el::2598][magit-dash-mark-by-tag]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-mark-by-tag
+:END:
+
+Mark all repos sharing a tag chosen via annotated completion. Adds to any existing marks rather than replacing them.
+
+**** [[file:../magit-dash.el::2616][magit-dash-visit-buffer]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-visit-buffer
+:END:
+
+Switch to a buffer visiting a file in the repository at point.
+
+**** [[file:../magit-dash.el::2629][magit-dash-find-file]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-find-file
+:END:
+
+Open a file in the repository at point.
+
+**** [[file:../magit-dash.el::2637][magit-dash-switch-branch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-switch-branch
+:END:
+
+Switch branch in the repository at point via magit.
+
+**** [[file:../magit-dash.el::2643][magit-dash-prune-branches]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-prune-branches
+:END:
+
+Prune merged branches in a repository. Uses the repository at point when called from a ‘magit-dash’ buffer, otherwise the git repository containing the current buffer (works from any ~magit~ buffer or a file/~dired~ buffer inside a repo), and finally prompts among the registered repositories when neither applies.
+
+**** [[file:../magit-dash.el::2654][magit-dash-drop-stashes]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-drop-stashes
+:END:
+
+Drop all stashes in a repository. Uses the repository at point when called from a ‘magit-dash’ buffer, otherwise the git repository containing the current buffer (works from any ~magit~ buffer or a file/~dired~ buffer inside a repo), and finally prompts among the registered repositories when neither applies.
+
+**** [[file:../magit-dash.el::2665][magit-dash-save-project-buffers]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-save-project-buffers
+:END:
+
+Save all project buffers for the repository. Prefers using projectile if ~projectile-mode~ and falls back to ‘project.el’. Uses the repository at point when called from a ‘magit-dash’ buffer, otherwise the git repository containing the current buffer, and finally prompts among the registered repositories when neither applies.
+
+**** [[file:../magit-dash.el::2686][magit-dash-projectile-save-project-buffers]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-projectile-save-project-buffers
+:END:
+
+Save all project buffers for the repository. Prefers using projectile if ~projectile-mode~ and falls back to ‘project.el’. Uses the repository at point when called from a ‘magit-dash’ buffer, otherwise the git repository containing the current buffer, and finally prompts among the registered repositories when neither applies.
+
+**** [[file:../magit-dash.el::2692][magit-dash-worktree-add]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-add
+:END:
+
+Add a new worktree for the repository at point via magit.
+
+**** [[file:../magit-dash.el::2702][magit-dash-worktree-delete]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-delete
+:END:
+
+Delete the worktree at point via magit. Signals ~user-error~ when the current row is not a worktree.
+
+**** [[file:../magit-dash.el::2713][magit-dash-agent-shell]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-agent-shell
+:END:
+
+Switch to an ~agent-shell~ session for the repository at point.
+
+**** [[file:../magit-dash.el::2719][magit-dash-agent-shell-new]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-agent-shell-new
+:END:
+
+Start a new ~agent-shell~ session in the repository at point.
+
+**** [[file:../magit-dash.el::2725][magit-dash-agent-shell-queue]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-agent-shell-queue
+:END:
+
+Open the ~agent-shell~ queue buffer.
+
+**** [[file:../magit-dash.el::2729][magit-dash-gh-ci-fetch-at-point]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-ci-fetch-at-point
+:END:
+
+Fetch CI status for the repository at point and refresh its dashboard row.
+
+**** [[file:../magit-dash.el::2735][magit-dash-gh-ci-open-at-point]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-ci-open-at-point
+:END:
+
+Open the most recent CI run in the browser for the repository at point.
+
+**** [[file:../magit-dash.el::2741][magit-dash-gh-ci-fix-at-point]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-ci-fix-at-point
+:END:
+
+Dispatch a fix-CI agent task for the repository at point.
+
+**** [[file:../magit-dash.el::2758][magit-dash-open-other-window]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-open-other-window
+:END:
+
+Open the repository dashboard buffer in another window. Signals ~user-error~ when ~magit-dash-repo-list~ is empty.
+
+**** [[file:../magit-dash.el::2765][magit-dash-open]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-open
+:END:
+
+Open the repository dashboard buffer in another window. Signals ~user-error~ when ~magit-dash-repo-list~ is empty.
+
+**** [[file:../magit-dash.el::2775][magit-dash-repo-ensure-configuration]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-ensure-configuration
+:END:
+
+Raise ~user-error~ when there is not ~magit-dash-repo-list~ defined.
+
+**** TODO [[file:../magit-dash.el::2780][magit-dash-create]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-create
+:END:
+
+*no docstring*
+
+*** Mark/Select Support
+
+**** [[file:../magit-dash.el::2848][magit-dash-toggle-mark]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-toggle-mark
+:END:
+
+Toggle the mark on the repository at point and advance to the next line.
+
+**** [[file:../magit-dash.el::2861][magit-dash-unmark-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-unmark-all
+:END:
+
+Unmark all repositories in the dashboard.
+
+**** [[file:../magit-dash.el::2872][magit-dash-hide-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-hide-repo
+:END:
+
+Hide REPO or repository at point from the list view. If any repositories are marked, hides all marked repositories and clears marks. Otherwise, hides REPO if non-nil, or the repository at point. Use ~magit-dash-unhide-all~ to restore all hidden repositories.
+
+**** [[file:../magit-dash.el::2910][magit-dash-hide]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-hide
+:END:
+
+Hide REPO or repository at point from the list view. If any repositories are marked, hides all marked repositories and clears marks. Otherwise, hides REPO if non-nil, or the repository at point. Use ~magit-dash-unhide-all~ to restore all hidden repositories.
+
+**** [[file:../magit-dash.el::2913][magit-dash-unhide-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-unhide-all
+:END:
+
+Restore all hidden repositories to the dashboard view.
+
+**** [[file:../magit-dash.el::2923][magit-dash-hide-clear]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-hide-clear
+:END:
+
+Restore all hidden repositories to the dashboard view.
+
+**** [[file:../magit-dash.el::2926][magit-dash-unhide-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-unhide-repo
+:END:
+
+Select a hidden repository using ~annotated-completing-read~ and restore it. If REPO is non-nil, restores REPO directly.
+
+**** [[file:../magit-dash.el::2960][magit-dash-hide-select]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-hide-select
+:END:
+
+Select a repository using ~annotated-completing-read~ to toggle its hidden state. If the chosen repository is hidden, unhides it.  Otherwise, hides it.
+
+**** [[file:../magit-dash.el::3032][magit-dash-toggle-batch-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-toggle-batch-all
+:END:
+
+Toggle whether batch operations act on all repos or only marked ones. When enabled, all repos visible in the dashboard are targeted. When disabled, only explicitly marked repos are targeted.
+
+**** [[file:../magit-dash.el::3040][magit-dash-fetch-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-fetch-all
+:END:
+
+Asynchronously fetch marked repos, or all visible repos when none are marked.
+
+**** [[file:../magit-dash.el::3052][magit-dash-pull-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-pull-all
+:END:
+
+Asynchronously pull marked repos, or all visible repos when none are marked.
+
+**** [[file:../magit-dash.el::3064][magit-dash-push-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-push-all
+:END:
+
+Asynchronously push marked repos, or all visible repos when none are marked.
+
+**** [[file:../magit-dash.el::3076][magit-dash-submodule-update-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-submodule-update-all
+:END:
+
+Run git submodule update --init --recursive for marked repos, or all visible repos.
+
+**** [[file:../magit-dash.el::3099][magit-dash-menu]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-menu
+:END:
+
+Actions for the repository at point in the repo dashboard.
+
+**** [[file:../magit-dash.el::3244][magit-dash-default-sync]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-default-sync
+:END:
+
+Run safe default sync (fetch, safe pull, safe push) for target repo(s).
+
+**** [[file:../magit-dash.el::3258][magit-dash-view-operations]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-view-operations
+:END:
+
+Display active and recent magit-dash operations in a buffer.
+
+**** [[file:../magit-dash.el::3297][magit-dash-stop-operations]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-stop-operations
+:END:
+
+Stop and cancel all currently running magit-dash operations.
+
+**** [[file:../magit-dash.el::3316][magit-dash-reset-operations]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-reset-operations
+:END:
+
+Reset all operation state, stopping active operations and clearing history.
+
+** magit-dash-status
+
+*** [[file:../magit-dash-status.el::62][magit-dash-status-enable]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-enable
+:END:
+
+When non-nil, insert GitHub CI and PR sections into ~magit-status~.
+
+*** [[file:../magit-dash-status.el::67][magit-dash-status-authored-prs-limit]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-authored-prs-limit
+:END:
+
+Maximum number of authored PRs to display in the status section.
+
+*** [[file:../magit-dash-status.el::72][magit-dash-status-cache-ttl]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-cache-ttl
+:END:
+
+Time-to-live in seconds for status cache before auto-refreshing in background.
+
+*** [[file:../magit-dash-status.el::439][magit-dash-status-insert-ci-header]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-insert-ci-header
+:END:
+
+Insert the GitHub CI status line into the ~magit-status~ header.
+
+*** [[file:../magit-dash-status.el::475][magit-dash-status-insert-pr-header]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-insert-pr-header
+:END:
+
+Insert the current branch’s GitHub PR line into the ~magit-status~ header.
+
+*** [[file:../magit-dash-status.el::510][magit-dash-status-insert-authored-prs]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-insert-authored-prs
+:END:
+
+Insert collapsible section for open PRs authored by @me in ~magit-status~.
+
+*** [[file:../magit-dash-status.el::546][magit-dash-status-ci-browse]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-ci-browse
+:END:
+
+Open current CI run in browser, or repo Actions page if no run is cached.
+
+*** [[file:../magit-dash-status.el::566][magit-dash-status-ci-failed-logs]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-ci-failed-logs
+:END:
+
+Download and display failed logs for current CI run.
+
+*** [[file:../magit-dash-status.el::575][magit-dash-status-ci-full-logs]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-ci-full-logs
+:END:
+
+Download and display full logs for current CI run.
+
+*** [[file:../magit-dash-status.el::580][magit-dash-status-ci-fix]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-ci-fix
+:END:
+
+Dispatch AI CI-fix prompt via agent-shell for current repo.
+
+*** [[file:../magit-dash-status.el::590][magit-dash-status-ci-refresh]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-ci-refresh
+:END:
+
+Force refresh of CI status for current repository.
+
+*** [[file:../magit-dash-status.el::604][magit-dash-status-ci-runs-list]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-ci-runs-list
+:END:
+
+Open workflow runs list buffer.
+
+*** [[file:../magit-dash-status.el::611][magit-dash-status-ci-menu]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-ci-menu
+:END:
+
+Actions for GitHub CI workflow run.
+
+*** [[file:../magit-dash-status.el::645][magit-dash-status-pr-browse]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-browse
+:END:
+
+Open pull request at point in web browser, or repo PRs page.
+
+*** [[file:../magit-dash-status.el::665][magit-dash-status-pr-diff]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-diff
+:END:
+
+View diff for pull request at point.
+
+*** [[file:../magit-dash-status.el::676][magit-dash-status-pr-worktree]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-worktree
+:END:
+
+Open pull request at point in dedicated worktree.
+
+*** [[file:../magit-dash-status.el::687][magit-dash-status-pr-checkout]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-checkout
+:END:
+
+Checkout pull request branch locally.
+
+*** [[file:../magit-dash-status.el::696][magit-dash-status-pr-checks]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-checks
+:END:
+
+View CI checks for pull request.
+
+*** [[file:../magit-dash-status.el::709][magit-dash-status-pr-fetch-threads]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-fetch-threads
+:END:
+
+Fetch comments and review threads for pull request to disk.
+
+*** [[file:../magit-dash-status.el::716][magit-dash-status-pr-refresh]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-refresh
+:END:
+
+Force refresh of PR status for current repository.
+
+*** [[file:../magit-dash-status.el::732][magit-dash-status-pr-menu]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-pr-menu
+:END:
+
+Actions for GitHub pull request.
+
+*** [[file:../magit-dash-status.el::752][magit-dash-status-refresh-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-refresh-all
+:END:
+
+Force refresh all GitHub status information for the current repository.
+
+*** [[file:../magit-dash-status.el::770][magit-dash-dispatch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-dispatch
+:END:
+
+Magit Dash operations and repository tools.
+
+*** [[file:../magit-dash-status.el::788][magit-dash-status-setup]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-status-setup
+:END:
+
+Install GitHub status headers, sections, and keybindings into Magit.
+
+** magit-dash-open
+
+*** [[file:../magit-dash-open.el::35][magit-dash-open-scan-depth]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-open-scan-depth
+:END:
+
+How many directory levels to scan for git repositories. Worktrees and submodules are always enumerated via git regardless of depth.
+
+*** [[file:../magit-dash-open.el::52][magit-dash-open-cache-reset]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-open-cache-reset
+:END:
+
+Clear the git info cache used by ~magit-dash-open-repo~.
+
+*** [[file:../magit-dash-open.el::253][magit-dash-open-repo]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-open-repo
+:END:
+
+Select a repository and open its magit status buffer.
+
+Context-aware collection: - In a magit-status buffer: scans from the parent of the current repo and merges ‘~/’ at depth 1, so sibling repos and home-level repos appear together. - In a directory that is itself a git repo: only the repo’s worktrees and submodules are offered (use a prefix arg to override and scan subdirs). - Otherwise: scans subdirectories of ~default-directory~.
+
+Live magit-status buffers are always included and marked "[open]"; selecting one switches to it directly without reopening it.
+
+With a prefix argument, prompt for ROOT and scan it normally regardless of the above context rules.
+
+*** [[file:../magit-dash-open.el::338][magit-dash-open-worktree-dispatch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-open-worktree-dispatch
+:END:
+
+Select a repository using context-aware completion and dispatch a worktree task. If DIR is non-nil, dispatches in DIR directly. If point is on a repository in ~magit-dash-mode~, operates on that repository. Otherwise, prompts for repository selection via ~annotated-completing-read~.
+
+** magit-dash-gh
+
+*** Core Helpers Shared By All Magit-Dash-Gh-* Modules
+
+**** [[file:../magit-dash-gh.el::81][magit-dash-gh-prune-pr-limit]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-prune-pr-limit
+:END:
+
+Maximum number of PRs to fetch from GitHub on each incremental scan.
+
+**** [[file:../magit-dash-gh.el::84][magit-dash-gh-prune-cache-dir]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-prune-cache-dir
+:END:
+
+Directory for per-repo closed-PR cache files, or nil to disable disk caching.
+
+**** [[file:../magit-dash-gh.el::310][magit-dash-gh-prune-merged-branches]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-prune-merged-branches
+:END:
+
+Open a menu to prune local branches whose PRs are merged or closed.
+
+Per-repo cache (candidates + marked list) lives on the unified global cache keyed by repository toplevel. The menu loops until you select ‘exit menu’. The menu offers:
+
+  - exit menu
+  - refresh
+  - prune all branches (no prompt)
+  - prune all branches (with prompt)
+  - mark branch for pruning
+  - prune marked branches (when any are marked)
+  - prune: BRANCH [marked]   (one entry per candidate)
+
+**** [[file:../magit-dash-gh.el::344][magit-dash-gh-prune-prefetch]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-prune-prefetch
+:END:
+
+Seed the in-memory closed-PR cache from disk for the current repo. Makes no GitHub API calls; safe to call on status load. Skips silently when caching is disabled, not in a git repo, or the in-memory cache is already populated.
+
+*** Shared Utilities
+
+**** [[file:../magit-dash-gh.el::379][magit-dash-gh-collect-base-dir]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-collect-base-dir
+:END:
+
+Base directory for artifact downloads, or nil to use <project-root>/plans/.
+
+**** [[file:../magit-dash-gh.el::382][magit-dash-gh-collect-name-function]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-collect-name-function
+:END:
+
+Function (TYPE SLUG ID) => string naming a collection run directory. TYPE is a symbol (‘ci’ or ‘pr’), SLUG is a branch or PR slug string, ID is a run-id or PR number.  The result is used as a subdirectory name under the base collection directory.
+
+**** [[file:../magit-dash-gh.el::388][magit-dash-gh-collect-index-format]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-collect-index-format
+:END:
+
+Serialization format for index files written by collect commands. ‘json’ (default, always available) or ‘yaml’ (requires the ‘yaml’ package).
+
+**** [[file:../magit-dash-gh.el::555][magit-dash-gh-auth-switch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-auth-switch
+:END:
+
+Switch the active ‘gh’ CLI account. When more than two accounts are configured, prompt to select which to switch to via ~annotated-completing-read~. Otherwise switch directly to the other configured account.
+
+**** [[file:../magit-dash-gh.el::579][magit-dash-gh-menu]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-menu
+:END:
+
+GitHub and Magit Dash operations.
+
+**** [[file:../magit-dash-gh-pr.el::44][magit-dash-gh-pr-thread-limit]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-thread-limit
+:END:
+
+Maximum number of review threads to fetch per pull request.
+
+*** Public Api
+
+**** [[file:../magit-dash-gh-pr.el::213][magit-dash-gh-pr-fetch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-fetch
+:END:
+
+Download comments and review threads for PR-NUMBER (or the current branch’s PR). When PR-NUMBER is nil, auto-detects the PR for the current branch.
+
+Creates an artifact directory under plans/ containing: pr-info.json            — PR metadata and review decision pr-review-threads.json  — all review threads with resolved status pr-issue-comments.json  — top-level (non-review) comments index.json              — collection summary with per-thread creator/last-commentor
+
+*** Pr Dashboard Mode
+
+**** [[file:../magit-dash-gh-pr.el::272][magit-dash-gh-pr-dashboard-mode-map]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-mode-map
+:END:
+
+Keymap for ~magit-dash-gh-pr-dashboard-mode~.
+
+**** [[file:../magit-dash-gh-pr.el::287][magit-dash-gh-pr-dashboard-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-mode
+:END:
+
+Major mode for the pull request dashboard.
+
+In addition to any hooks its parent mode ~tabulated-list-mode~ might have run, this mode runs the hook ~magit-dash-gh-pr-dashboard-mode-hook~, as the final or penultimate step during initialization.
+
+Key             Binding
+
+RET		magit-dash-gh-pr-dashboard-open-browser ?		magit-dash-gh-pr-dashboard-menu F		magit-dash-gh-pr-dashboard-clear-filters W		magit-dash-gh-pr-dashboard-open-worktree c		magit-dash-gh-pr-dashboard-fetch-ci f		magit-dash-gh-pr-dashboard-set-filter g		magit-dash-gh-pr-dashboard-refresh m		magit-dash-gh-pr-dashboard-menu q		quit-window r		magit-dash-gh-pr-dashboard-refresh w		magit-dash-gh-pr-dashboard-open-worktree
+
+**** [[file:../magit-dash-gh-pr.el::389][magit-dash-gh-pr-dashboard-refresh]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-refresh
+:END:
+
+Fetch PRs matching current filters and repopulate the PR table.
+
+**** [[file:../magit-dash-gh-pr.el::420][magit-dash-gh-pr-dashboard-open-browser]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-open-browser
+:END:
+
+Open the pull request at point in a web browser.
+
+**** [[file:../magit-dash-gh-pr.el::428][magit-dash-gh-pr-dashboard-set-filter]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-set-filter
+:END:
+
+Interactively set one PR dashboard filter field.
+
+**** [[file:../magit-dash-gh-pr.el::452][magit-dash-gh-pr-dashboard-clear-filters]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-clear-filters
+:END:
+
+Reset all dashboard filters to their defaults (open PRs) and refresh.
+
+**** [[file:../magit-dash-gh-pr.el::459][magit-dash-gh-pr-buffer-name]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-buffer-name
+:END:
+
+Buffer name for the pull request dashboard.
+
+**** [[file:../magit-dash-gh-pr.el::463][magit-gh-pr-dash]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-gh-pr-dash
+:END:
+
+Open the GitHub pull request dashboard buffer. Aggregates all open PRs by default across repositories.
+
+**** [[file:../magit-dash-gh-pr.el::475][magit-dash-gh-pr-dashboard-open]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-open
+:END:
+
+Open the GitHub pull request dashboard buffer. Aggregates all open PRs by default across repositories.
+
+**** [[file:../magit-dash-gh-pr.el::477][magit-gh-prs]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-gh-prs
+:END:
+
+Open the GitHub pull request dashboard buffer. Aggregates all open PRs by default across repositories.
+
+**** [[file:../magit-dash-gh-pr.el::479][magit-dash-gh-pr-dash]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dash
+:END:
+
+Open the GitHub pull request dashboard buffer. Aggregates all open PRs by default across repositories.
+
+**** [[file:../magit-dash-gh-pr.el::496][magit-dash-gh-pr-dashboard-open-worktree]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-open-worktree
+:END:
+
+Create and open a git worktree for the pull request at point (or ENTRY). If a worktree for this PR already exists, switches to its magit status buffer. Otherwise, fetches the PR branch from GitHub, adds the worktree, and opens its magit status buffer.
+
+**** [[file:../magit-dash-gh-pr.el::531][magit-dash-gh-pr-dashboard-fetch-ci]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-fetch-ci
+:END:
+
+Fetch GitHub Actions CI logs for the pull request at point.
+
+**** [[file:../magit-dash-gh-pr.el::541][magit-dash-gh-pr-dashboard-menu]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-pr-dashboard-menu
+:END:
+
+Actions for the PR dashboard.
+
+**** [[file:../magit-dash-gh-ci.el::43][agent-shell-prefer-viewport-interaction]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: agent-shell-prefer-viewport-interaction
+:END:
+
+Non-nil makes ~agent-shell~ prefer viewport interaction over shell interaction.
+
+For example, ‘agent-shell-send*’ will insert text into the viewport buffer instead of the shell buffer.  If no viewport buffer exists, one will be created.
+
+*** Display
+
+**** [[file:../magit-dash-gh-ci.el::108][magit-dash-gh-ci-fetch]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-ci-fetch
+:END:
+
+Fetch CI status for REPO asynchronously and call CALLBACK with the result. CALLBACK receives a CI status plist (see ~magit-dash-gh-ci--parse-runs~) or nil on error.  Does nothing when REPO does not have :include-ci set. Always queries the branch currently checked out at REPO’s path rather than a possibly-stale cached branch, so the CI status reflects what is actually checked out — important for worktrees, which are frequently switched to a different branch than their cached stats reflect. Caches the result as :ci-status in the shared magit-dash-gh cache.
+
+**** [[file:../magit-dash-gh-ci.el::146][magit-dash-gh-ci-open-last-run]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-ci-open-last-run
+:END:
+
+Open the URL of the most recent CI run for REPO in the browser. Does nothing when no CI status is cached for REPO.
+
+*** Fix-Ci Prompt Dispatch
+
+**** [[file:../magit-dash-gh-ci.el::186][magit-dash-ci-dispatch-fix-operation]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-ci-dispatch-fix-operation
+:END:
+
+Dispatch the ‘fix-ci’ prompt library workflow for REPO. Invokes ~agent-shell-prompt-exec~ with ~:repo~ set to REPO’s OWNER/NAME slug.
+
+**** [[file:../magit-dash-gh-actions.el::42][magit-dash-gh-actions-run-limit]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-actions-run-limit
+:END:
+
+Maximum number of CI runs shown when interactively selecting a run.
+
+**** [[file:../magit-dash-gh-actions.el::45][magit-dash-gh-actions-include-failed-log]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-actions-include-failed-log
+:END:
+
+When non-nil, download a failed-steps-only log alongside the full run log.
+
+**** [[file:../magit-dash-gh-actions.el::48][magit-dash-gh-actions-open-dired]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-actions-open-dired
+:END:
+
+When non-nil, open a dired buffer in the artifact directory after fetch completes.
+
+*** Log Viewer Mode
+
+**** [[file:../magit-dash-gh-actions.el::53][magit-dash-gh-actions-log-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-actions-log-mode
+:END:
+
+Major mode for viewing GitHub Actions CI log files. Applies ANSI colour sequences and provides read-only navigation.
+
+In addition to any hooks its parent mode ~special-mode~ might have run, this mode runs the hook ~magit-dash-gh-actions-log-mode-hook~, as the final or penultimate step during initialization.
+
+*** Public Api
+
+**** [[file:../magit-dash-gh-actions.el::248][magit-dash-gh-actions-fetch-for-pr]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-actions-fetch-for-pr
+:END:
+
+Fetch GitHub Actions CI logs for PR-NUMBER using REPO-DIR as the working directory. PR-NUMBER is an integer.  REPO-DIR must be a local checkout of the repository so that ‘gh’ can resolve the remote when listing and downloading runs.
+
+**** [[file:../magit-dash-gh-actions.el::260][magit-dash-gh-actions-fetch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-actions-fetch
+:END:
+
+Download GitHub Actions CI logs for the current branch. When RUN-ID is non-nil, fetch that specific run without prompting. Otherwise list recent runs and prompt for a selection.
+
+Creates an artifact directory under plans/ containing: run-info.json        — full run metadata run-logs.ghlog       — complete step logs (opens in ~magit-dash-gh-actions-log-mode~) run-failed-logs.ghlog — failed-step logs (when ~magit-dash-gh-actions-include-failed-log~) index.json           — collection summary
+
+*** Workflow Dispatch Api
+
+**** [[file:../magit-dash-gh-actions.el::326][magit-dash-gh-workflow-run]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-gh-workflow-run
+:END:
+
+Trigger a GitHub Actions WORKFLOW run for REPO-OR-PATH on branch REF. When WORKFLOW is nil, fetches available active workflows and prompts if more than one exists (or selects the only one). REPO-OR-PATH defaults to the repository at point or ~default-directory~. REF defaults to the current branch (or ‘main’). INPUTS is an optional alist of (KEY . VALUE) strings passed as -f KEY=VALUE. ON-COMPLETE is called with ‘ok’ or ~error~ on finish.
+
+**** [[file:../magit-dash-gh-actions.el::377][magit-gh-workflow-run]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-gh-workflow-run
+:END:
+
+Trigger a GitHub Actions WORKFLOW run for REPO-OR-PATH on branch REF. When WORKFLOW is nil, fetches available active workflows and prompts if more than one exists (or selects the only one). REPO-OR-PATH defaults to the repository at point or ~default-directory~. REF defaults to the current branch (or ‘main’). INPUTS is an optional alist of (KEY . VALUE) strings passed as -f KEY=VALUE. ON-COMPLETE is called with ‘ok’ or ~error~ on finish.
+
+**** [[file:../magit-dash-gh-actions.el::379][magit-dash-workflow-run]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-workflow-run
+:END:
+
+Trigger a GitHub Actions WORKFLOW run for REPO-OR-PATH on branch REF. When WORKFLOW is nil, fetches available active workflows and prompts if more than one exists (or selects the only one). REPO-OR-PATH defaults to the repository at point or ~default-directory~. REF defaults to the current branch (or ‘main’). INPUTS is an optional alist of (KEY . VALUE) strings passed as -f KEY=VALUE. ON-COMPLETE is called with ‘ok’ or ~error~ on finish.
+
+** magit-dash-worktree
+
+*** [[file:../magit-dash-worktree.el::46][magit-dash-repo-list]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-list
+:END:
+
+List of ‘magit-dash-repo’ structs registered for dashboard display. Use ~magit-dash-register~ to add entries.
+
+*** [[file:../magit-dash-worktree.el::55][magit-dash-worktree-global-symlinks]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-global-symlinks
+:END:
+
+List of relative paths to symlink from the main worktree into linked worktrees. These paths apply globally to all repositories unless overridden or extended.
+
+*** [[file:../magit-dash-worktree.el::61][magit-dash-worktree-repo-symlinks]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-repo-symlinks
+:END:
+
+Alist mapping repository names or paths to lists of relative paths to symlink. Example: '(("my-project" . ("dist" ".env.local")) ("backend"    . (".venv" "target")))
+
+*** [[file:../magit-dash-worktree.el::69][magit-dash-worktree-auto-symlink]] :option:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-auto-symlink
+:END:
+
+When non-nil, automatically create symlinks in new worktrees via ~magit-post-worktree-add-hook~.
+
+*** [[file:../magit-dash-worktree.el::76][magit-dash-worktree-main-dir]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-main-dir
+:END:
+
+Return the main repository checkout root directory for PATH. If PATH is in a linked worktree, follows git’s common directory back to the main checkout. If PATH is nil, uses ~default-directory~.
+
+*** [[file:../magit-dash-worktree.el::92][magit-dash-worktree-linked-p]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-linked-p
+:END:
+
+Return non-nil if PATH (default ~default-directory~) is a linked worktree. Returns nil if PATH is the primary repository checkout or not a git repository.
+
+*** [[file:../magit-dash-worktree.el::103][magit-dash-worktree-symlinks-for]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-symlinks-for
+:END:
+
+Return the combined, deduplicated list of symlink targets for REPO-OR-PATH. Combines ~magit-dash-worktree-global-symlinks~, matching entries from ~magit-dash-worktree-repo-symlinks~, and per-repo ~:worktree-symlinks~ settings.
+
+*** [[file:../magit-dash-worktree.el::147][magit-dash-worktree-symlink-worktree]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-symlink-worktree
+:END:
+
+Create symlinks in WORKTREE-PATH pointing to corresponding entries in MAIN-PATH. If MAIN-PATH is nil, resolves it via ~magit-dash-worktree-main-dir~. If SYMLINKS is nil, resolves via ~magit-dash-worktree-symlinks-for~. Returns an alist of ((TARGET . SOURCE) ...) for successfully created or active symlinks.
+
+*** [[file:../magit-dash-worktree.el::183][magit-dash-worktree-sync-symlinks]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-sync-symlinks
+:END:
+
+Enforce worktree symlinks for the worktree at PATH (default repo at point or current buffer). If invoked on a main worktree, syncs symlinks for all linked worktrees of that repository.
+
+*** [[file:../magit-dash-worktree.el::219][magit-dash-worktree-post-add-hook-function]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-post-add-hook-function
+:END:
+
+Hook function for ~magit-post-worktree-add-hook~ to enforce worktree symlinks. Creates configured symlinks in PATH from the main repository checkout.
+
+*** [[file:../magit-dash-worktree.el::238][magit-dash-worktree-add]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-add
+:END:
+
+Add a new worktree for the repository at point via magit.
+
+*** [[file:../magit-dash-worktree.el::249][magit-dash-worktree-delete]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-delete
+:END:
+
+Delete the worktree at point via magit. Signals ~user-error~ when the current row is not a worktree.
+
+*** [[file:../magit-dash-worktree.el::261][magit-dash-worktree-dispatch]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-worktree-dispatch
+:END:
+
+Create an agent worktree under DIR and dispatch a task. Prompts for task prompt, worktree short name, and target dispatch mode. Establishes configured symlinks for the new worktree.
+
+** magit-dash-submodules
+
+*** [[file:../magit-dash-submodules.el::29][magit-dash-repo-list]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-repo-list
+:END:
+
+List of ‘magit-dash-repo’ structs registered for dashboard display. Use ~magit-dash-register~ to add entries.
+
+*** [[file:../magit-dash-submodules.el::284][magit-dash-bump-submodules-run]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bump-submodules-run
+:END:
+
+: (fn PATH &key FETCH PULL PUSH DRY-RUN RECURSIVE ON-DONE)
+
+Bump submodule pointers in the repository tree containing /PATH/.
+
+Scans for submodules whose HEAD differs from the hash recorded by their parent (shown as ~+~ in ‘git submodule status’) and creates a single "bump: <names>" commit per parent repo.  Processing proceeds deepest-first so that after a child repo is committed, its parent picks up the new pointer on the next check. Only repos where ALL working-tree changes are submodule pointer updates are committed; repos with other modifications are skipped with a log message.
+
+Keyword arguments: :fetch     Run ‘git fetch --all’ in each repo before committing. :pull      Run ‘git pull --rebase’ in each repo before committing. :push      Push each repo after committing; children are pushed before parents. :dry-run   Log what would be committed without making any changes. :recursive Walk up to the topmost parent and process the full submodule tree. :on-done   Called with an alist of (name . status) when everything finishes.
+
+*** [[file:../magit-dash-submodules.el::323][magit-dash-bump-submodules-at-point]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bump-submodules-at-point
+:END:
+
+Bump submodule pointers for the repository at point in the dashboard.
+
+*** [[file:../magit-dash-submodules.el::336][magit-dash-bump-submodules-all]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bump-submodules-all
+:END:
+
+Bump submodule pointers across all registered dashboard repositories.
+
+*** [[file:../magit-dash-submodules.el::370][magit-dash-bump-submodules-menu]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-bump-submodules-menu
+:END:
+
+Bump submodule pointers across the repository tree. Commits each parent repo that has submodules with new commits, using a single "bump: <names>" commit per parent.  Processing order is deepest-first so children are committed and pushed before their parents record the new hashes.
+
+** magit-dash-timer
+
+*** [[file:../magit-dash-timer.el::17][magit-dash-sync-min-interval]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-sync-min-interval
+:END:
+
+Minimum seconds that must elapse between timer-triggered sync attempts. Applied globally across all registered timers.
+
+*** [[file:../magit-dash-timer.el::21][magit-dash-network-check-function]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-network-check-function
+:END:
+
+Function called with no arguments to test network availability. Return non-nil when syncing is safe, nil to skip. Override to implement custom connectivity detection.
+
+*** [[file:../magit-dash-timer.el::85][magit-dash-register-sync-timer]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-register-sync-timer
+:END:
+
+: (fn &key NAME REPOS (KIND 'interval) (INTERVAL 300) (IDLE-DELAY 120) (LAST-EDIT-THRESHOLD nil))
+
+Register a recurring auto-sync timer identified by /NAME/.
+
+Registering a second timer with the same /NAME/ cancels the first.
+
+/REPOS/ is a list of repo name strings to sync; nil syncs all repos that have at least one auto-sync step configured.
+
+KIND controls scheduling: ‘interval’  — fires every INTERVAL seconds (default 300). ‘idle’      — fires after IDLE-DELAY seconds of continuous idleness (default 120).
+
+LAST-EDIT-THRESHOLD (seconds) — with KIND ‘interval’, skip the sync unless Emacs has also been idle for at least this many seconds. Has no effect with KIND ‘idle’, where IDLE-DELAY already serves that purpose.
+
+Every firing is subject to the global guards: - ~magit-dash-network-check-function~ must return non-nil; - ~magit-dash-sync-min-interval~ seconds must have elapsed since the last timer-triggered sync attempt; - repos with no auto-sync steps are silently skipped.
+
+*** [[file:../magit-dash-timer.el::120][magit-dash-cancel-sync-timer]]
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cancel-sync-timer
+:END:
+
+Cancel the sync timer registered under NAME, if any.
+
+*** [[file:../magit-dash-timer.el::126][magit-dash-cancel-all-sync-timers]] :command:
+:PROPERTIES:
+:CUSTOM_ID: magit-dash-cancel-all-sync-timers
+:END:
+
+Cancel and remove all registered auto-sync timers.
+
+
+
+
+
+
+

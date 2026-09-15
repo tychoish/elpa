@@ -1,0 +1,42 @@
+#+TITLE: Prompt Composition and Enqueueing
+
+* Features
+
+- *Targeted and Unassigned Capture*: Compose prompts destined for a specific
+  agent shell (via [[file:api.org::#agent-shell-queue-capture][~agent-shell-queue-capture~]]) or park them in the =(unassigned)= queue to assign later (via [[file:api.org::#agent-shell-queue-capture-unassigned][~agent-shell-queue-capture-unassigned~]]).
+
+- *Context and Region Seeding*: Capture prompts seeded from the active region (via [[file:api.org::#agent-shell-queue-capture-from-region][~agent-shell-queue-capture-from-region~]]) or buffer context (via [[file:api.org::#agent-shell-queue-capture-from-context][~agent-shell-queue-capture-from-context~]]).
+
+- *Org-Mode Heading Refile*: Ingest task trees directly from Org files into the
+  prompt queue (via [[file:api.org::#agent-shell-queue-org-refile-from-heading][~agent-shell-queue-org-refile-from-heading~]]).
+
+- *Directory-Scoped Queues*: Queue items for directories without an active
+  shell (via [[file:api.org::#agent-shell-queue-add-directory][~agent-shell-queue-add-directory~]] or [[file:api.org::#agent-shell-queue-enqueue-directory][~agent-shell-queue-enqueue-directory~]]); shells spawn automatically upon dispatch.
+
+- *Alternative Execution Kinds*: Queue Emacs Lisp forms (via [[file:api.org::#agent-shell-queue-enqueue-emacs][~agent-shell-queue-enqueue-emacs~]]), eshell (via [[file:api.org::#agent-shell-queue-enqueue-shell-eshell][~agent-shell-queue-enqueue-shell-eshell~]]), or eat terminal commands (via [[file:api.org::#agent-shell-queue-enqueue-shell-eat][~agent-shell-queue-enqueue-shell-eat~]]).
+
+* Key Functions
+
+- [[file:api.org::#agent-shell-queue-enqueue][~agent-shell-queue-enqueue~]]: Queue a prompt for an active or specified shell buffer.
+- [[file:api.org::#agent-shell-queue-capture][~agent-shell-queue-capture~]]: Open an interactive markdown buffer for prompt composition.
+- [[file:api.org::#agent-shell-queue-capture-unassigned][~agent-shell-queue-capture-unassigned~]]: Open capture buffer targeting the unassigned queue.
+- [[file:api.org::#agent-shell-queue-capture-from-region][~agent-shell-queue-capture-from-region~]]: Pre-seed capture buffer from active region.
+- [[file:api.org::#agent-shell-queue-org-refile-from-heading][~agent-shell-queue-org-refile-from-heading~]]: Convert current Org heading into a queue item.
+- [[file:api.org::#agent-shell-queue-add-directory][~agent-shell-queue-add-directory~]] / [[file:api.org::#agent-shell-queue-enqueue-directory][~agent-shell-queue-enqueue-directory~]]: Target directory queues.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Programmatic enqueue with pre/post dispatch delays
+  (agent-shell-queue-enqueue
+   "Refactor auth middleware and add test cases"
+   (get-buffer "*agent-shell-backend*") nil)
+
+  ;; Directory queue: creates shell on dispatch automatically
+  (agent-shell-queue-add-directory
+   "Run project linting and formatchecks" "~/src/project-b/")
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for full documentation of these functions.

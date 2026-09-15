@@ -1,0 +1,44 @@
+#+TITLE: Interactive Sprite Dashboard
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=sprite-list.el= provides an interactive, tabulated-list dashboard buffer for observing and administering subordinate Emacs daemons. Running ~sprite-list~ opens a buffer displaying all active, idle, and decommissioned daemons along with their PIDs, uptime, memory, and connection status.
+
+* Keybindings in sprite-list-mode
+:PROPERTIES:
+:CUSTOM_ID: keybindings-in-sprite-list-mode
+:END:
+
+| Key   | Command                     | Description                                           |
+|-------+-----------------------------+-------------------------------------------------------|
+| ~c~   | ~sprite-list-create~        | Prompt for a name and spawn a new sprite daemon       |
+| ~d~   | ~sprite-list-decommission~  | Mark the sprite at point decommissioned and remove it |
+| ~r~   | ~sprite-list-restart~       | Terminate and respawn the sprite at point             |
+| ~s~   | ~sprite-list-stop~          | Stop the sprite daemon process                        |
+| ~f~   | ~sprite-list-open-frame~    | Open a GUI or terminal frame connected to the sprite  |
+| ~o~   | ~sprite-list-open-log~      | Open the IPC communication log buffer for this sprite |
+| ~i~   | ~sprite-list-info~          | Display detailed diagnostic metadata for this sprite  |
+| ~g~   | ~sprite-list-refresh~       | Re-scan filesystem state and refresh buffer contents  |
+| ~m~   | ~sprite-list-menu~          | Open transient action menu for the sprite at point    |
+
+* Key Functions and Options
+:PROPERTIES:
+:CUSTOM_ID: key-functions-and-options
+:END:
+
+- [[file:api.org::#sprite-list][~sprite-list~]]: Open the interactive sprite dashboard buffer.
+- [[file:api.org::#sprite-list-mode][~sprite-list-mode~]]: Major mode for the sprite list overview buffer.
+- [[file:api.org::#sprite-list-refresh][~sprite-list-refresh~]]: Refresh daemon statuses in the active list.
+- [[file:api.org::#sprite-list-info][~sprite-list-info~]]: Show detailed diagnostic metadata for daemon at point.
+- [[file:api.org::#sprite-list-mode-map][~sprite-list-mode-map~]]: Keymap bound in the sprite list buffer.
+
+* Reference
+:PROPERTIES:
+:CUSTOM_ID: reference
+:END:
+
+See the [[file:api.org][Sprite API Reference]] for all interactive commands.

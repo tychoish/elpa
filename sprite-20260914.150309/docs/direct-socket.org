@@ -1,0 +1,60 @@
+#+TITLE: Direct Socket Communication Protocol
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=sprite-direct.el= implements direct communication with Emacs daemon server sockets over Unix domain sockets or TCP. Rather than shelling out to an external =emacsclient= subprocess for every expression, =sprite-direct= opens network streams directly from Lisp, drastically reducing process creation overhead and latency for high-frequency IPC.
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+- *Subprocess Elimination*: Evaluates forms via native socket protocol with zero subprocess forks.
+- *Generator-Based Streaming*: Non-blocking generator receive loops process framed wire responses as they arrive.
+- *Peer UID and TCP Auth*: Automatically verifies local Unix domain socket permissions via peer UID (Emacs 29+) or auth cookies for TCP targets.
+- *Drop-in Call-and-Read*: ~sprite-direct-call-and-read~ acts as a fast replacement for =sprite--call-and-read=.
+
+* Key Functions and Options
+:PROPERTIES:
+:CUSTOM_ID: key-functions-and-options
+:END:
+
+- [[file:api.org::#sprite-direct-open][~sprite-direct-open~]]: Return a connection handle for a socket target.
+- [[file:api.org::#with-sprite-direct][~with-sprite-direct~]]: Bind a connection context to a target and evaluate a body.
+- [[file:api.org::#sprite-direct-eval-blocking][~sprite-direct-eval-blocking~]]: Synchronously evaluate an Elisp form over a direct socket connection and return the read value.
+- [[file:api.org::#sprite-direct-call-and-read][~sprite-direct-call-and-read~]]: Evaluate a form in a target daemon with optional custom timeout.
+- [[file:api.org::#sprite-direct-eval-non-blocking][~sprite-direct-eval-non-blocking~]]: Asynchronously evaluate a form over a socket, returning a promise.
+- [[file:api.org::#sprite-direct-blocking-timeout][~sprite-direct-blocking-timeout~]]: Default timeout in seconds for synchronous evaluations.
+- [[file:api.org::#sprite-direct-async-check-interval][~sprite-direct-async-check-interval~]]: Polling interval in seconds for async promise fulfillment callbacks.
+
+* Example
+:PROPERTIES:
+:CUSTOM_ID: example
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(require 'sprite-direct)
+
+;; Synchronous direct socket evaluation
+(let ((buffer-count (sprite-direct-call-and-read
+                     "tychoish.0.worker"
+                     '(length (buffer-list))
+                     :timeout 5)))
+  (message "Worker has %d open buffers" buffer-count))
+
+;; Reusing a direct connection across multiple calls
+(with-sprite-direct (conn "tychoish.0.worker")
+  (sprite-direct-eval-blocking conn '(setq gc-cons-threshold (* 64 1024 1024)))
+  (sprite-direct-eval-blocking conn '(garbage-collect)))
+#+END_SRC
+
+* Reference
+:PROPERTIES:
+:CUSTOM_ID: reference
+:END:
+
+See the [[file:api.org][Sprite API Reference]] for full technical documentation.

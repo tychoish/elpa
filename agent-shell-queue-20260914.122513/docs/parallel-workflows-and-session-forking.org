@@ -1,0 +1,28 @@
+#+TITLE: Parallel Workflows and Session Forking
+
+* Features
+
+- *Queue Forking*: Split a queue from a selected item into a new agent-shell session (via [[file:api.org::#agent-shell-queue-fork-session][~agent-shell-queue-fork-session~]] or [[file:api.org::#agent-shell-queue-buffer-fork][~agent-shell-queue-buffer-fork~]]).
+
+- *Git Worktree Isolation*: Automatically spin up an isolated Git worktree and branch for the forked session (configured in [[file:api.org::#agent-shell-queue-fork-session][~agent-shell-queue-fork-session~]] parameters).
+
+- *Pending-Fork Freezing*: Freeze queued items in place while composing preceding tasks (released via [[file:api.org::#agent-shell-queue-release-pending-fork][~agent-shell-queue-release-pending-fork~]]).
+
+* Key Functions
+
+- [[file:api.org::#agent-shell-queue-fork-session][~agent-shell-queue-fork-session~]]: Fork queued items into a newly spawned agent session.
+- [[file:api.org::#agent-shell-queue-buffer-fork][~agent-shell-queue-buffer-fork~]]: Interactively fork from the item at point.
+- [[file:api.org::#agent-shell-queue-insert-fork-before][~agent-shell-queue-insert-fork-before~]] / [[file:api.org::#agent-shell-queue-insert-fork-after][~agent-shell-queue-insert-fork-after~]]: Schedule an in-queue fork task.
+- [[file:api.org::#agent-shell-queue-release-pending-fork][~agent-shell-queue-release-pending-fork~]]: Release frozen fork items back to active dispatch.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Fork items starting at item "q0abcd" into a git worktree session
+  (agent-shell-queue-fork-session (current-buffer) "q0abcd"
+   '(:fork-mode fork :use-worktree t :worktree-branch "feature/experimental-branch"))
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for full documentation of these functions.

@@ -1,0 +1,45 @@
+#+TITLE: Worktrees and Submodule Management
+
+* Features
+
+- *Worktree Discovery & Display*: Automatically inspect and display active git worktrees
+  in the dashboard via [[file:api.org::#magit-dash-show-discovered-worktrees][~magit-dash-show-discovered-worktrees~]].
+- *Automated Environment Symlinking*: Share heavy developer dependencies (such as =node_modules=,
+  =.venv=, or secrets like =.env=) between main repositories and linked worktrees without disk duplication
+  via [[file:api.org::#magit-dash-worktree-global-symlinks][~magit-dash-worktree-global-symlinks~]] and [[file:api.org::#magit-dash-worktree-auto-symlink][~magit-dash-worktree-auto-symlink~]].
+- *Worktree Lifecycle Commands*: Interactively create ([[file:api.org::#magit-dash-worktree-add][~magit-dash-worktree-add~]]), remove
+  ([[file:api.org::#magit-dash-worktree-delete][~magit-dash-worktree-delete~]]), and resynchronize links ([[file:api.org::#magit-dash-worktree-sync-symlinks][~magit-dash-worktree-sync-symlinks~]]).
+- *Submodule Tracking & Fast Bumping*: Track dirty submodule revisions, status discrepancies,
+  and advance submodules to upstream HEAD with [[file:api.org::#magit-dash-bump-submodules-menu][~magit-dash-bump-submodules-menu~]] and
+  [[file:api.org::#magit-dash-bump-submodules-all][~magit-dash-bump-submodules-all~]].
+
+* Key Functions and Options
+
+- [[file:api.org::#magit-dash-worktree-add][~magit-dash-worktree-add~]]: Prompt to create a new git worktree with automatic symlink seeding.
+- [[file:api.org::#magit-dash-worktree-delete][~magit-dash-worktree-delete~]]: Select and prune an existing git worktree safely.
+- [[file:api.org::#magit-dash-worktree-sync-symlinks][~magit-dash-worktree-sync-symlinks~]]: Re-evaluate and link missing symlinks across worktrees.
+- [[file:api.org::#magit-dash-worktree-global-symlinks][~magit-dash-worktree-global-symlinks~]]: List of relative files and folders symlinked into new worktrees.
+- [[file:api.org::#magit-dash-worktree-auto-symlink][~magit-dash-worktree-auto-symlink~]]: Automatically link shared targets upon worktree creation.
+- [[file:api.org::#magit-dash-bump-submodules-menu][~magit-dash-bump-submodules-menu~]]: Interactive transient menu to inspect and advance submodules.
+- [[file:api.org::#magit-dash-bump-submodules-all][~magit-dash-bump-submodules-all~]]: Fast forward all registered submodules to latest upstream commits.
+- [[file:api.org::#magit-dash-show-discovered-worktrees][~magit-dash-show-discovered-worktrees~]]: Toggle worktree rows in the repository dashboard.
+- [[file:api.org::#magit-dash-show-discovered-submodules][~magit-dash-show-discovered-submodules~]]: Toggle submodule rows in the repository dashboard.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Customize shared symlinks across linked worktrees
+  (setq magit-dash-worktree-global-symlinks '("node_modules" ".venv" ".env" "target"))
+  (setq magit-dash-worktree-auto-symlink t)
+
+  ;; Add a new worktree
+  (magit-dash-worktree-add "~/src/project" "feature/refactor" "~/src/project-refactor")
+
+  ;; Synchronize symlinks across worktrees
+  (magit-dash-worktree-sync-symlinks)
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for complete module documentation for =magit-dash-worktree=
+and =magit-dash-submodules=.

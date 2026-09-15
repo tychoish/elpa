@@ -1,0 +1,49 @@
+#+TITLE: GitHub Integration (PRs, CI, and Logs)
+
+* Features
+
+- *Pull Request Dashboard*: Interactive tabulated view of authored and review-requested pull requests
+  via [[file:api.org::#magit-dash-gh-pr-dashboard-open][~magit-dash-gh-pr-dashboard-open~]].
+- *PR Thread and Comment Ingestion*: Download structured JSON reviews, unresolved comments, and metadata
+  into local plans directories with [[file:api.org::#magit-dash-gh-pr-fetch][~magit-dash-gh-pr-fetch~]].
+- *Merged Branch Pruning*: Clean up local git branches whose remote PRs have been merged or closed
+  using [[file:api.org::#magit-dash-gh-prune-merged-branches][~magit-dash-gh-prune-merged-branches~]].
+- *GitHub Actions CI Log Inspection*: Fetch full step logs, failed-step summaries, and metadata
+  using [[file:api.org::#magit-dash-gh-actions-fetch][~magit-dash-gh-actions-fetch~]] (viewed in ~magit-dash-gh-actions-log-mode~).
+- *Automated CI Diagnostics & Dispatch*: Dispatch automated fix prompts for failed runs directly
+  into AI agents using [[file:api.org::#magit-dash-ci-dispatch-fix-operation][~magit-dash-ci-dispatch-fix-operation~]].
+- *Multi-Account Authentication Switching*: Rapidly toggle between active GitHub CLI credentials
+  with [[file:api.org::#magit-dash-gh-auth-switch][~magit-dash-gh-auth-switch~]].
+- *Magit-Status Integration*: Display real-time CI status headers, current PR information, and authored
+  PR sections inside the native =magit-status= buffer via [[file:api.org::#magit-dash-status-setup][~magit-dash-status-setup~]].
+
+* Key Functions and Options
+
+- [[file:api.org::#magit-dash-gh-pr-dashboard-open][~magit-dash-gh-pr-dashboard-open~]]: Open the dedicated PR overview buffer.
+- [[file:api.org::#magit-dash-gh-pr-fetch][~magit-dash-gh-pr-fetch~]]: Download review comments and thread artifacts for a PR.
+- [[file:api.org::#magit-dash-gh-prune-merged-branches][~magit-dash-gh-prune-merged-branches~]]: Interactive menu to prune merged branches.
+- [[file:api.org::#magit-dash-gh-actions-fetch][~magit-dash-gh-actions-fetch~]]: Download and browse GitHub Actions run logs.
+- [[file:api.org::#magit-dash-gh-ci-open-last-run][~magit-dash-gh-ci-open-last-run~]]: Open the latest CI run in your web browser.
+- [[file:api.org::#magit-dash-ci-dispatch-fix-operation][~magit-dash-ci-dispatch-fix-operation~]]: Queue an automated agent prompt to repair CI failures.
+- [[file:api.org::#magit-dash-gh-auth-switch][~magit-dash-gh-auth-switch~]]: Switch active GitHub CLI profile.
+- [[file:api.org::#magit-dash-status-setup][~magit-dash-status-setup~]]: Hook CI/PR headers and dispatcher into Magit status.
+- [[file:api.org::#magit-dash-status-enable][~magit-dash-status-enable~]]: Custom option controlling Magit status section insertion.
+- [[file:api.org::#magit-dash-status-cache-ttl][~magit-dash-status-cache-ttl~]]: Cache TTL in seconds for GitHub status and PR queries.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Open PR dashboard
+  (magit-dash-gh-pr-dashboard-open)
+
+  ;; Fetch CI logs for current branch
+  (magit-dash-gh-actions-fetch)
+
+  ;; Prune local branches whose PRs are merged
+  (magit-dash-gh-prune-merged-branches)
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for complete module documentation for =magit-dash-gh=, =magit-dash-gh-pr=,
+=magit-dash-gh-ci=, and =magit-dash-status=.
