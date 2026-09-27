@@ -150,7 +150,7 @@ Does nothing when no CI status is cached for REPO.
 (fn REPO)")
 (autoload 'magit-dash-ci-dispatch-fix-operation "magit-dash-gh-ci"
 "Dispatch the `fix-ci' prompt library workflow for REPO.
-Invokes `agent-shell-prompt-dispatch' with `:repo' set to REPO's OWNER/NAME slug.
+Invokes `agent-shell-workflow-dispatch' with `:repo' set to REPO's OWNER/NAME slug.
 
 (fn REPO)")
 (register-definition-prefixes "magit-dash-gh-ci" '("magit-dash-"))

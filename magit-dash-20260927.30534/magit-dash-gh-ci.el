@@ -153,8 +153,8 @@ Does nothing when no CI status is cached for REPO."
 
 ;;; Fix-CI prompt dispatch
 
-(declare-function agent-shell-prompt-dispatch "agent-shell-prompt")
-(declare-function agent-shell-prompt-exec "agent-shell-prompt")
+(declare-function agent-shell-workflow-dispatch "agent-shell-workflow")
+(declare-function agent-shell-workflow-exec "agent-shell-workflow")
 
 (defun magit-dash-ci--repo-slug (repo)
   "Return OWNER/NAME slug for REPO struct or path."
@@ -175,15 +175,15 @@ Does nothing when no CI status is cached for REPO."
 
 (defun magit-dash-ci--dispatch-prompt (id args)
   "Dispatch prompt ID with ARGS plist.
-Calls `agent-shell-prompt-dispatch' (or fallback `agent-shell-prompt-exec') with `:args' ARGS."
-  (let ((fn (cond ((fboundp 'agent-shell-prompt-dispatch) #'agent-shell-prompt-dispatch)
-                  ((fboundp 'agent-shell-prompt-exec) #'agent-shell-prompt-exec)
-                  (t (user-error "magit-dash fix-CI requires the agent-shell-prompt library")))))
+Calls `agent-shell-workflow-dispatch' (or fallback `agent-shell-workflow-exec') with `:args' ARGS."
+  (let ((fn (cond ((fboundp 'agent-shell-workflow-dispatch) #'agent-shell-workflow-dispatch)
+                  ((fboundp 'agent-shell-workflow-exec) #'agent-shell-workflow-exec)
+                  (t (user-error "magit-dash fix-CI requires the agent-shell-workflow library")))))
     (funcall fn id :args args)))
 
 (defun magit-dash-ci--download-and-dispatch (repo run-id)
   "Dispatch the `fix-ci' prompt library workflow for REPO and RUN-ID.
-Requires `agent-shell-prompt-dispatch' to be available from the `agent-shell-prompt' library."
+Requires `agent-shell-workflow-dispatch' to be available from the `agent-shell-workflow' library."
   (let* ((path (magit-dash-repo-path repo))
          (slug (magit-dash-ci--repo-slug repo))
          (default-directory (file-name-as-directory path)))
@@ -192,7 +192,7 @@ Requires `agent-shell-prompt-dispatch' to be available from the `agent-shell-pro
 ;;;###autoload
 (defun magit-dash-ci-dispatch-fix-operation (repo)
   "Dispatch the `fix-ci' prompt library workflow for REPO.
-Invokes `agent-shell-prompt-dispatch' with `:repo' set to REPO's OWNER/NAME slug."
+Invokes `agent-shell-workflow-dispatch' with `:repo' set to REPO's OWNER/NAME slug."
   (unless (magit-dash-repo-include-ci repo)
     (user-error "magit-dash fix-CI: %s does not have CI enabled (:include-ci)"
                 (magit-dash-repo-name repo)))
