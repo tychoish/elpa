@@ -5,8 +5,6 @@
 
 ;;; Code:
 
-(add-to-list 'load-path (or (and load-file-name (directory-file-name (file-name-directory load-file-name))) (car load-path)))
-
 
 
 ;;; Generated autoloads from mcpkit.el
@@ -71,10 +69,12 @@ the final or penultimate step during initialization." t)
 (register-definition-prefixes "mcpkit" '("mcpkit-"))
 
 
-;;; Generated autoloads from mcpkit-ask.el
+;;; Generated autoloads from mcpkit-emacs.el
 
-(autoload 'mcpkit-register-ask-tools "mcpkit-ask"
-"Register `agent-shell-ask` tools on dedicated `agent-shell-ask` service.")
+(autoload 'mcpkit-emacs-register "mcpkit-emacs"
+"Ensure `mcpkit-emacs-service' is registered in `mcpkit-registry' and return it.
+Kept for backward compatibility." t)
+(register-definition-prefixes "mcpkit-emacs" '("mcpkit-emacs-"))
 
 ;;; End of scraped data
 

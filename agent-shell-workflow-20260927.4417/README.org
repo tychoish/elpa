@@ -1,0 +1,39 @@
+#+TITLE: agent-shell-workflow — Dynamic Workflow Composition & Template Library
+#+AUTHOR: tycho garen
+#+LANGUAGE: en
+
+* Overview
+
+~agent-shell-workflow~ provides dynamic workflow composition, template expansion,
+and dispatching for ~agent-shell~ sessions. It enables structured workflow
+authoring, file-based prompt templates, pre/post evaluation hooks, and ACR/Transient
+interactive selection menus.
+
+* Features
+
+- *Workflow Templates*: Configurable variable substitutions with regex extraction.
+- *Workflow Library*: Discoverable library of reusable workflow definitions (~agent-shell-workflow-library~).
+- *Interactive Menus*: Fast transient and completing-read selection menus (~agent-shell-workflow-menu~).
+- *Pluggable Dispatch*: Extensible target buffer resolution via ~agent-shell-workflow-dispatch-target-functions~ hook.
+- *Zero Queue Coupling*: Works independently or alongside ~agent-shell-queue~.
+
+* Installation
+
+** ELPAish
+#+BEGIN_SRC elisp
+(use-package agent-shell-workflow
+  :ensure t)
+#+END_SRC
+
+* Usage
+
+#+BEGIN_SRC elisp
+(require 'agent-shell-workflow)
+
+;; Select and insert/dispatch a workflow from library
+(agent-shell-workflow-select)
+#+END_SRC
+
+* License
+
+GPL-3.0-or-later

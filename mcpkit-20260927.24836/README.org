@@ -16,7 +16,7 @@ Key capabilities:
 - *Custom Serialization Pipelines*: Built-in MCP content packaging with hooks for customized input decoding and output encoding.
 - *Flexible Multi-Service Routing*: Host multiple logical MCP services on a shared HTTP server instance with configurable collision policies (=namespace= prefixing or strict =error= checking).
 - *Tabulated Interactive Dashboard*: Full-featured =tabulated-list-mode= interface (=mcpkit-list-services=) to inspect, start, stop, and monitor registered services.
-- *Human-in-the-Loop Extension*: Bundled =mcpkit-ask= companion library for exposing `agent-shell-ask` question queues directly to external AI agents.
+- *Extensible Ecosystem*: First-class support for domain packages (such as `hitl-mcp` and `denote-mcp`) registering dedicated services and tools.
 
 * Contents                                                       :TOC:
 :PROPERTIES:
@@ -35,7 +35,6 @@ Key capabilities:
   - [[#custom-argument-decoding-and-result-encoding][Custom Argument Decoding and Result Encoding]]
   - [[#starting-services-and-tool-collision-management][Starting Services and Tool Collision Management]]
   - [[#managing-services-via-tabulated-ui][Managing Services via Tabulated UI]]
-  - [[#human-in-the-loop-ask-queue-mcpkit-ask][Human-in-the-Loop Ask Queue (mcpkit-ask)]]
 - [[#api-reference][API Reference]]
   - [[#mcpkit-define-service][mcpkit-define-service]]
   - [[#mcpkit-register-service][mcpkit-register-service]]
@@ -142,9 +141,8 @@ Standard production configuration using ~use-package~:
   :custom
   (mcpkit-log-verbose nil) ; default: nil, non-nil logs full request/response payloads
   :config
-  ;; Optionally register agent-shell-ask human-in-the-loop queue tools
-  (when (require 'mcpkit-ask nil t)
-    (mcpkit-register-ask-tools)))
+  ;; Additional services can be started on demand
+  ;; (mcpkit-start-service 'emacs))
 #+END_SRC
 
 ** Key Options & Customization
@@ -245,7 +243,7 @@ Run =M-x mcpkit-list-services= to open the interactive services buffer:
 Service               Status      Port      Tools     Description
 -----------------------------------------------------------------------------------------
 math                  active      8765      2         Mathematical utility service
-agent-shell-ask       inactive    8766      5         Human-in-the-Loop Question Queue Service
+denote                inactive    8765      19        Denote Knowledge Base MCP Service
 #+END_EXAMPLE
 
 In this buffer, you can use:
@@ -253,25 +251,23 @@ In this buffer, you can use:
 - ~k~: Stop the service at point.
 - ~g~: Refresh the service list.
 
-** Human-in-the-Loop Ask Queue (mcpkit-ask)
+** Core Emacs Service (mcpkit-emacs)
 :PROPERTIES:
-:CUSTOM_ID: human-in-the-loop-ask-queue-mcpkit-ask
+:CUSTOM_ID: core-emacs-service-mcpkit-emacs
 :END:
 
-The optional ~mcpkit-ask~ package registers tools that expose Emacs `agent-shell-ask` question queues to external AI agents:
+The bundled ~mcpkit-emacs~ module exposes core GNU Emacs management, buffer inspection,
+and safe evaluation to AI agents:
 
 #+BEGIN_SRC emacs-lisp
-(require 'mcpkit-ask)
-(mcpkit-register-ask-tools)
-(mcpkit-start-service 'agent-shell-ask :port 8766)
+(require 'mcpkit-emacs)
+(mcpkit-start-service 'emacs :port 8765)
 #+END_SRC
 
 Exposed MCP tools:
-- ~ask_user~: Post a question and receive a unique question ID.
-- ~poll_question~: Poll question resolution and user answer.
-- ~get_next_question~: Iterative cursor-based question polling.
-- ~list_pending_questions~: Enumerate pending questions awaiting human response.
-- ~cancel_question~: Abort a pending question.
+- ~emacs_server_status~: Return Emacs process status, versions, uptime, and active mcpkit services.
+- ~emacs_get_buffer~: Inspect buffer metadata and contents by name or visited file path.
+- ~emacs_eval~: Safely evaluate an Emacs Lisp expression string with prompt suppression.
 
 * API Reference
 :PROPERTIES:
@@ -292,7 +288,6 @@ Exposed MCP tools:
 | [[#mcpkit-service-list-refresh][~mcpkit-service-list-refresh~]]                 | Command   | Refresh the contents of the service list buffer                |
 | [[#mcpkit-service-list-start-at-point][~mcpkit-service-list-start-at-point~]]   | Command   | Start the service under point in the list buffer               |
 | [[#mcpkit-service-list-stop-at-point][~mcpkit-service-list-stop-at-point~]]     | Command   | Stop the service under point in the list buffer                |
-| [[#mcpkit-register-ask-tools][~mcpkit-register-ask-tools~]]                     | Command   | Register agent-shell-ask human-in-the-loop tools               |
 | [[#mcpkit-log-verbose][~mcpkit-log-verbose~]]                                 | Option    | Custom variable controlling payload logging verbosity          |
 
 ** mcpkit-define-service
