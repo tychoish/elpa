@@ -1,0 +1,104 @@
+#+TITLE: GitHub Integration (PRs, CI, and Logs)
+
+* Features
+
+- *Pull Request Dashboard*: Interactive tabulated view of authored and review-requested pull requests
+  via [[file:api.org::#magit-dash-gh-pr-dashboard-open][~magit-dash-gh-pr-dashboard-open~]].
+- *PR Thread and Comment Ingestion*: Download structured JSON reviews, unresolved comments, and metadata
+  into local plans directories with [[file:api.org::#magit-dash-gh-pr-fetch][~magit-dash-gh-pr-fetch~]].
+- *Merged Branch Pruning*: Clean up local git branches whose remote PRs have been merged or closed
+  using [[file:api.org::#magit-dash-gh-prune-merged-branches][~magit-dash-gh-prune-merged-branches~]].
+- *GitHub Actions CI Log Inspection*: Fetch full step logs, failed-step summaries, and metadata
+  using [[file:api.org::#magit-dash-gh-actions-fetch][~magit-dash-gh-actions-fetch~]] (viewed in ~magit-dash-gh-actions-log-mode~).
+- *Automated CI Diagnostics & Dispatch*: Dispatch automated fix prompts for failed runs directly
+  into AI agents using [[file:api.org::#magit-dash-ci-dispatch-fix-operation][~magit-dash-ci-dispatch-fix-operation~]].
+- *Per-Repository Multi-Account GitHub Support*: Bind distinct GitHub accounts and host
+  endpoints to specific repositories using ~:gh-account~ and ~:gh-host~ in `magit-dash-register`.
+  Operations resolve account credentials via ~gh auth token~ and run with dynamically scoped
+  environment variables (~GH_TOKEN~ / ~GH_ENTERPRISE_TOKEN~), avoiding HTTP 403 errors without
+  mutating global ~gh auth switch~ state.
+- *Multi-Account Authentication Switching*: Rapidly toggle between active GitHub CLI credentials
+  with [[file:api.org::#magit-dash-gh-auth-switch][~magit-dash-gh-auth-switch~]].
+- *Magit-Status Integration*: Display real-time CI status headers, current PR information, and authored
+  PR sections inside the native =magit-status= buffer via [[file:api.org::#magit-dash-status-setup][~magit-dash-status-setup~]].
+
+* Key Functions and Options
+
+- [[file:api.org::#magit-dash-gh-pr-dashboard-open][~magit-dash-gh-pr-dashboard-open~]]: Open the dedicated PR overview buffer.
+- [[file:api.org::#magit-dash-gh-pr-fetch][~magit-dash-gh-pr-fetch~]]: Download review comments and thread artifacts for a PR.
+- [[file:api.org::#magit-dash-gh-prune-merged-branches][~magit-dash-gh-prune-merged-branches~]]: Interactive menu to prune merged branches.
+- [[file:api.org::#magit-dash-gh-actions-fetch][~magit-dash-gh-actions-fetch~]]: Download and browse GitHub Actions run logs.
+- [[file:api.org::#magit-dash-gh-ci-open-last-run][~magit-dash-gh-ci-open-last-run~]]: Open the latest CI run in your web browser.
+- [[file:api.org::#magit-dash-ci-dispatch-fix-operation][~magit-dash-ci-dispatch-fix-operation~]]: Queue an automated agent prompt to repair CI failures.
+- [[file:api.org::#magit-dash-gh-validate-repo-accounts][~magit-dash-gh-validate-repo-accounts~]]: Eagerly validate that ~gh auth token~ can resolve credentials for all registered repositories configured with ~:gh-account~.
+- ~magit-dash-multi-github-host~: Customizable default host for GitHub repositories (defaults to ~"github.com"~).
+- [[file:api.org::#magit-dash-gh-auth-switch][~magit-dash-gh-auth-switch~]]: Switch active GitHub CLI profile.
+- [[file:api.org::#magit-dash-status-setup][~magit-dash-status-setup~]]: Hook CI/PR headers and dispatcher into Magit status.
+- [[file:api.org::#magit-dash-status-enable][~magit-dash-status-enable~]]: Custom option controlling Magit status section insertion.
+- [[file:api.org::#magit-dash-status-cache-ttl][~magit-dash-status-cache-ttl~]]: Cache TTL in seconds for GitHub status and PR queries.
+
+* Per-Repository Multi-Account Configuration
+
+The =gh= CLI keeps a single active authenticated account per host, switched globally via ~gh auth switch~.
+When managing repositories across multiple GitHub accounts (such as personal projects and work organizations),
+dashboard operations targeting repositories belonging to another account can fail with HTTP 403 Forbidden.
+
+magit-dash solves this by supporting per-repo GitHub credentials:
+
+1. *Register repositories with account details*:
+   Pass ~:gh-account~ and optionally ~:gh-host~ to ~magit-dash-register~.
+   #+BEGIN_SRC emacs-lisp
+     ;; Personal repo on github.com
+     (magit-dash-register
+      :name "dotfiles"
+      :path "~/src/dotfiles"
+      :gh-account "my-personal-user")
+
+     ;; Work repo on GitHub Enterprise
+     (magit-dash-register
+      :name "backend-service"
+      :path "~/src/backend-service"
+      :gh-account "corp-user"
+      :gh-host "github.corp.example.com")
+   #+END_SRC
+
+2. *Customizable Default Host*:
+   If most of your repositories are on a private GitHub Enterprise server, set
+   ~magit-dash-multi-github-host~:
+   #+BEGIN_SRC emacs-lisp
+     (setq magit-dash-multi-github-host "github.corp.example.com")
+   #+END_SRC
+   When ~:gh-host~ is omitted, it falls back to ~magit-dash-multi-github-host~, or ~"github.com"~ if nil.
+
+3. *Process Credential Isolation*:
+   All GitHub CLI invocations for a repository automatically resolve the required token via
+   ~gh auth token -u USER -h HOST~ and bind ~GH_TOKEN~ (for ~github.com~) or ~GH_ENTERPRISE_TOKEN~
+   and ~GH_HOST~ (for Enterprise hosts) inside the child process environment.
+   Your global CLI active account state is never modified.
+
+4. *Eager Account Validation*:
+   To verify that authentication tokens are valid for all configured repository accounts
+   (for example, inside your Emacs initialization or interactively), run:
+   #+BEGIN_SRC emacs-lisp
+     (magit-dash-gh-validate-repo-accounts)
+   #+END_SRC
+   This checks each registered repository with a ~:gh-account~, warns on any authentication
+   failures, and returns an alist of ~(REPO-NAME . STATUS)~ where status is ~ok~ or the error message.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Open PR dashboard
+  (magit-dash-gh-pr-dashboard-open)
+
+  ;; Fetch CI logs for current branch
+  (magit-dash-gh-actions-fetch)
+
+  ;; Prune local branches whose PRs are merged
+  (magit-dash-gh-prune-merged-branches)
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for complete module documentation for =magit-dash-gh=, =magit-dash-gh-pr=,
+=magit-dash-gh-ci=, and =magit-dash-status=.

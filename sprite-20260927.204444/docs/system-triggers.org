@@ -1,0 +1,65 @@
+#+TITLE: Session Lifecycle and Sleep Hooks
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=sprite-system.el= provides unified lifecycle triggers for idle states and system sleep events. By centralizing idle detection and systemd-logind D-Bus signals, other packages and sprite background workers can register hooks without inventing their own polling loops or platform-specific power management monitors.
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+- *Idle Timers*: Fires registered hooks when the Emacs user has been idle for a customizable duration.
+- *systemd-logind D-Bus Integration*: Monitors Linux power management sleep and wake signals (=PrepareForSleep=), allowing daemon workers to pause heavy tasks before system suspension.
+- *Decoupled Design*: Separates system trigger mechanisms from package-specific reaction code.
+
+* Key Functions and Options
+:PROPERTIES:
+:CUSTOM_ID: key-functions-and-options
+:END:
+
+- [[file:api.org::#sprite-system-start-idle-timer][~sprite-system-start-idle-timer~]]: Start the global idle monitoring timer.
+- [[file:api.org::#sprite-system-stop-idle-timer][~sprite-system-stop-idle-timer~]]: Cancel the global idle monitoring timer.
+- [[file:api.org::#sprite-system-add-on-idle][~sprite-system-add-on-idle~]]: Register a callback to execute when user becomes idle.
+- [[file:api.org::#sprite-system-remove-on-idle][~sprite-system-remove-on-idle~]]: Remove a previously registered idle callback.
+- [[file:api.org::#sprite-system-idle-timeout][~sprite-system-idle-timeout~]]: Seconds of user inactivity before idle hooks trigger.
+- [[file:api.org::#sprite-system-start-logind-watch][~sprite-system-start-logind-watch~]]: Subscribe to systemd-logind sleep and resume D-Bus signals.
+- [[file:api.org::#sprite-system-stop-logind-watch][~sprite-system-stop-logind-watch~]]: Unsubscribe from systemd-logind sleep signals.
+- [[file:api.org::#sprite-system-before-sleep-hook][~sprite-system-before-sleep-hook~]]: Hook run immediately before the machine suspends.
+- [[file:api.org::#sprite-system-after-sleep-hook][~sprite-system-after-sleep-hook~]]: Hook run immediately after the machine resumes from sleep.
+
+* Example
+:PROPERTIES:
+:CUSTOM_ID: example
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(require 'sprite-system)
+
+;; Configure 15-minute idle threshold
+(setq sprite-system-idle-timeout 900)
+(sprite-system-start-idle-timer)
+
+;; Register background worker cleanup on idle
+(sprite-system-add-on-idle
+ (lambda ()
+   (message "User is idle; pausing non-essential sprite background workers")
+   (sprite-fleet-mapc '(garbage-collect) (sprite-resolve-list))))
+
+;; Pause daemons on laptop sleep
+(add-hook 'sprite-system-before-sleep-hook
+          (lambda ()
+            (message "System preparing for sleep; stopping active syncs")))
+(sprite-system-start-logind-watch)
+#+END_SRC
+
+* Reference
+:PROPERTIES:
+:CUSTOM_ID: reference
+:END:
+
+See the [[file:api.org][Sprite API Reference]] for all session hook options and functions.
