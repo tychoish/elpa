@@ -1,0 +1,135 @@
+#+title: denote-mcp: Denote Knowledge-Base Integration for MCP
+#+author: Sam Kleinman
+#+email: sam@tychoish.com
+#+language: en
+
+* Overview
+
+~denote-mcp~ exposes the [[https://protesilaos.com/emacs/denote/][Denote]] note-taking and knowledge-base ecosystem to autonomous AI agents (such as Claude Code, Antigravity, Cursor, and OpenCodeInterpreter) via the [[https://modelcontextprotocol.io][Model Context Protocol]] (MCP) using [[https://github.com/tychoish/mcpkit][mcpkit.el]].
+
+Instead of invoking shell-heavy =emacsclient --eval= subshells with brittle quoting and unpredictable minibuffer prompts, ~denote-mcp~ hosts a high-performance HTTP JSON-RPC 2.0 server directly within GNU Emacs. AI agents interact with notes with sub-10ms latency, structured JSON schemas, and headless execution safety.
+
+* Features
+
+- *19 Native MCP Tools*: Full lifecycle coverage spanning discovery, read, create, frontmatter synchronization, Folgezettel sequences, linking, dynamic block insertion, and backdating.
+- *Headless Safety*: All tools run inside ~denote-mcp-silently~, neutralizing interactive confirmation prompts (~y-or-n-p~, revert queries, coding system questions, and backlink guards).
+- *Folgezettel Hierarchy*: Deep integration with ~denote-sequence~ and ~denote-dash~ for subtree reparenting, gap verification, and collision-free grafting.
+- *Atomic Backdating*: ~denote_redate~ renames notes, updates frontmatter dates/identifiers, and safely rewrites all links across the knowledge base in a single call.
+- *Service Isolation*: Tools are registered on the ~denote~ service at load time, but no network listener is opened until explicitly requested via ~(mcpkit-start-service 'denote)~.
+
+* Tool Catalog
+
+** Search & Discovery
+- ~denote_find~: Find notes matching regex across title, keywords, identifier, and sequence signatures.
+- ~denote_find_by_slug~: Resolve note metadata and file path by title slug or identifier fragment.
+- ~denote_find_most_recent~: Find the most recently authored note matching a set of required tags.
+
+** Reading & Authoring
+- ~denote_get_metadata~: Retrieve structured metadata (id, sequence, title, tags, date, execution status).
+- ~denote_read_note~: Safely read note text content with UTF-8 encoding and optional byte truncation.
+- ~denote_create_note~: Create a new note with title, tags, sequence signature, and body.
+- ~denote_append_body~: Append text safely to an existing note.
+- ~denote_rename~: Update title and/or keywords, rewriting frontmatter and renaming file on disk.
+
+** Folgezettel Sequence Management
+- ~denote_seq_get_next~: Compute next available child or sibling sequence slot.
+- ~denote_seq_set~: Assign sequence signature to a note and rename file.
+- ~denote_seq_graft~: Batch reassign sequences ordered in reverse depth to prevent slot collisions.
+- ~denote_seq_reparent~: Reparent a note or subtree under a new parent note.
+- ~denote_seq_tree~: Return tree representation of notes organized by sequence hierarchy.
+- ~denote_verify~: Audit sequence continuity, check for missing parents, and verify frontmatter sync.
+
+** Linking & Org Integration
+- ~denote_link_string~: Construct canonical ~[[denote:ID][Title]]~ links without sequence signatures.
+- ~denote_insert_dblock~: Insert and update Org dynamic blocks (~denote-backlinks~, ~denote-links~, ~denote-sequence~).
+- ~denote_redate~: Backdate note identifier and rewrite all links repo-wide.
+
+** Maintenance & Lifecycle
+- ~denote_sync_frontmatter~: Synchronize frontmatter headers to match disk filenames.
+- ~denote_mark_executed~: Mark a plan note as executed (~:x:~ tag, remove ~done~, update status).
+
+* Installation
+
+Using ~use-package~ with ~package-vc~ (Emacs 29+):
+
+#+begin_src emacs-lisp
+(use-package denote-mcp
+  :vc (:fetcher github :repo "tychoish/denote-mcp")
+  :after (mcpkit denote)
+  :commands (denote-mcp-register))
+#+end_src
+
+* Emacs Configuration & Autostart
+
+Add to your Emacs initialization (e.g. =~/.emacs.d/init.el= or =~/.emacs.d/lisp/setup-core.el=):
+
+#+begin_src emacs-lisp
+(use-package mcpkit
+  :ensure t
+  :defer t
+  :commands (mcpkit-start-service mcpkit-stop-service tychoish/mcpkit-start-default-services)
+  :init
+  (defun tychoish/mcpkit-start-default-services ()
+    "Start default MCP services (denote, emacs) on port 8765."
+    (interactive)
+    (require 'denote-mcp)
+    (require 'mcpkit-emacs nil t)
+    (mcpkit-start-service 'denote)
+    (when (mcpkit-get-service 'emacs)
+      (mcpkit-start-service 'emacs)))
+
+  ;; Automatically start MCP services when running as a daemon
+  (when (daemonp)
+    (add-hook 'after-init-hook #'tychoish/mcpkit-start-default-services)))
+#+end_src
+
+* Client Configurations
+
+** Claude Code
+
+Add to =~/.claude/mcp.json= or project =.mcp.json=:
+
+#+begin_src json
+{
+  "mcpServers": {
+    "denote": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765"
+    }
+  }
+}
+#+end_src
+
+** Antigravity / JSON-RPC Agent Clients
+
+Add to your agent configuration:
+
+#+begin_src json
+{
+  "servers": {
+    "denote": {
+      "endpoint": "http://127.0.0.1:8765",
+      "transport": "http-jsonrpc",
+      "autoReconnect": true
+    }
+  }
+}
+#+end_src
+
+* Testing & Quality
+
+Run the test suite with:
+
+#+begin_src shell
+make test
+#+end_src
+
+Byte-compile without warnings:
+
+#+begin_src shell
+make compile
+#+end_src
+
+* License
+
+GPL-3.0-or-later
