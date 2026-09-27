@@ -38,8 +38,9 @@ Candidates are annotated with their category and one-line doc.  With
 CATEGORY non-nil, only workflows in that category are offered.
 
 (fn &optional CATEGORY)" t)
- (autoload 'agent-shell-workflow-dispatch-menu "agent-shell-workflow-menu" nil t)
+(autoload 'agent-shell-workflow-dispatch-menu "agent-shell-workflow-menu" nil t)
 (register-definition-prefixes "agent-shell-workflow-menu" '("agent-shell-workflow--candidates"))
+
 
 ;;; End of scraped data
 
