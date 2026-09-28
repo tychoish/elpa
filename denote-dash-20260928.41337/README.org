@@ -1,0 +1,102 @@
+#+title: denote-dash
+#+subtitle: Unified tabulated-list browser, saved bookmark views, and dispatch menu for Denote
+#+author: sam kleinman
+#+language: en
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=denote-dash= provides an interactive tabulated-list dashboard and dispatch
+system for [[https://github.com/protesilaos/denote][Denote]] note collections.
+
+It features composable boolean querying, bookmarkable saved views, sequence
+tree folding, frontmatter-aware metadata editing, and a comprehensive Transient
+dispatch menu that dynamically integrates with [[https://github.com/tychoish/denote-tree][denote-tree]], [[https://github.com/tychoish/denote-convert][denote-convert]],
+=denote-review=, and =denote-explore=.
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+- *Tabulated List Browser*: High-performance buffer listing notes with customizable
+  columns (sequence, fold toggles, title, keywords, modified timestamp, ID,
+  directory, git status, review status).
+- *Boolean Query Engine*: Filter notes by keyword, text regex, sequence subtree,
+  or complex boolean expressions (=and=, =or=, =not=).
+- *Bookmark Views*: Save and restore named dashboard configurations (filters,
+  visible columns, sequence narrowing, and sort orders).
+- *Dynamic Dispatch*: Unified Transient menu (=denote-dash-dispatch=) that probes
+  installed extensions to surface sequence refactoring, format conversion,
+  and review commands.
+- *Sequence Synchronization*: Automatic live dashboard buffer refreshes whenever
+  underlying sequence trees or notes are modified by =denote-tree= or =denote-convert=.
+
+* Requirements
+:PROPERTIES:
+:CUSTOM_ID: requirements
+:END:
+
+- GNU Emacs 29.1 or later
+- =denote= 3.0.0 or later
+- =transient= 0.4.0 or later
+- =annotated-completing-read= 0.1.0 or later
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+=denote-dash= is available via [[https://github.com/tychoish/elpaish][elpaish]]:
+
+#+begin_src emacs-lisp
+(use-package denote-dash
+  :after denote
+  :commands (denote-dash denote-dash-dispatch)
+  :bind (("C-c d d" . denote-dash)
+         ("C-c d ?" . denote-dash-dispatch)))
+#+end_src
+
+* Interactive Commands
+:PROPERTIES:
+:CUSTOM_ID: commands
+:END:
+
+| Command                                     | Key in Dash  | Description                                              |
+|---------------------------------------------+--------------+----------------------------------------------------------|
+| =denote-dash=                               |              | Open or focus the Denote dashboard buffer                |
+| =denote-dash-dispatch=                      | ~?~          | Open the unified Denote dispatch menu                    |
+| =denote-dash-refresh=                       | ~g~          | Refresh dashboard contents                               |
+| =denote-dash-filter-expression=             | ~e~          | Prompt for a boolean filter expression                   |
+| =denote-dash-clear-filter=                  | ~C-f~        | Clear active filter                                      |
+| =denote-dash-column-transient=              | ~c~          | Toggle columns and column display options                |
+| =denote-dash-cycle-fold=                    | ~TAB~        | Toggle folding of sequence children at point             |
+| =denote-dash-global-cycle=                  | ~S-TAB~      | Cycle sequence folding depth globally                    |
+| =denote-dash-expand-all=                    | ~M-TAB~      | Expand all sequence rows                                 |
+| =denote-dash-collapse-all=                  | ~z~          | Collapse all sequence rows                               |
+| =denote-dash-rename-file=                   |              | Rename note with annotated prompts                       |
+| =denote-dash-retag-file=                    |              | Retag note with annotated prompts                        |
+| =denote-dash-save-view=                     | ~b s~        | Save current dashboard state as a named view             |
+| =denote-dash-jump-view=                     | ~b j~        | Restore a saved dashboard view                           |
+| =denote-dash-close-all-notes=               |              | Save and close open Denote buffers                       |
+
+* Customization
+:PROPERTIES:
+:CUSTOM_ID: customization
+:END:
+
+| Variable                              | Default             | Description                                          |
+|---------------------------------------+---------------------+------------------------------------------------------|
+| =denote-dash-columns=                 | ~'(sequence title)~ | Default columns enabled in dashboard                 |
+| =denote-dash-default-filter=          | =nil=               | Initial filter expression applied on dashboard open  |
+| =denote-dash-title-source=            | ='front-matter=     | Title source: ='front-matter= or ='filename=        |
+| =denote-dash-saved-views=             | =nil=               | Alist of user-saved dashboard views                  |
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See [[file:LICENSE][LICENSE]] for details.

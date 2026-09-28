@@ -1,0 +1,126 @@
+#+title: denote-tree
+#+subtitle: Structural sequence tree manipulation, linting, and refactoring for Denote
+#+author: sam kleinman
+#+language: en
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=denote-tree= is a standalone extension for [[https://github.com/protesilaos/denote][Denote]] and [[https://github.com/protesilaos/denote-sequence][denote-sequence]]
+that provides structural operations, refactoring workflows, and integrity
+tooling for Luhmann-style sequence trees (folgezettel).
+
+It decouples structural sequence operations from dashboard/presentation logic,
+enabling tree refactoring directly from visited note buffers, Dired, and
+=denote-sequence-hierarchy-mode= buffers.
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+- *Sequence Linting & Diagnostics*: Scan notes for mismatches between filename
+  signatures and frontmatter, with Flymake and Flycheck diagnostic backends.
+- *Gap Compaction (Repacking)*: Re-index child sequences sequentially (1, 2, 3...
+  or a, b, c...) to eliminate gaps, complete with a visual diff preview.
+- *Sequence Swapping*: Swap a note with its parent or adjacent siblings,
+  recursively moving entire descendant subtrees.
+- *Recursive Reparenting & Renumbering*: Relocate subtrees to new sequence
+  positions with automatic alphanumeric level-alternation rewriting.
+- *Sequence Insertion*: Insert a new sequence note at any position, shifting
+  subsequent siblings downward automatically.
+- *Bulk Subtree Retagging*: Add, remove, or replace keywords across all notes
+  in a sequence subtree.
+- *Hierarchy Fold Management*: Smart initial folding by depth or subtree size,
+  interactive per-sequence fold persistence, and automatic fold remapping
+  across renames.
+- *Lifecycle Hooks*: Notification hooks for cache invalidation and dashboard
+  synchronization.
+
+* Requirements
+:PROPERTIES:
+:CUSTOM_ID: requirements
+:END:
+
+- GNU Emacs 29.1 or later
+- =denote= 3.0.0 or later
+- =denote-sequence= 0.3.0 or later
+- =annotated-completing-read= 0.1.0 or later
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+=denote-tree= is available via [[https://github.com/tychoish/elpaish][elpaish]]:
+
+#+begin_src emacs-lisp
+(use-package denote-tree
+  :after (denote denote-sequence)
+  :commands (denote-tree-lint-sequences
+             denote-tree-fix-sequence-frontmatter
+             denote-tree-repack-children
+             denote-tree-swap-with-parent
+             denote-tree-swap-with-previous
+             denote-tree-swap-with-next
+             denote-tree-reparent
+             denote-tree-reparent-recursive
+             denote-tree-renumber-recursive
+             denote-tree-insert-sequence-note
+             denote-tree-retag-sequence))
+#+end_src
+
+* Interactive Commands
+:PROPERTIES:
+:CUSTOM_ID: commands
+:END:
+
+| Command                                     | Key in Hierarchy | Description                                            |
+|---------------------------------------------+------------------+--------------------------------------------------------|
+| =denote-tree-lint-sequences=                |                  | Display sequence signature mismatches buffer           |
+| =denote-tree-fix-sequence-frontmatter=      | ~h~              | Update frontmatter signature to match filename         |
+| =denote-tree-fix-all-sequence-frontmatter=  | ~C-l~            | Fix frontmatter across all mismatched notes            |
+| =denote-tree-repack-children=               | ~r~, ~C-r~       | Compact numbering gaps among children of sequence      |
+| =denote-tree-swap-with-parent=              | ~M-r~            | Swap sequence note position with its parent            |
+| =denote-tree-swap-with-previous=            | ~M-p~            | Swap sequence subtree with previous sibling            |
+| =denote-tree-swap-with-next=                | ~M-n~            | Swap sequence subtree with next sibling                |
+| =denote-tree-reparent=                      | ~m~              | Move note to a new parent (optionally recursive)       |
+| =denote-tree-renumber-recursive=            | ~u~              | Move note and all descendants to a new sequence ID     |
+| =denote-tree-insert-sequence-note=          |                  | Create note at sequence ID and shift siblings          |
+| =denote-tree-retag-sequence=                | ~k~              | Add, remove, or replace keywords across subtree        |
+| =denote-tree-hierarchy-toggle-fold-sequence=| ~z~              | Toggle persistent fold for sequence at point           |
+| =denote-tree-hierarchy-clear-fold-sequences=|                  | Clear all persisted sequence folds                     |
+| =denote-tree-setup-flymake=                 |                  | Enable Flymake diagnostic backend in current buffer    |
+
+* Customization
+:PROPERTIES:
+:CUSTOM_ID: customization
+:END:
+
+| Variable                                  | Default | Description                                              |
+|-------------------------------------------+---------+----------------------------------------------------------|
+| =denote-tree-hierarchy-initial-fold-depth=| =nil=   | Fold depth on hierarchy open (integer or nil)            |
+| =denote-tree-hierarchy-auto-fold-min-size=| =nil=   | Auto-fold trees with note count <= this value            |
+| =denote-tree-hierarchy-auto-fold-max-size=| =nil=   | Auto-fold trees with note count > this value             |
+| =denote-tree-hierarchy-fold-sequences=    | =nil=   | Persisted list of sequence IDs to keep folded            |
+
+* Hooks
+:PROPERTIES:
+:CUSTOM_ID: hooks
+:END:
+
+| Hook Variable                           | Arguments                         | Trigger                               |
+|-----------------------------------------+-----------------------------------+---------------------------------------|
+| =denote-tree-after-rename-functions=    | ~(old-file new-file old-sig new-sig)~ | After single sequence note rename     |
+| =denote-tree-after-reseq-functions=     | ~(plan)~                          | After batch renumbering or reparenting|
+| =denote-tree-after-swap-functions=      | ~(seq-a seq-b files-a files-b)~   | After sibling or parent swap          |
+| =denote-tree-after-lint-fix-functions=  | ~(files)~                         | After fixing frontmatter signatures   |
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See [[file:LICENSE][LICENSE]] for details.

@@ -1,0 +1,78 @@
+#+title: denote-convert
+#+subtitle: File format translation and Org datetree importer for Denote
+#+author: sam kleinman
+#+language: en
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=denote-convert= provides note file format translation and Org datetree journal
+importing for [[https://github.com/protesilaos/denote][Denote]].
+
+It operates standalone without any dependency on sequence trees or dashboard
+browsers, enabling note migrations from Dired, visited note buffers, or batch
+scripts.
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+- *File Format Conversion*: Convert notes between Org, Markdown YAML, Markdown
+  TOML, and Plain Text formats. Translates the frontmatter block into the target
+  syntax and renames the file with the proper extension while preserving the body.
+- *Org Datetree Importer*: Extract journal or diary entries organized under
+  Org datetrees (e.g. created by =org-journal= or Org capture datetrees) into
+  individual, atomic Denote notes with date ranges, titles, tags, and bodies.
+- *Lifecycle Hooks*: Notification hooks run upon note conversion.
+
+* Requirements
+:PROPERTIES:
+:CUSTOM_ID: requirements
+:END:
+
+- GNU Emacs 29.1 or later
+- =denote= 3.0.0 or later
+- =org= 9.6 or later
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+=denote-convert= is available via [[https://github.com/tychoish/elpaish][elpaish]]:
+
+#+begin_src emacs-lisp
+(use-package denote-convert
+  :after denote
+  :commands (denote-convert-file-type
+             denote-convert-import-from-datetree))
+#+end_src
+
+* Interactive Commands
+:PROPERTIES:
+:CUSTOM_ID: commands
+:END:
+
+| Command                              | Description                                                   |
+|--------------------------------------+---------------------------------------------------------------|
+| =denote-convert-file-type=           | Migrate note frontmatter syntax and file extension            |
+| =denote-convert-import-from-datetree=| Import Org datetree entries as individual Denote notes        |
+
+* Hooks
+:PROPERTIES:
+:CUSTOM_ID: hooks
+:END:
+
+| Hook Variable                             | Arguments                               | Trigger                     |
+|-------------------------------------------+-----------------------------------------+-----------------------------|
+| =denote-convert-after-conversion-functions=| ~(old-file new-file old-type new-type)~ | After note format conversion|
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See [[file:LICENSE][LICENSE]] for details.
