@@ -20,6 +20,7 @@
 ;;; Code:
 
 (require 'sprite)
+(require 'sprite-daemon)
 
 ;;;; Parent-side primitives
 

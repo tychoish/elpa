@@ -30,6 +30,7 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'sprite)
+(require 'sprite-daemon)
 (require 'sprite-future)
 
 (defun sprite-fleet--make-item-form (fn-or-form item)

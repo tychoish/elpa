@@ -35,6 +35,7 @@
 (require 'tabulated-list)
 (require 'transient)
 (require 'sprite)
+(require 'sprite-daemon)
 
 (declare-function annotated-completing-read "annotated-completing-read")
 

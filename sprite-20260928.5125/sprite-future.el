@@ -41,6 +41,7 @@
 (require 'subr-x)
 (require 'generator)
 (require 'sprite)
+(require 'sprite-daemon)
 (require 'sprite-direct)
 
 ;;;; Struct

@@ -11,7 +11,21 @@
 
 ;;; Generated autoloads from sprite.el
 
-(autoload 'sprite-create "sprite"
+(autoload 'sprite-state-path "sprite"
+"Return full state-directory path for NAME, scoped to host and instance.
+
+(fn NAME)")
+(register-definition-prefixes "sprite" '("sprite-"))
+
+
+;;; Generated autoloads from sprite-async.el
+
+(register-definition-prefixes "sprite-async" '("sprite-async-"))
+
+
+;;; Generated autoloads from sprite-daemon.el
+
+(autoload 'sprite-create "sprite-daemon"
 "Spawn a new sprite daemon with UNIQUE-NAME under the current instance.
 The current instance's ID becomes the parent.
 Returns the new sprite struct.
@@ -19,23 +33,23 @@ Returns the new sprite struct.
 Times out after TIMEOUT seconds.
 
 (fn UNIQUE-NAME &key TIMEOUT)" t)
-(autoload 'sprite-open-frame "sprite"
+(autoload 'sprite-open-frame "sprite-daemon"
 "Open a new Emacs frame connected to SPRITE.
 When called interactively, select from accessible sprites via
 `annotated-completing-read' (when available), annotated with status and
 uptime.
 
 (fn SPRITE)" t)
-(autoload 'sprite-get-next "sprite"
+(autoload 'sprite-get-next "sprite-daemon"
 "Return the struct of the next available sprite, or nil.
  \"Available\" means running and not recently contacted.")
-(autoload 'sprite-get-or-create-next "sprite"
+(autoload 'sprite-get-or-create-next "sprite-daemon"
 "Return the next available sprite, creating one if none are free.
  Times out after TIMEOUT seconds.  Signals `user-error' if
  `sprite-max-count' would be exceeded.
 
 (fn &key TIMEOUT)")
-(autoload 'sprite-get-or-create-fleet "sprite"
+(autoload 'sprite-get-or-create-fleet "sprite-daemon"
 "Return a list of up to COUNT available or newly created sprite structs.
  Reuses available sprites first, spawning new ones up to `sprite-max-count'
  or COUNT.
@@ -48,8 +62,8 @@ for a description of this minor mode.
 Setting this variable directly does not take effect;
 either customize it (see the info node `Easy Customization')
 or call the function `sprite-mode'.")
-(custom-autoload 'sprite-mode "sprite" nil)
-(autoload 'sprite-mode "sprite"
+(custom-autoload 'sprite-mode "sprite-daemon" nil)
+(autoload 'sprite-mode "sprite-daemon"
 "Global minor mode for managing sprite (subordinate Emacs daemon) state.
 
 Enabling wires the registry into `savehist' persistence and scans the
@@ -74,12 +88,7 @@ disabled.
 \\{sprite-mode-map}
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "sprite" '("sprite-"))
-
-
-;;; Generated autoloads from sprite-async.el
-
-(register-definition-prefixes "sprite-async" '("sprite-async-"))
+(register-definition-prefixes "sprite-daemon" '("sprite-"))
 
 
 ;;; Generated autoloads from sprite-direct.el
