@@ -537,6 +537,73 @@ If no active services remain, close the underlying `ws-server' socket."
         (setq mcpkit--active-server nil)))
     svc))
 
+;;;###autoload
+(defun mcpkit-active-port ()
+  "Return the port the shared MCP server is listening on, or nil if not running.
+
+Callers never choose the port directly (see `mcpkit-start-service'); this is
+the way to discover it after the fact, e.g. for external bootstrapping via
+`emacsclient --eval \"(mcpkit-active-port)\"'."
+  (interactive)
+  (and mcpkit--active-server
+       (plist-get (process-contact (ws-process mcpkit--active-server) t) :service)))
+
+;;; Autostart
+
+(defvar mcpkit-autostart-alist nil
+  "Alist of (NAME-OR-SERVICE PREDICATE PORT ON-COLLISION) registrations.
+Populated by `mcpkit-register-autostart' and consulted once by
+`mcpkit-run-autostart'.")
+
+(defvar mcpkit--autostart-ran nil
+  "Non-nil once `mcpkit-run-autostart' has already run this session.
+Guards against running twice: once from `after-init-hook' and once from
+loading mcpkit itself, in case mcpkit is loaded lazily after init has
+already completed.")
+
+;;;###autoload
+(cl-defun mcpkit-register-autostart (name-or-service &key predicate port on-collision)
+  "Register NAME-OR-SERVICE to start automatically at startup.
+
+PREDICATE is a function of no arguments consulted once, when autostart runs;
+the service starts iff PREDICATE is nil or returns non-nil. This lets callers
+gate autostart on arbitrary local policy (daemon name, hostname, etc.)
+without mcpkit needing to know about it.
+
+PORT and ON-COLLISION are forwarded to `mcpkit-start-service'. PORT defaults
+to `t' (a fresh, OS-assigned port) rather than any service's configured
+default, so that autostarted services never collide with each other or with
+a fixed well-known port.
+
+Registering is safe to call from `:init' / top-level configuration before
+mcpkit has loaded; it only records the registration for `mcpkit-run-autostart'
+to consult later."
+  (setf (alist-get name-or-service mcpkit-autostart-alist nil nil #'equal)
+        (list predicate port on-collision)))
+
+;;;###autoload
+(defun mcpkit-run-autostart ()
+  "Start every service registered via `mcpkit-register-autostart'.
+A registered service starts only when its predicate is nil or returns
+non-nil. Runs at most once per Emacs session; safe to call more than once."
+  (interactive)
+  (unless mcpkit--autostart-ran
+    (setq mcpkit--autostart-ran t)
+    (seq-do
+     (lambda (entry)
+       (seq-let (name predicate port on-collision) entry
+         (when (or (null predicate) (funcall predicate))
+           (mcpkit-start-service name :port (or port t) :on-collision (or on-collision 'namespace)))))
+     mcpkit-autostart-alist)))
+
+(add-hook 'after-init-hook #'mcpkit-run-autostart)
+
+;; If mcpkit is loaded after `after-init-hook' has already fired (e.g. loaded
+;; lazily via an autoloaded command well after startup), that hook will never
+;; run again, so run autostart immediately instead.
+(when after-init-time
+  (mcpkit-run-autostart))
+
 ;;; Tabulated List Mode
 
 (defun mcpkit--service-list-entries ()

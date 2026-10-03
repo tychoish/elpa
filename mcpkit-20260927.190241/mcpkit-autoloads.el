@@ -52,6 +52,34 @@ ON-COLLISION specifies how tool name collisions are handled:
 If no active services remain, close the underlying `ws-server' socket.
 
 (fn NAME-OR-SERVICE)" t)
+(autoload 'mcpkit-active-port "mcpkit"
+"Return the port the shared MCP server is listening on, or nil if not running.
+
+Callers never choose the port directly (see `mcpkit-start-service'); this is
+the way to discover it after the fact, e.g. for external bootstrapping via
+`emacsclient --eval \"(mcpkit-active-port)\"'." t)
+(autoload 'mcpkit-register-autostart "mcpkit"
+"Register NAME-OR-SERVICE to start automatically at startup.
+
+PREDICATE is a function of no arguments consulted once, when autostart runs;
+the service starts iff PREDICATE is nil or returns non-nil. This lets callers
+gate autostart on arbitrary local policy (daemon name, hostname, etc.)
+without mcpkit needing to know about it.
+
+PORT and ON-COLLISION are forwarded to `mcpkit-start-service'. PORT defaults
+to `t' (a fresh, OS-assigned port) rather than any service's configured
+default, so that autostarted services never collide with each other or with
+a fixed well-known port.
+
+Registering is safe to call from `:init' / top-level configuration before
+mcpkit has loaded; it only records the registration for `mcpkit-run-autostart'
+to consult later.
+
+(fn NAME-OR-SERVICE &key PREDICATE PORT ON-COLLISION)")
+(autoload 'mcpkit-run-autostart "mcpkit"
+"Start every service registered via `mcpkit-register-autostart'.
+A registered service starts only when its predicate is nil or returns
+non-nil. Runs at most once per Emacs session; safe to call more than once." t)
 (autoload 'mcpkit-service-list-mode "mcpkit"
 "Major mode for browsing and managing MCP services.
 
