@@ -259,5 +259,32 @@ on, rather than reinventing an HTTP layer."
     (ignore-errors (ws-stop mcpkit-proxy--server))
     (setq mcpkit-proxy--server nil)))
 
+;;; Sprite Registry Integration
+
+;;;###autoload
+(defun mcpkit-proxy-register-sprite (sprite-name &optional port)
+  "Register SPRITE-NAME with `mcpkit-proxy'.
+If PORT is nil, attempts to discover the active port by evaluating
+`(mcpkit-active-port)' in the sprite via `sprite-direct' or `sprite'."
+  (let ((p (or port
+               (when (require 'sprite-direct nil t)
+                 (ignore-errors
+                   (let ((res (sprite-direct-eval-blocking sprite-name '(mcpkit-active-port))))
+                     (if (stringp res) (read res) res))))
+               (when (fboundp 'sprite--call-and-read)
+                 (ignore-errors
+                   (sprite--call-and-read sprite-name '(mcpkit-active-port)))))))
+    (if (and (integerp p) (> p 0))
+        (progn
+          (mcpkit-proxy-register-route (format "%s" sprite-name) p)
+          p)
+      (message "mcpkit-proxy: could not determine mcpkit port for sprite %s" sprite-name)
+      nil)))
+
+;;;###autoload
+(defun mcpkit-proxy-unregister-sprite (sprite-name)
+  "Unregister SPRITE-NAME from `mcpkit-proxy'."
+  (mcpkit-proxy-unregister-route (format "%s" sprite-name)))
+
 (provide 'mcpkit-proxy)
 ;;; mcpkit-proxy.el ends here

@@ -140,7 +140,18 @@ on, rather than reinventing an HTTP layer.
 (fn &optional PORT)" t)
 (autoload 'mcpkit-proxy-stop "mcpkit-proxy"
 "Stop the mcpkit-proxy HTTP gateway, if running." t)
+(autoload 'mcpkit-proxy-register-sprite "mcpkit-proxy"
+"Register SPRITE-NAME with `mcpkit-proxy'.
+If PORT is nil, attempts to discover the active port by evaluating
+`(mcpkit-active-port)' in the sprite via `sprite-direct' or `sprite'.
+
+(fn SPRITE-NAME &optional PORT)")
+(autoload 'mcpkit-proxy-unregister-sprite "mcpkit-proxy"
+"Unregister SPRITE-NAME from `mcpkit-proxy'.
+
+(fn SPRITE-NAME)")
 (register-definition-prefixes "mcpkit-proxy" '("mcpkit-proxy-"))
+
 
 ;;; End of scraped data
 
