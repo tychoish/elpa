@@ -59,6 +59,34 @@
                                                  (symbol-name (mcpkit-service-name (car entry))))
                                                (bound-and-true-p mcpkit--active-services)))))
 
+;; 1b. emacs_whoami
+(mcpkit-register-tool 'emacs_whoami 'emacs
+  :description "Identify the Emacs instance: daemon name, process ID (PID), active MCP port, user, and active services."
+  :input-schema '(:type "object" :properties ())
+  (ignore args)
+  (list :daemon_name (or (bound-and-true-p server-name)
+                         (and (fboundp 'daemonp) (daemonp))
+                         "standalone")
+        :pid (emacs-pid)
+        :active_port (or (and (fboundp 'mcpkit-active-port) (mcpkit-active-port)) :json-null)
+        :user (user-login-name)
+        :system_type (symbol-name system-type)
+        :emacs_version emacs-version
+        :active_services (vconcat (seq-map (lambda (entry)
+                                             (symbol-name (mcpkit-service-name (car entry))))
+                                           (bound-and-true-p mcpkit--active-services)))))
+
+;; 1c. emacs_proxy_routes
+(mcpkit-register-tool 'emacs_proxy_routes 'emacs
+  :description "List all daemon and sprite routes registered with mcpkit-proxy."
+  :input-schema '(:type "object" :properties ())
+  (ignore args)
+  (if (fboundp 'mcpkit-proxy-list-routes)
+      (let ((routes (mcpkit-proxy-list-routes)))
+        (list :count (length routes)
+              :routes (vconcat routes)))
+    (list :count 0 :routes [] :error "mcpkit-proxy not loaded")))
+
 ;; 2. emacs_get_buffer
 (mcpkit-register-tool 'emacs_get_buffer 'emacs
   :description "Inspect buffer metadata and contents by name or visited file path."

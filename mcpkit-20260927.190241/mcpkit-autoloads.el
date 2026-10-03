@@ -122,6 +122,8 @@ Kept for backward compatibility." t)
 "Remove the routing rule for TARGET-ID.
 
 (fn TARGET-ID)")
+(autoload 'mcpkit-proxy-list-routes "mcpkit-proxy"
+"Return a list of plists `(:target_id ID :port PORT)' for all registered routes.")
 (autoload 'mcpkit-proxy-handler "mcpkit-proxy"
 "HTTP request handler for the mcpkit-proxy gateway.
 REQUEST is a `ws-request' instance.  Resolves a target-id from the

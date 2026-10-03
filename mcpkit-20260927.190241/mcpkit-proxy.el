@@ -91,6 +91,15 @@ nil)', so real parsed headers commonly carry a leading nil cell.")
   "Return the backend port registered for TARGET-ID, or nil."
   (and target-id (gethash target-id mcpkit-proxy--routes)))
 
+;;;###autoload
+(defun mcpkit-proxy-list-routes ()
+  "Return a list of plists `(:target_id ID :port PORT)' for all registered routes."
+  (let ((routes nil))
+    (maphash (lambda (id port)
+               (push (list :target_id id :port port) routes))
+             mcpkit-proxy--routes)
+    (nreverse routes)))
+
 ;;; Request Parsing & Route Resolution
 
 (defun mcpkit-proxy--header-value (headers key)
@@ -198,10 +207,16 @@ produce structured JSON-RPC error responses instead of a crash."
   (let* ((proc (oref request process))
          (body (oref request body))
          (headers (oref request headers))
+         (path (mcpkit-proxy--request-path headers))
          (resolved (mcpkit-proxy--resolve-target headers))
          (target-id (car resolved))
          (id (mcpkit-proxy--extract-id body)))
     (cond
+     ((or (equal path "/routes") (equal path "/sprite/routes") (equal path "/mcp/routes"))
+      (let* ((routes (mcpkit-proxy-list-routes))
+             (json-str (json-serialize (list :routes (vconcat routes)
+                                             :count (length routes)))))
+        (mcpkit-proxy--send-json proc 200 json-str)))
      ((null target-id)
       (let ((msg (format "mcpkit-proxy: missing/unsupported routing information (path=%s, header-routing=%s)"
                          (or (mcpkit-proxy--request-path headers) "<none>")
