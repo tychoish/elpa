@@ -424,6 +424,14 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "agent-shell-queue-ui" '("agent-shell-queue-"))
+
+
+
+;;; Generated autoloads from asq-mcp.el
+
+(autoload 'asq-mcp-register "asq-mcp"
+"Ensure `asq-mcp-service' is registered in `mcpkit-registry' and return it." t)
+(register-definition-prefixes "asq-mcp" '("asq-mcp-"))
 
 ;;; End of scraped data
 
