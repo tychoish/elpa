@@ -1,0 +1,70 @@
+#+TITLE: hitl — Human-in-the-Loop Interaction Engine for Emacs
+#+AUTHOR: tycho garen
+#+LANGUAGE: en
+
+* Overview
+
+~hitl~ is a standalone, display-agnostic Human-in-the-Loop (HITL) interaction
+and question management engine for Emacs. It decouples asking human users
+structured, interactive questions from any particular agent framework, queue,
+or protocol.
+
+* Features
+
+- *Structured Question Types*: Freeform text, single-choice, multiple-choice,
+  and confirmation prompts.
+- *Multiple UI Surfaces*: Interactive minibuffer prompts, completing-read widgets,
+  and a tabulated queue buffer (~hitl-view-questions~ / ~*hitl-questions*~).
+- *Non-blocking Asynchronous Lifecycle*: Question creation, answering, cancellation,
+  and automatic timeout expiration with callback hooks.
+- *State Navigation*: Universal cursors (~hitl-cursor~) for sequential and scoped
+  review of questions across topics and sources.
+- *Modeline Indicator*: Dynamic indicator (~hitl-indicator-mode~) showing pending
+  question counts.
+- *Agnostic Integration*: Cleanly bridges to agent systems, task runners, and shell
+  environments.
+
+* Installation
+
+** ELPAish
+#+BEGIN_SRC elisp
+(use-package hitl
+  :ensure t)
+#+END_SRC
+
+* Usage
+
+#+BEGIN_SRC elisp
+(require 'hitl)
+
+;; Ask a single-choice question
+(hitl-ask "Proceed with deployment?"
+          :kind :single-choice
+          :options '("yes" "no" "dry-run")
+          :callback (lambda (answer)
+                      (message "User chose: %s" answer)))
+
+;; Open the questions dashboard
+(hitl-view-questions)
+#+END_SRC
+
+* Model Context Protocol (MCP) Integration
+
+~hitl-mcp~ exposes the question queue to external AI agents (Claude Code, Antigravity, custom agents) over MCP via [[https://github.com/tychoish/mcpkit.el][mcpkit]]:
+
+#+BEGIN_SRC elisp
+(require 'hitl-mcp)
+(mcpkit-start-service 'hitl :port 8766)
+#+END_SRC
+
+** MCP Tools
+- ~ask_user~: Post a question and receive a unique question ID.
+- ~poll_question~: Poll question resolution and user answer.
+- ~get_next_question~: Iterative cursor-based question polling.
+- ~list_pending_questions~: Enumerate pending questions awaiting human response.
+- ~cancel_question~: Abort a pending question.
+- ~answer_question~: Submit an answer to a pending question.
+
+* License
+
+GPL-3.0-or-later
