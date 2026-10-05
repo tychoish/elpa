@@ -1,0 +1,767 @@
+;;; docker-container.el --- Interface to docker-container  -*- lexical-binding: t -*-
+
+;; Author: Philippe Vaucher <philippe.vaucher@gmail.com>
+;;         Yuki Inoue <inouetakahiroki@gmail.com>
+
+;; This file is NOT part of GNU Emacs.
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+;;
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+;;
+;; You should have received a copy of the GNU General Public License
+;; along with GNU Emacs; see the file COPYING.  If not, write to the
+;; Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
+
+;;; Commentary:
+
+;;; Code:
+(require 's)
+(require 'aio)
+(require 'dash)
+(require 'json)
+(require 'tablist)
+(require 'transient)
+
+(require 'docker-core)
+(require 'docker-faces)
+(require 'docker-utils)
+
+(defgroup docker-container nil
+  "Docker container customization group."
+  :group 'docker)
+
+(defconst docker-container-id-template
+  "{{ json .Names }}"
+  "Go template extracting the container id passed to transient commands.")
+
+(defcustom docker-container-shell-file-name "/bin/sh"
+  "Shell to use when entering containers."
+  :group 'docker-container
+  :type 'string)
+
+(defcustom docker-container-tramp-method "docker"
+  "TRAMP method to use for connecting to Docker containers."
+  :group 'docker-container
+  :type 'string)
+
+(defcustom docker-container-default-sort-key '("Image" . nil)
+  "Sort key for docker containers.
+
+This should be a cons cell (NAME . FLIP) where
+NAME is a string matching one of the column names
+and FLIP is a boolean to specify the sort order."
+  :group 'docker-container
+  :type '(cons (string :tag "Column Name"
+                       :validate (lambda (widget)
+                                   (unless (--any-p (equal (plist-get it :name) (widget-value widget)) docker-container-columns)
+                                     (widget-put widget :error "Default Sort Key must match a column name")
+                                     widget)))
+               (choice (const :tag "Ascending" nil)
+                       (const :tag "Descending" t))))
+
+(defcustom docker-container-columns
+  '((:name "Id" :width 16 :template "{{ json .ID }}" :sort nil :format nil)
+    (:name "Image" :width 15 :template "{{ json .Image }}" :sort nil :format nil)
+    (:name "Command" :width 30 :template "{{ json .Command }}" :sort nil :format nil)
+    (:name "Created" :width 23 :template "{{ json .CreatedAt }}" :sort nil :format (lambda (x) (format-time-string "%F %T" (date-to-time x))))
+    (:name "Status" :width 20 :template "{{ json .Status }}" :sort nil :format nil)
+    (:name "Ports" :width 10 :template "{{ json .Ports }}" :sort nil :format nil)
+    (:name "Names" :width 10 :template "{{ json .Names }}" :sort nil :format nil))
+  "Column specification for docker containers.
+
+The order of entries defines the displayed column order.  Template is the Go
+template passed to `docker-container-ls' to create the column data; it should
+return a string delimited with double quotes.  Sort function is a binary
+predicate returning non-nil when the first argument sorts before the second.
+Format function transforms the displayed value from string to string."
+  :group 'docker-container
+  :set 'docker-utils-columns-setter
+  :get 'docker-utils-columns-getter
+  :type '(repeat (list :tag "Column"
+                       (string :tag "Name")
+                       (integer :tag "Width")
+                       (string :tag "Template")
+                       (sexp :tag "Sort function")
+                       (sexp :tag "Format function"))))
+
+(defcustom docker-container-exec-default-args
+  '("-i" "-t")
+  "Default infix args used when docker exec is invoked.
+
+Note this can be overriden for specific containers using
+`docker-container-exec-custom-args'."
+  :group 'docker-container
+  :type '(repeat string))
+
+(defcustom docker-container-exec-custom-args
+  nil
+  "List which can be used to customize the default arguments for docker exec.
+
+Its elements should be of the form (REGEX ARGS) where
+REGEX is a (string) regular expression and ARGS is a list of strings
+corresponding to arguments.
+
+Note that they are ignored unless `docker-container-exec-default-args' is
+also set."
+  :group 'docker-container
+  :type '(repeat (list string (repeat string))))
+
+(defalias 'docker-container-inspect 'docker-inspect)
+
+(defun docker-container--read-shell (&optional read-shell-name)
+  "Return `docker-container-shell-file-name'.
+
+When READ-SHELL-NAME is non-nil, read the shell name instead."
+  (if read-shell-name (read-shell-command "Shell: ") docker-container-shell-file-name))
+
+(defun docker-container-status-face (status)
+  "Return the correct face according to STATUS."
+  (cond
+   ((s-starts-with? "Up" status)
+    'docker-face-status-up)
+   ((s-starts-with? "Exited" status)
+    'docker-face-status-down)
+   (t
+    'docker-face-status-other)))
+
+(aio-defun docker-container-entries (&rest args)
+  "Return the docker containers data for `tabulated-list-entries'."
+  (let* ((fmt (docker-utils-make-format-string docker-container-id-template docker-container-columns))
+         (data (aio-await (docker-run-docker-async "container" "ls" args (format "--format=\"%s\"" fmt))))
+         (lines (s-split "\n" data t)))
+    (-map (-partial #'docker-utils-parse docker-container-columns) lines)))
+
+(aio-defun docker-container-entries-propertized (&rest args)
+  "Return the propertized docker containers data for `tabulated-list-entries'."
+  (let ((entries (aio-await (docker-container-entries args))))
+    (-map #'docker-container-propertize-entry entries)))
+
+(defun docker-container-propertize-entry (entry)
+  "Propertize ENTRY."
+  (let* ((index (--find-index (string-equal "Status" (plist-get it :name)) docker-container-columns))
+         (data (cadr entry))
+         (status (aref data index)))
+    (aset data index (propertize status 'font-lock-face (docker-container-status-face status)))
+    entry))
+
+(aio-defun docker-container-update-status-async ()
+  "Write the status to `docker-status-strings'."
+  (plist-put docker-status-strings :containers "Containers")
+  (when (or (eq docker-show-status t) (and (eq docker-show-status 'local-only) (not (file-remote-p default-directory))))
+    (let* ((entries (aio-await (docker-container-entries-propertized (docker-container-ls-arguments))))
+           (index (--find-index (string-equal "Status" (plist-get it :name)) docker-container-columns))
+           (statuses (--map (aref (cadr it) index) entries))
+           (faces (--map (get-text-property 0 'font-lock-face it) statuses))
+           (all (length faces))
+           (up (-count (-partial #'equal 'docker-face-status-up) faces))
+           (down (-count (-partial #'equal 'docker-face-status-down) faces))
+           (other (- all up down)))
+      (plist-put docker-status-strings
+                 :containers
+                 (format "Containers (%s total, %s up, %s down, %s other)"
+                         all
+                         (propertize (number-to-string up) 'face 'docker-face-status-up)
+                         (propertize (number-to-string down) 'face 'docker-face-status-down)
+                         (propertize (number-to-string other) 'face 'docker-face-status-other)))
+      (transient--redisplay))))
+
+(add-hook 'docker-open-hook #'docker-container-update-status-async)
+
+(aio-defun docker-container-refresh ()
+  "Refresh the containers list."
+  (docker-utils-refresh-entries
+   (docker-container-entries-propertized (docker-container-ls-arguments))))
+
+(defun docker-container-read-name ()
+  "Read a container name."
+  (docker-utils-completing-read "Container: " (-map #'car (aio-wait-for (docker-container-entries))) 'docker-container-name))
+
+;; Absent before Emacs 29, where hops always stay in the file name.
+(defvar tramp-show-ad-hoc-proxies)
+
+(defun docker-container--default-directory (container &optional workdir directory)
+  "Return the tramp directory for CONTAINER, at WORKDIR when it is given.
+
+WORKDIR may be any file name inside the container.
+
+It is built on top of DIRECTORY, `default-directory' by default, so its hops,
+such as a remote host or a sudo one, come before the container's."
+  (let* ((prefix (let ((tramp-show-ad-hoc-proxies t))
+                   (file-remote-p (or directory default-directory))))
+         (file-prefix (if prefix (format "%s|" (s-chop-suffix ":" prefix)) "/")))
+    ;; Docker reports an empty WorkingDir for an image that sets none.
+    (format "%s%s:%s:%s" file-prefix docker-container-tramp-method container
+            (if (s-blank? workdir) "/" workdir))))
+
+(aio-defun docker-container--config (container)
+  "Return a promise with the Config object docker reports for CONTAINER."
+  (let* ((json (aio-await (docker-run-docker-async "inspect" container)))
+         (data (json-read-from-string json)))
+    (cdr (assq 'Config (aref data 0)))))
+
+(aio-defun docker-container--env-context (container)
+  "Return a promise with the working directory and environment of CONTAINER.
+
+The value is (DIRECTORY . ENV).  DIRECTORY is the tramp directory at the
+container's working directory, built on top of the caller's `default-directory',
+and ENV is the list of \"VAR=VALUE\" strings the container sets."
+  ;; Read before the await, while a caller's binding of `default-directory' applies.
+  (let* ((directory default-directory)
+         (config (aio-await (docker-container--config container))))
+    (cons (docker-container--default-directory container (cdr (assq 'WorkingDir config)) directory)
+          (append (cdr (assq 'Env config)) nil))))
+
+(defun docker-container-assert-tramp-docker ()
+  "Assert tramp docker support is available."
+  (unless (or (assoc docker-container-tramp-method tramp-methods)
+              (docker-utils-package-p 'docker-tramp))
+    (error "Tramp docker support was not detected, try installing docker-tramp")))
+
+(declare-function eat-other-window "eat")
+(declare-function ghostel-create "ghostel")
+(declare-function vterm-other-window "vterm")
+
+(defvar eshell-buffer-name)
+
+;;;###autoload (autoload 'docker-container-eshell "docker-container" nil t)
+(defun docker-container-eshell (container)
+  "Open `eshell' in CONTAINER."
+  (interactive (list (docker-container-read-name)))
+  (docker-container-assert-tramp-docker)
+  (let* ((default-directory (docker-container--default-directory container))
+         (eshell-buffer-name (docker-utils-generate-new-buffer-name "docker" "eshell:" default-directory)))
+    (eshell)))
+
+;;;###autoload (autoload 'docker-container-find-directory "docker-container" nil t)
+(defun docker-container-find-directory (container directory)
+  "Inside CONTAINER open DIRECTORY."
+  (interactive
+   (let* ((container-name (docker-container-read-name))
+          (tramp-filename (read-directory-name "Directory: " (docker-container--default-directory container-name))))
+     (with-parsed-tramp-file-name tramp-filename nil
+       (list host localname))))
+  (docker-container-assert-tramp-docker)
+  (dired (docker-container--default-directory container directory)))
+
+(define-obsolete-function-alias 'docker-container-dired
+  'docker-container-find-directory "2.6.0")
+
+;;;###autoload (autoload 'docker-container-find-file "docker-container" nil t)
+(defun docker-container-find-file (container file)
+  "Open FILE inside CONTAINER."
+  (interactive
+   (let* ((container-name (docker-container-read-name))
+          (tramp-filename (read-file-name "File: " (docker-container--default-directory container-name))))
+     (with-parsed-tramp-file-name tramp-filename nil
+       (list host localname))))
+  (docker-container-assert-tramp-docker)
+  (find-file (docker-container--default-directory container file)))
+
+;;;###autoload (autoload 'docker-container-shell "docker-container" nil t)
+(defun docker-container-shell (container &optional read-shell)
+  "Open `shell' in CONTAINER.  When READ-SHELL is not nil, ask the user for it."
+  (interactive (list
+                (docker-container-read-name)
+                current-prefix-arg))
+  (docker-container-assert-tramp-docker)
+  (let* ((shell-file-name (docker-container--read-shell read-shell))
+         (default-directory (docker-container--default-directory container)))
+    (shell (docker-utils-generate-new-buffer "docker" "shell:" default-directory))))
+
+;;;###autoload (autoload 'docker-container-shell-env "docker-container" nil t)
+(aio-defun docker-container-shell-env (container &optional read-shell)
+  "Open `shell' in CONTAINER with its environment and working directory.
+
+When READ-SHELL is not nil, ask the user for the shell."
+  (interactive (list
+                (docker-container-read-name)
+                current-prefix-arg))
+  (docker-container-assert-tramp-docker)
+  (let* ((shell-file-name (docker-container--read-shell read-shell))
+         (context (aio-await (docker-container--env-context container)))
+         (default-directory (car context))
+         ;; `docker exec' already passes the container's variables except PATH,
+         ;; which tramp replaces with `tramp-remote-path'; this restores it.
+         (tramp-remote-process-environment (cdr context)))
+    (shell (docker-utils-generate-new-buffer "docker" "shell-env:" default-directory))))
+
+;;;###autoload (autoload 'docker-container-vterm "docker-container" nil t)
+(defun docker-container-vterm (container)
+  "Open `vterm' in CONTAINER."
+  (interactive (list (docker-container-read-name)))
+  (docker-container-assert-tramp-docker)
+  (if (fboundp 'vterm-other-window)
+      (let* ((default-directory (docker-container--default-directory container)))
+        (vterm-other-window (docker-utils-generate-new-buffer-name "docker" "vterm:" default-directory)))
+    (error "The vterm package is not installed")))
+
+;;;###autoload (autoload 'docker-container-vterm-env "docker-container" nil t)
+(aio-defun docker-container-vterm-env (container)
+  "Open `vterm' in CONTAINER with its environment and working directory."
+  (interactive (list
+                (docker-container-read-name)))
+  (docker-container-assert-tramp-docker)
+  (unless (fboundp 'vterm-other-window)
+    (error "The vterm package is not installed"))
+  (let* ((context (aio-await (docker-container--env-context container)))
+         (default-directory (car context))
+         ;; `docker exec' already passes the container's variables except PATH,
+         ;; which tramp replaces with `tramp-remote-path'; this restores it.
+         (tramp-remote-process-environment (cdr context)))
+    (vterm-other-window (docker-utils-generate-new-buffer-name "docker" "vterm-env:" default-directory))))
+
+(defvar eat-buffer-name)
+
+;;;###autoload (autoload 'docker-container-eat "docker-container" nil t)
+(defun docker-container-eat (container)
+  "Open `eat' in CONTAINER."
+  (interactive (list (docker-container-read-name)))
+  (docker-container-assert-tramp-docker)
+  (if (fboundp 'eat-other-window)
+      (let* ((default-directory (docker-container--default-directory container))
+             (eat-buffer-name (docker-utils-generate-new-buffer-name "docker" "eat:" default-directory)))
+        (eat-other-window))
+    (error "The eat package is not installed")))
+
+;;;###autoload (autoload 'docker-container-eat-env "docker-container" nil t)
+(aio-defun docker-container-eat-env (container)
+  "Open `eat' in CONTAINER with its environment and working directory."
+  (interactive (list
+                (docker-container-read-name)))
+  (docker-container-assert-tramp-docker)
+  (unless (fboundp 'eat-other-window)
+    (error "The eat package is not installed"))
+  (let* ((context (aio-await (docker-container--env-context container)))
+         (default-directory (car context))
+         ;; `docker exec' already passes the container's variables except PATH,
+         ;; which tramp replaces with `tramp-remote-path'; this restores it.
+         (tramp-remote-process-environment (cdr context))
+         (eat-buffer-name (docker-utils-generate-new-buffer-name "docker" "eat-env:" default-directory)))
+    (eat-other-window)))
+
+(defun docker-container--assert-ghostel ()
+  "Signal an error unless `ghostel-create' is available."
+  (unless (fboundp 'ghostel-create)
+    (require 'ghostel nil t))
+  (unless (fboundp 'ghostel-create)
+    (error "The ghostel package (0.52.0 or later) is not installed")))
+
+(defun docker-container--ghostel (name)
+  "Open a new ghostel terminal named NAME in `default-directory'."
+  ;; A display action ranks below `display-buffer-overriding-action', so
+  ;; `other-window-prefix' and `same-window-prefix' still apply.
+  (ghostel-create name '((display-buffer-pop-up-window))))
+
+;;;###autoload (autoload 'docker-container-ghostel "docker-container" nil t)
+(defun docker-container-ghostel (container)
+  "Open `ghostel' in CONTAINER."
+  (interactive (list (docker-container-read-name)))
+  (docker-container-assert-tramp-docker)
+  (docker-container--assert-ghostel)
+  (let ((default-directory (docker-container--default-directory container)))
+    (docker-container--ghostel
+     (docker-utils-generate-new-buffer-name "docker" "ghostel:" default-directory))))
+
+;;;###autoload (autoload 'docker-container-ghostel-env "docker-container" nil t)
+(aio-defun docker-container-ghostel-env (container)
+  "Open `ghostel' in CONTAINER with its environment and working directory."
+  (interactive (list
+                (docker-container-read-name)))
+  (docker-container-assert-tramp-docker)
+  (docker-container--assert-ghostel)
+  (let* ((context (aio-await (docker-container--env-context container)))
+         (default-directory (car context))
+         ;; `docker exec' already passes the container's variables except PATH,
+         ;; which tramp replaces with `tramp-remote-path'; this restores it.
+         (tramp-remote-process-environment (cdr context)))
+    (docker-container--ghostel
+     (docker-utils-generate-new-buffer-name "docker" "ghostel-env:" default-directory))))
+
+(defun docker-container-cp-from-selection (container-path host-path)
+  "Run \"docker cp\" from CONTAINER-PATH to HOST-PATH for selected container."
+  (interactive "sContainer path: \nFHost path: ")
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (docker-run-docker-async "cp" (concat it ":" container-path) host-path)))
+
+(defun docker-container-cp-to-selection (host-path container-path)
+  "Run \"docker cp\" from HOST-PATH to CONTAINER-PATH for selected containers."
+  (interactive "fHost path: \nsContainer path: ")
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (docker-run-docker-async "cp" host-path (concat it ":" container-path))))
+
+(defun docker-container-eshell-selection ()
+  "Run `docker-container-eshell' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    ;; Each terminal becomes the current buffer, and the next container's
+    ;; directory is built on top of the current buffer's.
+    (save-current-buffer (docker-container-eshell it))))
+
+(defun docker-container-find-directory-selection (path)
+  "Run `docker-container-find-directory' for PATH on the containers selection."
+  (interactive "sPath: ")
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (docker-container-find-directory it path)))
+
+(defun docker-container-find-file-selection (path)
+  "Run `docker-container-find-file' for PATH on the containers selection."
+  (interactive "sPath: ")
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (docker-container-find-file it path)))
+
+(aio-defun docker-container-rename-selection ()
+  "Rename containers."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (aio-await (docker-run-docker-async "rename" it (docker-utils-read-string (format "Rename \"%s\" to: " it) 'docker-container-name))))
+  (tablist-revert))
+
+(defun docker-container-shell-selection (prefix)
+  "Run `docker-container-shell' on the containers selection forwarding PREFIX."
+  (interactive "P")
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    ;; Each terminal becomes the current buffer, and the next container's
+    ;; directory is built on top of the current buffer's.
+    (save-current-buffer (docker-container-shell it prefix))))
+
+(defun docker-container-shell-env-selection (prefix)
+  "Run `docker-container-shell-env' on the containers selection forwarding PREFIX."
+  (interactive "P")
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (with-suppressed-warnings ((obsolete docker-container-shell-env))
+      (docker-container-shell-env it prefix))))
+
+(defun docker-container-vterm-selection ()
+  "Run `docker-container-vterm' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    ;; Each terminal becomes the current buffer, and the next container's
+    ;; directory is built on top of the current buffer's.
+    (save-current-buffer (docker-container-vterm it))))
+
+(defun docker-container-vterm-env-selection ()
+  "Run `docker-container-vterm-env' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (with-suppressed-warnings ((obsolete docker-container-vterm-env))
+      (docker-container-vterm-env it))))
+
+;;;###autoload (autoload 'docker-container-shell-command "docker-container" nil t)
+(defun docker-container-shell-command (container)
+  "Run a command in CONTAINER, prompting with a \"docker exec\" line.
+
+The line starts with the exec arguments for CONTAINER, see
+`docker-container-exec-default-args' and `docker-container-exec-custom-args',
+and is run as typed."
+  (interactive (list (docker-container-read-name)))
+  (let* ((exec-args (docker-utils-compute-args docker-container-exec-default-args
+                                               docker-container-exec-custom-args
+                                               container))
+         (default-command (string-join (append (list docker-command)
+                                               (docker-arguments)
+                                               (list "exec")
+                                               exec-args
+                                               (list container))
+                                       " "))
+         (command (read-shell-command "Run: " default-command)))
+    (docker-run-async-with-buffer-interactive command)))
+
+(defun docker-container-shell-command-selection ()
+  "Run `docker exec' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (docker-container-shell-command it)))
+
+(defun docker-container-eat-selection ()
+  "Run `docker-container-eat' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    ;; Each terminal becomes the current buffer, and the next container's
+    ;; directory is built on top of the current buffer's.
+    (save-current-buffer (docker-container-eat it))))
+
+(defun docker-container-eat-env-selection ()
+  "Run `docker-container-eat-env' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (with-suppressed-warnings ((obsolete docker-container-eat-env))
+      (docker-container-eat-env it))))
+
+(defun docker-container-ghostel-selection ()
+  "Run `docker-container-ghostel' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    ;; Each terminal becomes the current buffer, and the next container's
+    ;; directory is built on top of the current buffer's.
+    (save-current-buffer (docker-container-ghostel it))))
+
+(defun docker-container-ghostel-env-selection ()
+  "Run `docker-container-ghostel-env' on the containers selection."
+  (interactive)
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (with-suppressed-warnings ((obsolete docker-container-ghostel-env))
+      (docker-container-ghostel-env it))))
+
+(dolist (command '(docker-container-shell-env docker-container-vterm-env
+                   docker-container-eat-env docker-container-ghostel-env))
+  (make-obsolete command
+                 "run a shell with `docker-container-shell-command', which gets the container's environment and working directory from \"docker exec\"."
+                 "2.6.0"))
+
+(dolist (command '(docker-container-shell-env-selection docker-container-vterm-env-selection
+                   docker-container-eat-env-selection docker-container-ghostel-env-selection))
+  (make-obsolete command
+                 "run a shell with `docker-container-shell-command-selection', which gets the container's environment and working directory from \"docker exec\"."
+                 "2.6.0"))
+
+(docker-utils-transient-define-prefix docker-container-attach ()
+  "Transient for attaching to containers."
+  :man-page "docker-container-attach"
+  ["Arguments"
+   ("n" "No STDIN" "--no-stdin")
+   ("d" "Key sequence for detaching" "--detach-keys " :class docker-option :history-key docker-container-detach-keys)]
+  [:description docker-generic-action-description
+   ("a" "Attach" docker-generic-action-with-buffer-interactive)])
+
+(docker-utils-transient-define-prefix docker-container-cp ()
+  "Transient for copying files from/to containers."
+  :man-page "docker-container-cp"
+  [:description docker-generic-action-description
+   ("f" "Copy From" docker-container-cp-from-selection)
+   ("t" "Copy To" docker-container-cp-to-selection)])
+
+(docker-utils-transient-define-prefix docker-container-diff ()
+  "Transient for showing containers diffs."
+  :man-page "docker-container-diff"
+  [:description docker-generic-action-description
+   ("d" "Diff" docker-generic-action-with-buffer)])
+
+(defclass docker-container-exec-prefix (transient-prefix) nil)
+
+(cl-defmethod transient-init-value ((obj docker-container-exec-prefix))
+  "Set the OBJ value from the docker exec arguments.
+
+See `docker-container-exec-default-args' and
+`docker-container-exec-custom-args'."
+  (oset obj value
+        (docker-utils-compute-args docker-container-exec-default-args docker-container-exec-custom-args)))
+
+(docker-utils-transient-define-prefix docker-container-exec ()
+  "Transient for running commands on containers."
+  :man-page "docker-container-exec"
+  :class 'docker-container-exec-prefix
+  ["Arguments"
+   ("P" "Privileged" "--privileged")
+   ("d" "Detach" "-d")
+   ("e" docker-option-env)
+   ("i" "Interactive" "-i")
+   ("t" "TTY" "-t")
+   ("u" docker-option-user)
+   ("w" docker-option-workdir)]
+  [:description docker-generic-action-description
+   ("E" "Exec" docker-container-exec-selection)])
+
+(defun docker-container-exec-selection (command)
+  "Run \"docker container exec\" with COMMAND on the containers selection."
+  (interactive (list (docker-utils-read-string "Command: " 'docker-container-command)))
+  (docker-utils-ensure-items)
+  (--each (docker-utils-get-marked-items-ids)
+    (docker-run-docker-async-with-buffer-interactive "container" "exec" (transient-args 'docker-container-exec) it command)))
+
+(docker-utils-transient-define-prefix docker-container-open ()
+  "Transient for opening containers files."
+  [:description docker-generic-action-description
+   ("d" "Open directory" docker-container-find-directory-selection)
+   ("f" "Open file" docker-container-find-file-selection)])
+
+(docker-utils-transient-define-prefix docker-container-kill ()
+  "Transient for sending a signal to containers."
+  :man-page "docker-container-kill"
+  ["Arguments"
+   ("s" "Signal" "-s " :class docker-option :history-key docker-container-signal)]
+  [:description docker-generic-action-description
+   ("K" "Kill" docker-generic-action-multiple-ids)])
+
+(defun docker-container-logs-action (action args)
+  "Run the log ACTION with the transient ARGS.
+
+With -f in ARGS the output streams into the buffer; otherwise it is collected
+and displayed once the command finishes."
+  (interactive (list (docker-get-transient-action)
+                     (transient-args transient-current-command)))
+  (if (member "-f" args)
+      (docker-generic-action-with-buffer-noninteractive action args)
+    (aio-wait-for (docker-generic-action-with-buffer action args))))
+
+(docker-utils-transient-define-prefix docker-container-logs ()
+  "Transient for showing containers logs."
+  :man-page "docker-container-logs"
+  ["Arguments"
+   ("f" "Follow" "-f")
+   ("s" "Since" "--since " :class docker-option :history-key docker-logs-since)
+   ("t" docker-option-tail)
+   ("u" "Until" "--until " :class docker-option :history-key docker-logs-until)]
+  [:description docker-generic-action-description
+   ("L" "Logs" docker-container-logs-action)])
+
+(docker-utils-define-transient-arguments docker-container-ls)
+
+(transient-define-prefix docker-container-ls ()
+  "Transient for listing containers."
+  :man-page "docker-container-ls"
+  :value '("--all")
+  ["Arguments"
+   ("N" "Last" "--last " transient-read-number-N0 :class docker-option)
+   ("a" "All" "--all")
+   ("e" "Exited containers" "--filter=status=exited")
+   ("f" "Filter" "--filter " :class docker-option :multi-value repeat :history-key docker-container-filter)
+   ("n" "Don't truncate" "--no-trunc")]
+  ["Actions"
+   ("l" "List" tablist-revert)])
+
+(docker-utils-transient-define-prefix docker-container-pause ()
+  "Transient for pausing containers."
+  :man-page "docker-container-pause"
+  [:description docker-generic-action-description
+   ("P" "Pause" docker-generic-action-multiple-ids)])
+
+(docker-utils-transient-define-prefix docker-container-unpause ()
+  "Transient for unpausing containers."
+  :man-page "docker-container-unpause"
+  [:description docker-generic-action-description
+   ("N" "Unpause" docker-generic-action-multiple-ids)])
+
+(docker-utils-transient-define-prefix docker-container-restart ()
+  "Transient for restarting containers."
+  :man-page "docker-container-restart"
+  ["Arguments"
+   ("t" docker-option-timeout)]
+  [:description docker-generic-action-description
+   ("R" "Restart" docker-generic-action-multiple-ids)])
+
+(docker-utils-transient-define-prefix docker-container-rm ()
+  "Transient for removing containers."
+  :man-page "docker-container-rm"
+  ["Arguments"
+   ("f" "Force" "-f")
+   ("v" "Volumes" "-v")]
+  [:description docker-generic-action-description
+   ("D" "Remove" docker-generic-action-multiple-ids)])
+
+(docker-utils-transient-define-prefix docker-container-shells ()
+  "Transient for using shells on containers."
+  [:description docker-generic-action-description
+   ("!" "Shell command" docker-container-shell-command-selection)
+   ("b" "Shell" docker-container-shell-selection)
+   ("B" "Shell with env (obsolete)" docker-container-shell-env-selection)
+   ("e" "Eshell" docker-container-eshell-selection)
+   ("v" "Vterm" docker-container-vterm-selection)
+   ("V" "Vterm with env (obsolete)" docker-container-vterm-env-selection)
+   ("a" "Eat" docker-container-eat-selection)
+   ("A" "Eat with env (obsolete)" docker-container-eat-env-selection)
+   ("g" "Ghostel" docker-container-ghostel-selection)
+   ("G" "Ghostel with env (obsolete)" docker-container-ghostel-env-selection)])
+
+(docker-utils-transient-define-prefix docker-container-start ()
+  "Transient for starting containers."
+  :man-page "docker-container-start"
+  [:description docker-generic-action-description
+   ("S" "Start" docker-generic-action-multiple-ids)])
+
+(docker-utils-transient-define-prefix docker-container-stop ()
+  "Transient for stopping containers."
+  :man-page "docker-container-stop"
+  ["Arguments"
+   ("t" docker-option-timeout)]
+  [:description docker-generic-action-description
+   ("O" "Stop" docker-generic-action-multiple-ids)])
+
+(transient-define-prefix docker-container-help ()
+  "Help transient for docker containers."
+  ["Docker containers help"
+   ["Lifecycle"
+    ("K" "Kill"       docker-container-kill)
+    ("O" "Stop"       docker-container-stop)
+    ("N" "Unpause"    docker-container-unpause)
+    ("P" "Pause"      docker-container-pause)
+    ("R" "Restart"    docker-container-restart)
+    ("S" "Start"      docker-container-start)]
+   ["Admin"
+    ("C" "Copy"       docker-container-cp)
+    ("D" "Remove"     docker-container-rm)
+    ("E" "Exec"       docker-container-exec)
+    ("I" "Inspect"    docker-container-inspect)
+    ("L" "Logs"       docker-container-logs)
+    ("a" "Attach"     docker-container-attach)
+    ("b" "Shell"      docker-container-shells)
+    ("d" "Diff"       docker-container-diff)
+    ("f" "Find file"  docker-container-open)
+    ("l" "List"       docker-container-ls)
+    ("r" "Rename"     docker-container-rename-selection)]])
+
+(defvar docker-container-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "?" 'docker-container-help)
+    (define-key map "C" 'docker-container-cp)
+    (define-key map "D" 'docker-container-rm)
+    (define-key map "E" 'docker-container-exec)
+    (define-key map "I" 'docker-container-inspect)
+    (define-key map "K" 'docker-container-kill)
+    (define-key map "L" 'docker-container-logs)
+    (define-key map "O" 'docker-container-stop)
+    (define-key map "N" 'docker-container-unpause)
+    (define-key map "P" 'docker-container-pause)
+    (define-key map "R" 'docker-container-restart)
+    (define-key map "S" 'docker-container-start)
+    (define-key map "a" 'docker-container-attach)
+    (define-key map "b" 'docker-container-shells)
+    (define-key map "d" 'docker-container-diff)
+    (define-key map "f" 'docker-container-open)
+    (define-key map "l" 'docker-container-ls)
+    (define-key map "r" 'docker-container-rename-selection)
+    map)
+  "Keymap for `docker-container-mode'.")
+
+;;;###autoload (autoload 'docker-containers "docker-container" nil t)
+(defun docker-containers ()
+  "List docker containers."
+  (interactive)
+  (docker-utils-pop-to-buffer "*docker-containers*")
+  (docker-container-mode)
+  (tablist-revert))
+
+(define-derived-mode docker-container-mode tabulated-list-mode "Containers Menu"
+  "Major mode for handling a list of docker containers."
+  (setq tabulated-list-format (docker-utils-columns-list-format docker-container-columns))
+  (setq tabulated-list-padding 2)
+  (setq tabulated-list-sort-key docker-container-default-sort-key)
+  (add-hook 'tabulated-list-revert-hook 'docker-container-refresh nil t)
+  (tabulated-list-init-header)
+  (tablist-minor-mode))
+
+(provide 'docker-container)
+
+;;; docker-container.el ends here
