@@ -1,0 +1,101 @@
+#+TITLE: denote-sync.el
+#+AUTHOR: sam kleinman
+#+EMAIL: sam@tychoish.com
+#+LANGUAGE: en
+#+OPTIONS: toc:2 num:nil
+
+Two-way synchronization between Denote notes and remote services (Notion, Google Docs) in Emacs.
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=denote-sync.el= provides interactive push and pull synchronization between local
+[[https://github.com/protesilaos/denote][Denote]] notes and remote services via modular backends:
+
+- *Notion* (=denote-sync-notion.el=) via the =npx ntn= CLI wrapper.
+- *Google Docs* (=denote-sync-gdocs.el=) via the =gog= CLI wrapper.
+
+** Features
+- Push current Denote note to remote (=denote-sync-push=), creating or updating remote documents.
+- Pull remote documents into Denote (=denote-sync-pull=), refreshing tracked files or creating new notes with metadata preserved.
+- Content-hash change detection (=unchanged=, =local-only=, =remote-only=, =both-changed=).
+- Three-way interactive conflict resolution via Ediff (=denote-sync-resolve-conflict=) with cached merge ancestors.
+- Bounded async batch sync across all tracked notes (=denote-sync-all=).
+- Integration with =denote-dash= saved views for tracked, conflicted, and remote-updated notes.
+- Automatic YAML front matter tracking (=<prefix>_id=, =<prefix>_created=, =<prefix>_edited=, =<prefix>_sync_hash=, =<prefix>_conflict=).
+- Configurable parent registry (=denote-sync-parent-registry=) with ACR selection.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** Prerequisites
+- For Notion sync: Node.js and =ntn= (=npx ntn=).
+- For Google Docs sync: =gog= CLI (=go install github.com/openclaw/gogcli/cmd/gog@latest=).
+
+** Manual Installation
+#+begin_src bash
+git clone https://github.com/tychoish/denote-sync.git ~/src/denote-sync
+#+end_src
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/denote-sync")
+(require 'denote-sync)
+(require 'denote-sync-notion) ; optional
+(require 'denote-sync-gdocs)  ; optional
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Basic =use-package= configuration:
+
+#+begin_src emacs-lisp
+(use-package denote-sync
+  :ensure t
+  :defer t
+  :commands (denote-sync-push denote-sync-pull denote-sync-resolve-conflict denote-sync-all))
+
+(use-package denote-sync-notion
+  :ensure t
+  :after denote-sync)
+
+(use-package denote-sync-gdocs
+  :ensure t
+  :after denote-sync)
+#+end_src
+
+* Commands & API
+:PROPERTIES:
+:CUSTOM_ID: commands
+:END:
+
+| Command                         | Summary                                                           |
+|---------------------------------+-------------------------------------------------------------------|
+| =denote-sync-push=              | Create or update the remote document for the current note.       |
+| =denote-sync-pull=              | Refresh current note or import a new note from a remote ID/URL.   |
+| =denote-sync-resolve-conflict=  | Three-way Ediff merge session against cached sync ancestor.       |
+| =denote-sync-all=               | Bounded async batch sync over all tracked notes across backends.  |
+
+* Development
+:PROPERTIES:
+:CUSTOM_ID: development
+:END:
+
+Run the ERT test suite:
+
+#+begin_src bash
+emacs --batch --eval '(package-initialize)' -L . -l test/test-denote-sync.el -l test/test-denote-sync-notion.el -l test/test-denote-sync-gdocs.el -f ert-run-tests-batch-and-exit
+#+end_src
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See =LICENSE= for details.
