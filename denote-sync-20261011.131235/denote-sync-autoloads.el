@@ -12,7 +12,7 @@
 ;;; Generated autoloads from denote-sync.el
 
 (autoload 'denote-sync-resolve-conflict "denote-sync"
-"Interactively resolve FILE's conflict flag via an ediff merge session.
+"Interactively resolve FILE's conflict via an ediff merge session.
 FILE defaults to `denote-sync--file-at-point'.
 If BACKEND is nil and FILE is conflicted for multiple backends, prompt
 the user to pick which backend conflict to resolve.
@@ -20,12 +20,15 @@ the user to pick which backend conflict to resolve.
 (fn &optional FILE BACKEND)" t)
 (autoload 'denote-sync-push "denote-sync"
 "Push FILE (default current buffer note) to remote.
-If FILE is tracked, updates its remote document.
+If FILE is tracked, updates its remote document, unless it is already up
+to date, only the remote changed, or both sides changed (it offers the
+merge); with FORCE (prefix argument) it overwrites the remote regardless.
 If FILE is untracked, PARENT is required (prompted if nil).
 If BACKEND is nil:
 - If FILE is tracked by 1 backend, uses it.
 - If FILE is tracked by multiple backends, prompts to select backend.
 - If FILE is untracked, uses registry selection or prompts for backend.
+Note lookups are memoized for the duration of the push.
 
 (fn &optional FILE PARENT FORCE BACKEND)" t)
 (autoload 'denote-sync-pull "denote-sync"
@@ -34,8 +37,11 @@ Without REMOTE-ID, refreshes TARGET-FILE (or current buffer file).
 With REMOTE-ID (an id or URL):
 - If already tracked by any note, refreshes that note.
 - Otherwise imports a new note from the remote document.
+A refresh is skipped when the note is already up to date or has only local
+changes, and when both sides changed it offers the merge instead of
+overwriting; FORCE (prefix argument) refreshes regardless.
 
-(fn &optional REMOTE-ID TARGET-FILE BACKEND)" t)
+(fn &optional REMOTE-ID TARGET-FILE BACKEND FORCE)" t)
 (autoload 'denote-sync-all "denote-sync"
 "Batch-sync every tracked note across all backends via a bounded async pool." t)
 (autoload 'denote-sync-dash-view-tracked "denote-sync"
@@ -59,6 +65,16 @@ With REMOTE-ID (an id or URL):
 "Add a Google Docs parent target to `denote-sync-parent-registry'.
 
 (fn NAME ACCOUNT FOLDER-ID)" t)
+(autoload 'denote-sync-gdocs-set-account "denote-sync-gdocs"
+"Set the Google account for FILE (defaults to current note) to ACCOUNT.
+Interactively, prompts with completion over all authorized accounts in `gog'.
+
+(fn &optional FILE ACCOUNT)" t)
+(autoload 'denote-sync-gdocs-add-account "denote-sync-gdocs"
+"Authorize a new Google Account EMAIL using `gog'.
+Runs the OAuth login flow interactively in a process buffer.
+
+(fn EMAIL)" t)
 (register-definition-prefixes "denote-sync-gdocs" '("denote-sync-gdocs-"))
 
 
@@ -69,6 +85,40 @@ With REMOTE-ID (an id or URL):
 
 (fn URL &optional NAME)" t)
 (register-definition-prefixes "denote-sync-notion" '("denote-"))
+
+
+;;; Generated autoloads from denote-sync-silo.el
+
+(autoload 'denote-sync-silo-add-rule "denote-sync-silo"
+"Register a tree sync rule NAME and a matching parent registry entry.
+SOURCE-PREFIX is the root signature to export; TARGET-DIRECTORY the silo.
+Rebase to TARGET-PREFIX, or allocate a new child of TARGET-PARENT in the
+silo on first export.  TARGET-FORMAT is `same' or a Denote file type,
+SCHEME converts the sequence scheme, STRIP-SIGNATURE drops signatures, and
+REWRITE-LINKS (default t) rewrites links to exported notes.  Target tags
+derive from each source note's: TAGS replaces them (a list, or a function
+from the source tag list to the new list), REMOVE-TAGS are dropped, then
+ADD-TAGS appended.
+
+(fn &key NAME SOURCE-PREFIX TARGET-DIRECTORY TARGET-PREFIX TARGET-PARENT TARGET-FORMAT SCHEME STRIP-SIGNATURE (REWRITE-LINKS t) (TAGS nil TAGS-P) ADD-TAGS REMOVE-TAGS)")
+(autoload 'denote-sync-silo-export-tree "denote-sync-silo"
+"Export and synchronize the tree described by rule RULE-NAME.
+Plans every target id and signature first so `denote:' links between
+notes in the tree are rewritten in a single write pass.  A preflight
+check runs before anything is written, and source notes seeded for a
+push that fails are returned to the untracked state.
+
+(fn RULE-NAME)" t)
+(register-definition-prefixes "denote-sync-silo" '("denote-sync-silo-"))
+
+
+;;; Generated autoloads from mdwn.el
+
+(autoload 'mdwn-to-org "mdwn"
+"Convert the Markdown string MARKDOWN to Org markup.
+
+(fn MARKDOWN)")
+(register-definition-prefixes "mdwn" '("mdwn-"))
 
 ;;; End of scraped data
 

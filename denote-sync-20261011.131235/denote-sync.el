@@ -9,7 +9,7 @@
 
 ;;; Commentary:
 ;; A backend-agnostic synchronization engine for Denote notes.
-;; Provides content-hash change detection, three-way ediff conflict resolution,
+;; Provides change-key change detection, three-way ediff conflict resolution,
 ;; bounded concurrent batch sync, and denote-dash saved views, parameterized
 ;; across pluggable backends (such as Notion and Google Docs).
 
@@ -33,7 +33,7 @@
                (:copier nil))
   "Protocol structure defining a `denote-sync' backend."
   name                  ; symbol, e.g. 'notion, 'google-docs
-  frontmatter-prefix    ; string, e.g. "notion", "gdoc"
+  frontmatter-prefix    ; string, e.g. "notion", "gdoc"; keys are sync-PREFIX-FIELD
   create-fn             ; (file parent content) -> plist (:id ... :url ... :edited-time ... [:created-time ...])
   update-fn             ; (file id content force) -> plist (:id ... :url ... :edited-time ...)
   fetch-remote-fn       ; (id &optional fetch-body-p) -> plist (:id ... :edited-time ... [:body ...])
@@ -49,6 +49,8 @@
   read-parent-fn        ; (optional) -> prompts and returns backend-specific parent
   format-parent-fn      ; (optional: parent) -> string for ACR annotation
   parse-parent-fn       ; (optional: string) -> parsed parent
+  render-fn             ; (optional: file backend) -> (CONTENT . DANGLING); nil renders Markdown.
+                        ; A nil CONTENT defers rendering to the backend's create/update-fn.
   )
 
 (defvar denote-sync-backends nil
@@ -123,14 +125,52 @@ PROPERTIES is an optional alist of metadata properties."
   "Return a regexp matching a front-matter line for KEY."
   (format "^%s:[ \t]*\\(.*\\)$" (regexp-quote key)))
 
-(defun denote-sync-frontmatter-get (file key)
-  "Return the raw string value of KEY from FILE's front matter, or nil."
-  (when (file-readable-p file)
-    (with-temp-buffer
-      (insert-file-contents file)
-      (goto-char (point-min))
-      (when (re-search-forward (denote-sync--frontmatter-line-regexp key) nil t)
+(defun denote-sync--org-file-p (file)
+  "Return non-nil if FILE is an Org note, whose metadata is `#+KEY:' lines."
+  (string-suffix-p ".org" file))
+
+(defun denote-sync--frontmatter-key-regexp (file key)
+  "Return a regexp matching the front-matter line for KEY in FILE."
+  (if (denote-sync--org-file-p file)
+      (format "^#\\+%s:[ \t]*\\(.*\\)$" (regexp-quote key))
+    (denote-sync--frontmatter-line-regexp key)))
+
+(defun denote-sync--prop-key (prefix field)
+  "Return the front-matter key for backend PREFIX and FIELD, e.g. `sync-silo-id'."
+  (format "sync-%s-%s" prefix (string-replace "_" "-" field)))
+
+(defun denote-sync--legacy-key (key)
+  "Return the pre-`sync-' spelling of KEY (`sync-silo-sync-hash' is
+`silo_sync_hash'), or nil when KEY is not a `sync-' key."
+  (when (string-prefix-p "sync-" key)
+    (let* ((rest (substring key 5))
+           (i (string-search "-" rest)))
+      (when i
+        (concat (substring rest 0 i) "_"
+                (string-replace "-" "_" (substring rest (1+ i))))))))
+
+(defun denote-sync--legacy-alternation (key)
+  "Return a regexp matching KEY or its legacy spelling."
+  (if-let* ((legacy (denote-sync--legacy-key key)))
+      (format "\\(?:%s\\|%s\\)" (regexp-quote key) (regexp-quote legacy))
+    (regexp-quote key)))
+
+(defun denote-sync--frontmatter-get-1 (file key)
+  "Return the raw value of exactly KEY in FILE's front matter, or nil."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (goto-char (point-min))
+    (let ((case-fold-search (denote-sync--org-file-p file)))
+      (when (re-search-forward (denote-sync--frontmatter-key-regexp file key) nil t)
         (string-trim (match-string 1))))))
+
+(defun denote-sync-frontmatter-get (file key)
+  "Return the raw string value of KEY from FILE's front matter, or nil.
+A `sync-' KEY falls back to its legacy spelling in older notes."
+  (when (file-readable-p file)
+    (or (denote-sync--frontmatter-get-1 file key)
+        (when-let* ((legacy (denote-sync--legacy-key key)))
+          (denote-sync--frontmatter-get-1 file legacy)))))
 
 (defun denote-sync--frontmatter-format-value (value)
   "Format VALUE as a string suitable for YAML front matter."
@@ -140,13 +180,23 @@ PROPERTIES is an optional alist of metadata properties."
     (concat "[" (string-join (mapcar (lambda (v) (format "%S" v)) value) ", ") "]"))
    (t (format "%S" value))))
 
-(defun denote-sync-frontmatter-set (file key value)
-  "Set KEY to VALUE in FILE's front matter.
-Replaces the line if KEY exists; inserts it before the closing delimiter
-if missing."
+(defun denote-sync--frontmatter-set-org (key value)
+  "Set the Org `#+KEY:' line to VALUE in the current buffer."
+  (let ((text (cond ((null value) "") ((stringp value) value) (t (format "%s" value))))
+        (case-fold-search t))
+    (goto-char (point-min))
+    (if (re-search-forward (denote-sync--frontmatter-key-regexp "x.org" key) nil t)
+        (replace-match (concat "#+" key ": " text) t t)
+      (goto-char (point-min))
+      (while (looking-at "^#\\+") (forward-line 1))
+      (insert "#+" key ": " text "\n"))))
+
+(defun denote-sync--frontmatter-set-1 (file key value)
+  "In the current buffer, set KEY to VALUE in FILE's front matter."
   (let ((formatted (denote-sync--frontmatter-format-value value)))
-    (with-current-buffer (find-file-noselect file)
-      (save-excursion
+    (save-excursion
+      (if (denote-sync--org-file-p file)
+          (denote-sync--frontmatter-set-org key value)
         (goto-char (point-min))
         (if (re-search-forward (denote-sync--frontmatter-line-regexp key) nil t)
             (replace-match (concat key ": " formatted))
@@ -162,18 +212,47 @@ if missing."
                   (insert key ": " formatted "\n"))
               (goto-char (point-min))
               (insert "---\n" key ": " formatted "\n---\n")))))
+      (denote-sync--frontmatter-drop-legacy file key))))
+
+(defun denote-sync-frontmatter-set-many (file pairs)
+  "Set every (KEY . VALUE) in PAIRS in FILE's front matter, then save once.
+Replaces a line if its KEY exists; inserts it before the closing delimiter
+if missing.  Org notes use `#+KEY: VALUE' lines instead of YAML.  The note
+is visited once, so its modify and save hooks run once however many keys
+change.  If the note is already open, its buffer is edited and saved, and
+that save includes any edits you have not saved yet."
+  (when pairs
+    (with-current-buffer (find-file-noselect file)
+      (pcase-dolist (`(,key . ,value) pairs)
+        (denote-sync--frontmatter-set-1 file key value))
       (save-buffer))))
+
+(defun denote-sync-frontmatter-set (file key value)
+  "Set KEY to VALUE in FILE's front matter; see `denote-sync-frontmatter-set-many'."
+  (denote-sync-frontmatter-set-many file (list (cons key value))))
+
+(defun denote-sync--frontmatter-drop-legacy (file key)
+  "In the current buffer, delete the legacy spelling of KEY for FILE, if any."
+  (when-let* ((legacy (denote-sync--legacy-key key)))
+    (save-excursion
+      (goto-char (point-min))
+      (let ((case-fold-search (denote-sync--org-file-p file)))
+        (while (re-search-forward
+                (format (if (denote-sync--org-file-p file) "^#\\+%s:.*\n?" "^%s:.*\n?")
+                        (regexp-quote legacy))
+                nil t)
+          (replace-match ""))))))
 
 (defun denote-sync--frontmatter-nonempty-value-regexp (key)
   "Return a regexp matching KEY with a non-empty, non-quoted-empty value."
-  (concat "^" (regexp-quote key) ":[ \t]*\\([^ \t\r\n\"']+\\|\"[^\"]+\"\\|'[^']+'\\)"))
+  (concat "^\\(?:#\\+\\)?" (denote-sync--legacy-alternation key) ":[ \t]*\\([^ \t\r\n\"']+\\|\"[^\"]+\"\\|'[^']+'\\)"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Backend-specific frontmatter queries
 
 (defun denote-sync--backend-prop-key (backend field)
   "Return the frontmatter key for FIELD in BACKEND."
-  (format "%s_%s" (denote-sync-backend-frontmatter-prefix backend) field))
+  (denote-sync--prop-key (denote-sync-backend-frontmatter-prefix backend) field))
 
 (defun denote-sync--get-id (file backend)
   "Return the remote document ID for FILE under BACKEND, or nil."
@@ -183,7 +262,7 @@ if missing."
 
 (defun denote-sync--get-sync-hash (file backend)
   "Return the stored sync content hash for FILE under BACKEND, or nil."
-  (let ((val (denote-sync-frontmatter-get file (denote-sync--backend-prop-key backend "sync_hash"))))
+  (let ((val (denote-sync-frontmatter-get file (denote-sync--backend-prop-key backend "sync-hash"))))
     (when (and val (not (string-empty-p val)) (not (equal val "\"\"")))
       (string-trim val "\"" "\""))))
 
@@ -194,13 +273,15 @@ if missing."
       (string-trim val "\"" "\""))))
 
 (defun denote-sync--get-conflict (file backend)
-  "Return non-nil if FILE has a conflict flag set for BACKEND."
-  (let ((val (denote-sync-frontmatter-get file (denote-sync--backend-prop-key backend "conflict"))))
-    (and val (string= val "t"))))
+  "Return non-nil if FILE's local and remote copies both changed for BACKEND.
+Derived from the stored sync hash and edited time, not from a stored flag, so
+it cannot go stale; it asks the remote, so it can be slow for network backends."
+  (and (denote-sync-tracked-p file backend)
+       (eq (ignore-errors (denote-sync--sync-state file backend)) 'both-changed)))
 
 (defun denote-sync--get-remote-dirty (file backend)
   "Return non-nil if FILE is marked remotely dirty for BACKEND."
-  (let ((val (denote-sync-frontmatter-get file (denote-sync--backend-prop-key backend "remote_dirty"))))
+  (let ((val (denote-sync-frontmatter-get file (denote-sync--backend-prop-key backend "remote-dirty"))))
     (and val (string= val "t"))))
 
 (defun denote-sync-tracked-p (file &optional backend)
@@ -218,7 +299,7 @@ if missing."
               (denote-sync-registered-backends)))
 
 (defun denote-sync--conflicted-p (file &optional backend)
-  "Return non-nil if FILE has a conflict flag set for BACKEND (or any backend)."
+  "Return non-nil if FILE is in conflict (both sides changed) for BACKEND or any."
   (if backend
       (let ((b (if (symbolp backend) (denote-sync-get-backend backend) backend)))
         (denote-sync--get-conflict file b))
@@ -301,24 +382,49 @@ If BACKEND is nil, searches across all registered backends."
     (save-buffer)))
 
 (defun denote-sync--export-title (file)
-  "Return FILE's title from Denote metadata or filename."
-  (or (denote-retrieve-filename-title file)
-      (file-name-base file)))
+  "Return FILE's title: its front-matter title, else filename title or base."
+  (let ((title (ignore-errors
+                 (denote-retrieve-front-matter-title-value
+                  file (denote-filetype-heuristics file)))))
+    (or (and title (not (string-empty-p title)) title)
+        (denote-retrieve-filename-title file)
+        (file-name-base file))))
+
+(defmacro denote-sync--with-path-cache (&rest body)
+  "Run BODY with `denote-get-path-by-id' memoized for this call.
+Each lookup scans the whole `denote-directory', and a note with hundreds
+of `denote:' links pays that per link.  Only found paths are cached, keyed
+by `denote-directory', so a note created while BODY runs is still found."
+  (declare (indent 0))
+  (let ((cache (make-symbol "cache")) (orig (make-symbol "orig")))
+    `(let ((,cache (make-hash-table :test 'equal))
+           (,orig (symbol-function 'denote-get-path-by-id)))
+       (cl-letf (((symbol-function 'denote-get-path-by-id)
+                  (lambda (id)
+                    (let ((key (cons denote-directory id)))
+                      (or (gethash key ,cache)
+                          (when-let* ((path (funcall ,orig id)))
+                            (puthash key path ,cache)))))))
+         ,@body))))
 
 (defun denote-sync--org-to-markdown (org-body)
-  "Convert ORG-BODY (a string of Org markup) to Markdown via `ox-gfm'."
+  "Convert ORG-BODY (a string of Org markup) to Markdown via `ox-gfm'.
+Source blocks are exported verbatim, never evaluated: a note body is
+data, and this runs on every sync-state check."
   (require 'ox-gfm)
   (with-temp-buffer
     (insert org-body)
     (org-mode)
-    (let ((md-buffer
-           (cl-letf (((symbol-function 'denote-link-ol-export)
-                      (lambda (link description _format)
-                        (pcase-let ((`(,_path ,query ,_search)
-                                     (denote-link--ol-resolve-link-to-target link :full-data)))
-                          (format "[%s](denote:%s)" description query)))))
-             (org-export-to-buffer 'gfm (generate-new-buffer-name "*denote-sync-md*")
-                                   nil nil nil nil '(:with-toc nil)))))
+    (let* ((org-export-use-babel nil)
+           (md-buffer
+           (denote-sync--with-path-cache
+             (cl-letf (((symbol-function 'denote-link-ol-export)
+                        (lambda (link description _format)
+                          (pcase-let ((`(,_path ,query ,_search)
+                                       (denote-link--ol-resolve-link-to-target link :full-data)))
+                            (format "[%s](denote:%s)" description query)))))
+               (org-export-to-buffer 'gfm (generate-new-buffer-name "*denote-sync-md*")
+                                     nil nil nil nil '(:with-toc nil))))))
       (unwind-protect
           (with-current-buffer md-buffer
             (string-trim (buffer-substring-no-properties (point-min) (point-max))))
@@ -351,7 +457,8 @@ If BACKEND is nil, searches across all registered backends."
   "Rewrite `denote:' Markdown links in BODY to BACKEND's URLs."
   (let* (dangling
          (rewritten
-          (replace-regexp-in-string
+          (denote-sync--with-path-cache
+           (replace-regexp-in-string
            denote-md-link-in-context-regexp
            (lambda (whole-match)
              (save-match-data
@@ -377,16 +484,24 @@ If BACKEND is nil, searches across all registered backends."
                                source-file)
                          dangling)
                    desc)))))
-           body)))
+           body))))
     (cons rewritten (nreverse dangling))))
 
-(defun denote-sync--export-body (file backend)
-  "Extract FILE's exportable Markdown body for BACKEND."
+(defun denote-sync--export-markdown (file backend)
+  "Return (CONTENT . DANGLING): FILE's body as Markdown for BACKEND."
   (let* ((body (denote-sync--body-without-front-matter file))
          (converted (if (eq (denote-filetype-heuristics file) 'org)
                         (denote-sync--org-to-markdown body)
                       body)))
     (denote-sync--rewrite-denote-links converted file backend)))
+
+(defun denote-sync--export-body (file backend)
+  "Return (CONTENT . DANGLING) for pushing FILE to BACKEND.
+BACKEND's `render-fn' decides the form; without one the body is Markdown.
+CONTENT may be nil when the backend defers rendering to its own push."
+  (if-let* ((render (denote-sync-backend-render-fn backend)))
+      (funcall render file backend)
+    (denote-sync--export-markdown file backend)))
 
 (defun denote-sync--report-dangling-links (dangling-links)
   "Report DANGLING-LINKS encounterd during push."
@@ -423,17 +538,89 @@ If BACKEND is nil, searches across all registered backends."
   (with-temp-file (denote-sync--cache-file-for backend-name remote-id)
     (insert content)))
 
-(defun denote-sync--content-hash (content)
-  "Return SHA-1 content hash of CONTENT."
-  (secure-hash 'sha1 content))
+(defun denote-sync--cache-delete (backend-name remote-id)
+  "Delete the cached last-synced body for BACKEND-NAME and REMOTE-ID, if any."
+  (let ((cache-file (denote-sync--cache-file-for backend-name remote-id)))
+    (when (file-exists-p cache-file)
+      (delete-file cache-file))))
 
-(defun denote-sync--record-synced-content (file backend id content &optional edited-time)
-  "Record CONTENT and EDITED-TIME for FILE under BACKEND and ID."
+(defconst denote-sync--denote-id-in-body-regexp
+  "denote:\\([0-9]\\{8\\}T[0-9]\\{6\\}\\)"
+  "Match a `denote:' link and capture the target identifier.")
+
+(defun denote-sync--link-targets (body backend)
+  "Return (ID TARGET REMOTE) for each distinct `denote:' link in BODY, by ID.
+TARGET is the linked note's path or nil.  REMOTE is the id BACKEND holds
+for it, or nil when the note is missing or not tracked."
+  (let (ids)
+    (with-temp-buffer
+      (insert body)
+      (goto-char (point-min))
+      (while (re-search-forward denote-sync--denote-id-in-body-regexp nil t)
+        (cl-pushnew (match-string 1) ids :test #'equal)))
+    (denote-sync--with-path-cache
+      (mapcar (lambda (id)
+                (let ((target (denote-get-path-by-id id)))
+                  (list id target
+                        (and target
+                             (denote-sync-tracked-p target backend)
+                             (denote-sync--get-id target backend)))))
+              (sort ids #'string<)))))
+
+(defun denote-sync--link-map (body backend)
+  "Return the sorted `ID=REMOTE' lines for the `denote:' links in BODY.
+REMOTE is `-' for a note BACKEND does not track.  A link renders
+differently once its target is tracked, so the map belongs in the change
+key."
+  (mapcar (pcase-lambda (`(,id ,_target ,remote)) (format "%s=%s" id (or remote "-")))
+          (denote-sync--link-targets body backend)))
+
+(defun denote-sync--dangling-links (file backend)
+  "Return the dangling-link entries for FILE's `denote:' links under BACKEND.
+Entries have the shape `denote-sync--report-dangling-links' expects.  This
+needs no export, so a backend that defers rendering can still report them."
+  (let ((body (denote-sync--body-without-front-matter file)))
+    (delq nil
+          (mapcar (pcase-lambda (`(,id ,target ,remote))
+                    (unless remote
+                      (list id id
+                            (cond ((not target) 'missing-file)
+                                  (denote-sync-export-auto-push-linked-notes 'cycle-detected)
+                                  (t 'not-yet-pushed))
+                            file)))
+                  (denote-sync--link-targets body backend)))))
+
+(defun denote-sync--change-key (file backend)
+  "Return FILE's format-independent change key for BACKEND.
+The key hashes the note's own body and the link map, so it needs no
+export to Markdown or any other transport format."
+  (let ((body (denote-sync--body-without-front-matter file)))
+    (secure-hash 'sha1 (concat body "\0"
+                               (string-join
+                                (denote-sync--link-map body backend) "\n")))))
+
+(defun denote-sync--local-changed-p (file backend stored-hash)
+  "Return non-nil if FILE changed locally since STORED-HASH for BACKEND."
+  (or (string-empty-p stored-hash)
+      (not (equal stored-hash (denote-sync--change-key file backend)))))
+
+(defun denote-sync--record-synced-content (file backend id content &optional edited-time extra-pairs)
+  "Record CONTENT and EDITED-TIME for FILE under BACKEND and ID.
+EXTRA-PAIRS, an alist of front matter (KEY . VALUE), is written in the same
+save as the sync hash and edited time."
   (let ((p (denote-sync-backend-frontmatter-prefix backend)))
-    (denote-sync-frontmatter-set file (format "%s_sync_hash" p) (denote-sync--content-hash content))
-    (when (and edited-time (not (string-empty-p edited-time)))
-      (denote-sync-frontmatter-set file (format "%s_edited" p) edited-time))
-    (denote-sync--cache-write (denote-sync-backend-name backend) id content)))
+    (denote-sync-frontmatter-set-many
+     file
+     (append extra-pairs
+             (list (cons (denote-sync--prop-key p "sync-hash")
+                         (denote-sync--change-key file backend)))
+             (when (and edited-time (not (string-empty-p edited-time)))
+               (list (cons (denote-sync--prop-key p "edited") edited-time)))))
+    (if content
+        (denote-sync--cache-write (denote-sync-backend-name backend) id content)
+      ;; the ancestor must share the conflict buffers' format; a stale one would
+      ;; mislead a three-way merge
+      (denote-sync--cache-delete (denote-sync-backend-name backend) id))))
 
 (defun denote-sync--classify-sync-state (local-changed-p remote-changed-p)
   "Classify sync state from LOCAL-CHANGED-P and REMOTE-CHANGED-P."
@@ -457,8 +644,7 @@ If BACKEND is nil, searches across all registered backends."
   (let* ((id (denote-sync--get-id file backend))
          (stored-hash (or (denote-sync--get-sync-hash file backend) ""))
          (stored-edited (or (denote-sync--get-edited file backend) ""))
-         (local-hash (denote-sync--content-hash (car (denote-sync--export-body file backend))))
-         (local-changed-p (or (string-empty-p stored-hash) (not (equal local-hash stored-hash))))
+         (local-changed-p (denote-sync--local-changed-p file backend stored-hash))
          (remote (funcall (denote-sync-backend-fetch-remote-fn backend) id nil))
          (remote-edited (plist-get remote :edited-time))
          (remote-changed-p (denote-sync--remote-timestamp-stale-p stored-edited remote-edited)))
@@ -472,8 +658,7 @@ If BACKEND is nil, searches across all registered backends."
   (let* ((id (denote-sync--get-id file backend))
          (stored-hash (or (denote-sync--get-sync-hash file backend) ""))
          (stored-edited (or (denote-sync--get-edited file backend) ""))
-         (local-hash (denote-sync--content-hash (car (denote-sync--export-body file backend))))
-         (local-changed-p (or (string-empty-p stored-hash) (not (equal local-hash stored-hash)))))
+         (local-changed-p (denote-sync--local-changed-p file backend stored-hash)))
     (funcall (denote-sync-backend-async-fetch-remote-fn backend)
              id
              (lambda (error remote)
@@ -490,7 +675,7 @@ If BACKEND is nil, searches across all registered backends."
 (defun denote-sync--build-conflict-buffers (file backend id)
   "Return plist of conflict buffers (:local, :remote, :ancestor) for FILE."
   (let* ((bname (denote-sync-backend-name backend))
-         (local-content (car (denote-sync--export-body file backend)))
+         (local-content (car (denote-sync--export-markdown file backend)))
          (remote-result (funcall (denote-sync-backend-fetch-remote-fn backend) id t))
          (remote-content (or (plist-get remote-result :body) ""))
          (ancestor-content (denote-sync--cache-read bname id))
@@ -506,18 +691,16 @@ If BACKEND is nil, searches across all registered backends."
     (list :local local-buffer :remote remote-buffer :ancestor ancestor-buffer)))
 
 (defun denote-sync--finish-conflict-resolution (file backend merged-content)
-  "Write MERGED-CONTENT back into FILE, clear conflict flag, and force-push."
-  (let ((p (denote-sync-backend-frontmatter-prefix backend)))
-    (denote-sync--write-body file merged-content)
-    (denote-sync-frontmatter-set file (format "%s_conflict" p) "")
-    (if (and (null (cdr (denote-sync--tracked-backends file)))
-             (not (null (denote-sync--tracked-backends file))))
-        (denote-sync-push file nil t)
-      (denote-sync-push file nil t backend))))
+  "Write MERGED-CONTENT back into FILE and force-push, recording a new sync hash."
+  (denote-sync--write-body file merged-content)
+  (if (and (null (cdr (denote-sync--tracked-backends file)))
+           (not (null (denote-sync--tracked-backends file))))
+      (denote-sync-push file nil t)
+    (denote-sync-push file nil t backend)))
 
 ;;;###autoload
 (defun denote-sync-resolve-conflict (&optional file backend)
-  "Interactively resolve FILE's conflict flag via an ediff merge session.
+  "Interactively resolve FILE's conflict via an ediff merge session.
 FILE defaults to `denote-sync--file-at-point'.
 If BACKEND is nil and FILE is conflicted for multiple backends, prompt
 the user to pick which backend conflict to resolve."
@@ -537,12 +720,11 @@ the user to pick which backend conflict to resolve."
                                    (mapcar (lambda (b) (symbol-name (denote-sync-backend-name b))) conflicted)
                                    nil t)))
                       (denote-sync-get-backend (intern choice))))))
-         (p (denote-sync-backend-frontmatter-prefix backend))
          (id (denote-sync--get-id file backend)))
     (unless (denote-sync-tracked-p file backend)
       (user-error "File is not tracked by backend %s: %s" (denote-sync-backend-name backend) file))
     (unless (denote-sync--conflicted-p file backend)
-      (user-error "File has no %s_conflict to resolve: %s" p file))
+      (user-error "File has no conflict to resolve (local and remote have not both changed): %s" file))
     (let* ((buffers (denote-sync--build-conflict-buffers file backend id))
            (local-buffer (plist-get buffers :local))
            (remote-buffer (plist-get buffers :remote))
@@ -590,8 +772,7 @@ If BACKEND-FILTER is non-nil, only show entries for that backend."
                  (eq (cadr entry) (denote-sync-backend-name backend-filter))
                t))
            denote-sync-parent-registry))
-         (candidate-names (mapcar #'car candidates))
-         (lookup-table (make-hash-table :test 'equal)))
+         (table nil))
     (dolist (entry candidates)
       (let* ((name (car entry))
              (bname (cadr entry))
@@ -600,10 +781,9 @@ If BACKEND-FILTER is non-nil, only show entries for that backend."
              (p-str (if (and b (denote-sync-backend-format-parent-fn b))
                         (funcall (denote-sync-backend-format-parent-fn b) (car pdata))
                       (format "%S" (car pdata)))))
-        (puthash name (format " [%s: %s]" bname p-str) lookup-table)))
+        (push (cons name (format "[%s: %s]" bname p-str)) table)))
     (let ((chosen (annotated-completing-read
-                   "Parent target: " candidate-names
-                   :annotation-function (lambda (cand) (gethash cand lookup-table "")))))
+                   (nreverse table) :prompt "Parent target: ")))
       (assoc chosen denote-sync-parent-registry))))
 
 (defun denote-sync--backend-for-parent (parent)
@@ -662,22 +842,39 @@ Honors `denote-sync-default-parent' and `denote-sync-parent-registry'."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Export & Push
 
+(defcustom denote-sync-prompt-resolve-conflicts t
+  "When non-nil, a push that finds both sides changed offers to merge.
+The merge runs `denote-sync-resolve-conflict'.  Never prompts in batch mode."
+  :type 'boolean
+  :group 'denote-sync)
+
+(defvar denote-sync--push-outcome nil
+  "How the last `denote-sync--export-update' ended.
+One of `pushed', `in-sync' (nothing to push), `conflict' (both sides
+changed, nothing written) or `remote-changed' (only the remote changed, so
+a push would discard its edits; nothing written).")
+
 (defun denote-sync--export-update (file backend force)
   "Update FILE's remote document for BACKEND.
-With FORCE non-nil, overwrite without checking sync-state."
-  (let* ((p (denote-sync-backend-frontmatter-prefix backend))
-         (id (denote-sync--get-id file backend))
+With FORCE non-nil, overwrite without checking sync-state.  Sets
+`denote-sync--push-outcome'."
+  (let* ((id (denote-sync--get-id file backend))
          (state (unless force (denote-sync--sync-state file backend))))
+    (setq denote-sync--push-outcome
+          (pcase state
+            ('unchanged 'in-sync) ('both-changed 'conflict) ('remote-only 'remote-changed)
+            (_ 'pushed)))
     (when (eq state 'both-changed)
-      (denote-sync-frontmatter-set file (format "%s_conflict" p) t)
-      (message
-       "%s item %s changed since the last sync (remote and local both changed); marked %s_conflict -- run `denote-sync-resolve-conflict' to reconcile"
-       (capitalize (symbol-name (denote-sync-backend-name backend))) id p))
-    (if (memq state '(unchanged both-changed))
+      (denote-sync--offer-merge file backend id))
+    (if (memq state '(unchanged both-changed remote-only))
         (progn
-          (unless (eq state 'both-changed)
-            (message "%s item %s already in sync; nothing to push"
-                     (capitalize (symbol-name (denote-sync-backend-name backend))) id))
+          (pcase state
+            ('unchanged
+             (message "%s item %s already in sync; nothing to push"
+                      (capitalize (symbol-name (denote-sync-backend-name backend))) id))
+            ('remote-only
+             (message "%s item %s changed remotely only; pull it instead of pushing"
+                      (capitalize (symbol-name (denote-sync-backend-name backend))) id)))
           (cons (funcall (denote-sync-backend-link-url-fn backend) id) nil))
       (pcase-let ((`(,content . ,dangling) (denote-sync--export-body file backend)))
         (let ((result (funcall (denote-sync-backend-update-fn backend) file id content force)))
@@ -693,22 +890,31 @@ With FORCE non-nil, overwrite without checking sync-state."
            (edited (plist-get result :edited-time))
            (created (plist-get result :created-time))
            (p (denote-sync-backend-frontmatter-prefix backend)))
-      (denote-sync-frontmatter-set file (format "%s_id" p) id)
-      (when (and created (not (string-empty-p created)))
-        (denote-sync-frontmatter-set file (format "%s_created" p) created))
-      (denote-sync--record-synced-content file backend id content edited)
+      (denote-sync--record-synced-content
+       file backend id content edited
+       (cons (cons (denote-sync--prop-key p "id") id)
+             (when (and created (not (string-empty-p created)))
+               (list (cons (denote-sync--prop-key p "created") created)))))
       (cons url dangling))))
 
 ;;;###autoload
 (defun denote-sync-push (&optional file parent force backend)
   "Push FILE (default current buffer note) to remote.
-If FILE is tracked, updates its remote document.
+If FILE is tracked, updates its remote document, unless it is already up
+to date, only the remote changed, or both sides changed (it offers the
+merge); with FORCE (prefix argument) it overwrites the remote regardless.
 If FILE is untracked, PARENT is required (prompted if nil).
 If BACKEND is nil:
 - If FILE is tracked by 1 backend, uses it.
 - If FILE is tracked by multiple backends, prompts to select backend.
-- If FILE is untracked, uses registry selection or prompts for backend."
+- If FILE is untracked, uses registry selection or prompts for backend.
+Note lookups are memoized for the duration of the push."
   (interactive (list nil nil current-prefix-arg nil))
+  (denote-sync--with-path-cache
+    (denote-sync--push file parent force backend)))
+
+(defun denote-sync--push (file parent force backend)
+  "Push FILE to BACKEND under PARENT; see `denote-sync-push'."
   (let ((denote-sync--auto-push-in-flight
          (or denote-sync--auto-push-in-flight (make-hash-table :test 'equal)))
         (file (or file (denote-sync--file-at-point) (user-error "No file to export"))))
@@ -730,8 +936,13 @@ If BACKEND is nil:
              (t nil))))
       (if (and target-backend (denote-sync-tracked-p file target-backend))
           (pcase-let ((`(,url . ,dangling) (denote-sync--export-update file target-backend force)))
-            (message "Exported to %s" url)
-            (denote-sync--report-dangling-links dangling))
+            (pcase denote-sync--push-outcome
+              ('pushed (message "Exported to %s" url))
+              ('in-sync (message "Not exported: %s is already up to date (C-u to force)" url))
+              ('remote-changed (message "Not exported: only the remote changed; pull it, or C-u to force push"))
+              ('conflict (message "Not exported: both sides changed; resolve the conflict or C-u to force push")))
+            (when (eq denote-sync--push-outcome 'pushed)
+              (denote-sync--report-dangling-links dangling)))
         (let* ((target-info (if (and parent target-backend)
                                 (cons target-backend parent)
                               (denote-sync--read-parent target-backend)))
@@ -744,17 +955,54 @@ If BACKEND is nil:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Import & Pull
 
+(defun denote-sync--offer-merge (file backend id)
+  "Report FILE's conflict with BACKEND (document ID); offer the merge session.
+Return non-nil when the merge session was started."
+  (let ((name (capitalize (symbol-name (denote-sync-backend-name backend)))))
+    (if (and denote-sync-prompt-resolve-conflicts (not noninteractive)
+             (y-or-n-p (format "%s item %s changed locally and remotely; merge now? " name id)))
+        (progn (denote-sync-resolve-conflict file backend) t)
+      (message "%s item %s changed since the last sync (remote and local both changed) -- run `denote-sync-resolve-conflict' to reconcile"
+               name id)
+      nil)))
+
+(defun denote-sync--refresh-checked (file backend id force)
+  "Refresh FILE from BACKEND's document ID, guarded by its sync state.
+Skips an up-to-date note, declines when only the local note changed (a
+pull would discard its edits) and, when both sides changed, offers the
+merge instead of overwriting.  FORCE refreshes unconditionally."
+  (let ((name (capitalize (symbol-name (denote-sync-backend-name backend))))
+        (state (unless force (denote-sync--sync-state file backend))))
+    (pcase state
+      ('unchanged
+       (message "Not pulled: %s is already up to date with %s (C-u to force)"
+                (file-name-nondirectory file) name))
+      ('local-only
+       (message "Not pulled: %s has local changes the remote lacks; push it, or C-u to force"
+                (file-name-nondirectory file)))
+      ('both-changed
+       (denote-sync--offer-merge file backend id)
+       (message "Not pulled: %s has local and remote changes (C-u to force)"
+                (file-name-nondirectory file)))
+      (_
+       (funcall (denote-sync-backend-refresh-fn backend) file id)
+       (message "Refreshed %s from %s" (file-name-nondirectory file) name)))))
+
 ;;;###autoload
-(defun denote-sync-pull (&optional remote-id target-file backend)
+(defun denote-sync-pull (&optional remote-id target-file backend force)
   "Pull a remote document into Denote, creating or refreshing as needed.
 Without REMOTE-ID, refreshes TARGET-FILE (or current buffer file).
 With REMOTE-ID (an id or URL):
 - If already tracked by any note, refreshes that note.
-- Otherwise imports a new note from the remote document."
+- Otherwise imports a new note from the remote document.
+A refresh is skipped when the note is already up to date or has only local
+changes, and when both sides changed it offers the merge instead of
+overwriting; FORCE (prefix argument) refreshes regardless."
   (interactive
    (list (let ((file (denote-sync--file-at-point)))
            (unless (and file (denote-sync-tracked-p file))
-             (read-string "Remote document ID or URL: ")))))
+             (read-string "Remote document ID or URL: ")))
+         nil nil current-prefix-arg))
   (let* ((file (or target-file (denote-sync--file-at-point)))
          (target-backend (when backend
                            (if (symbolp backend) (denote-sync-get-backend backend) backend))))
@@ -775,10 +1023,7 @@ With REMOTE-ID (an id or URL):
                                      nil t)))
                         (denote-sync-get-backend (intern choice))))))
                  (id (denote-sync--get-id file b)))
-            (funcall (denote-sync-backend-refresh-fn b) file id)
-            (message "Refreshed %s from %s"
-                     (file-name-nondirectory file)
-                     (capitalize (symbol-name (denote-sync-backend-name b))))))
+            (denote-sync--refresh-checked file b id force)))
       (let* ((b (or target-backend
                     (denote-sync--detect-backend-from-id remote-id)
                     (let ((registered (denote-sync-registered-backends)))
@@ -802,11 +1047,7 @@ With REMOTE-ID (an id or URL):
                            file)
                          (denote-sync--find-tracked-file id b))))
         (if target
-            (progn
-              (funcall (denote-sync-backend-refresh-fn b) target id)
-              (message "Refreshed %s from %s"
-                       (file-name-nondirectory target)
-                       (capitalize (symbol-name (denote-sync-backend-name b)))))
+            (denote-sync--refresh-checked target b id force)
           (funcall (denote-sync-backend-import-fn b) id))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -852,7 +1093,6 @@ With REMOTE-ID (an id or URL):
                    (t (or (car (denote-sync--tracked-backends file))
                           (denote-sync-get-backend 'notion)))))
          (bname (denote-sync-backend-name backend))
-         (p (denote-sync-backend-frontmatter-prefix backend))
          (b-counts (when backend-counts (alist-get bname backend-counts))))
     (cl-flet ((record (key)
                 (cl-incf (cdr (assq key counts)))
@@ -900,7 +1140,6 @@ With REMOTE-ID (an id or URL):
                                      (record (if err 'errored 'pulled))))
                         (error (record 'errored)))))
                    ('both-changed
-                    (denote-sync-frontmatter-set file (format "%s_conflict" p) t)
                     (record 'conflicted))))))))
         (error (record 'errored))))))
 
@@ -971,7 +1210,7 @@ With REMOTE-ID (an id or URL):
 (defun denote-sync--mark-remote-dirty (file backend dirty)
   "Set FILE's remote dirty marker for BACKEND to DIRTY."
   (let ((p (denote-sync-backend-frontmatter-prefix backend)))
-    (denote-sync-frontmatter-set file (format "%s_remote_dirty" p) (if dirty t ""))))
+    (denote-sync-frontmatter-set file (denote-sync--prop-key p "remote-dirty") (if dirty t ""))))
 
 (defun denote-sync--refresh-remote-dirty-marker-async (file backend on-done)
   "Asynchronously check if FILE's remote document in BACKEND has advanced."
@@ -1017,7 +1256,7 @@ With REMOTE-ID (an id or URL):
     (when b
       (let* ((name (format "%s: tracked" (denote-sync-backend-name b)))
              (p (denote-sync-backend-frontmatter-prefix b))
-             (regex (denote-sync--frontmatter-nonempty-value-regexp (format "%s_id" p))))
+             (regex (denote-sync--frontmatter-nonempty-value-regexp (denote-sync--prop-key p "id"))))
         (denote-sync--dash-register-view name regex)
         (denote-dash-open-view name)))))
 
@@ -1034,8 +1273,16 @@ With REMOTE-ID (an id or URL):
                 (car (denote-sync-registered-backends))))))
     (when b
       (let* ((name (format "%s: conflicts" (denote-sync-backend-name b)))
-             (p (denote-sync-backend-frontmatter-prefix b))
-             (regex (format "^%s_conflict:[ \t]*t[ \t]*$" p)))
+             (ids (seq-keep (lambda (file)
+                              (when (denote-sync--get-conflict file b)
+                                (denote-retrieve-filename-identifier file)))
+                            (seq-filter (lambda (f) (denote-sync-tracked-p f b))
+                                        (denote-directory-files))))
+             ;; conflicts are derived, not stored: match the conflicted notes by id
+             (regex (if ids
+                        (format "^\\(?:#\\+\\)?identifier:[ \t]*\"?\\(?:%s\\)"
+                                (mapconcat #'regexp-quote ids "\\|"))
+                      "\\`\\'")))
         (denote-sync--dash-register-view name regex)
         (denote-dash-open-view name)))))
 
@@ -1053,7 +1300,8 @@ With REMOTE-ID (an id or URL):
     (when b
       (let* ((name (format "%s: remote-updated" (denote-sync-backend-name b)))
              (p (denote-sync-backend-frontmatter-prefix b))
-             (regex (format "^%s_remote_dirty:[ \t]*t[ \t]*$" p)))
+             (regex (format "^\\(?:#\\+\\)?%s:[ \t]*t[ \t]*$"
+                            (denote-sync--legacy-alternation (denote-sync--prop-key p "remote-dirty")))))
         (denote-sync--dash-register-view name regex)
         (dolist (file (denote-directory-files))
           (when (denote-sync-tracked-p file b)

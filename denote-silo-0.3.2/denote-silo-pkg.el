@@ -1,0 +1,2 @@
+;; Generated package description from denote-silo.el  -*- mode: lisp-data; no-byte-compile: t; lexical-binding:t -*-
+(define-package "denote-silo" "0.3.2" "Convenience functions for using Denote in multiple silos" '((emacs "28.1") (denote "4.0.0")) :commit "41985759d29d4a673055a0d0bd08e2ada88cffe8" :authors '(("Protesilaos" . "info@protesilaos.com")) :maintainer '("Protesilaos" . "info@protesilaos.com") :url "https://github.com/protesilaos/denote-silo")

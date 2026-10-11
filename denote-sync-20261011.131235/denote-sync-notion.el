@@ -183,8 +183,8 @@ Calls (CALLBACK ERROR RESULT)."
   "Built-in default Notion property values applied to newly created pages.")
 
 (defun denote-sync-notion--export-properties (file)
-  "Return FILE's `notion_properties' front-matter value, parsed but unresolved."
-  (when-let* ((raw (denote-sync-frontmatter-get file "notion_properties"))
+  "Return FILE's `sync-notion-properties' front-matter value, parsed but unresolved."
+  (when-let* ((raw (denote-sync-frontmatter-get file (denote-sync--prop-key "notion" "properties")))
               (raw (and (not (string-empty-p raw)) raw)))
     (json-parse-string raw :object-type 'alist :array-type 'list)))
 
@@ -206,11 +206,11 @@ Calls (CALLBACK ERROR RESULT)."
      id (list (cons key (list (cons 'title (denote-sync-notion--rich-text-value title))))))))
 
 (defun denote-sync-notion--set-tags-from-properties (file properties)
-  "Set FILE's notion_tags from Notion page PROPERTIES' Tags, if any."
+  "Set FILE's sync-notion-tags from Notion page PROPERTIES' Tags, if any."
   (when-let* ((tags-prop (map-elt properties 'Tags))
               (multi-select (map-elt tags-prop 'multi_select))
               (names (seq-map (lambda (tag) (map-elt tag 'name)) multi-select)))
-    (denote-sync-frontmatter-set file "notion_tags" names)))
+    (denote-sync-frontmatter-set file (denote-sync--prop-key "notion" "tags") names)))
 
 (defun denote-sync-notion--extract-page-id (id-or-url)
   "Return the 32-char hex page id embedded in ID-OR-URL."
@@ -333,7 +333,7 @@ Calls (CALLBACK ERROR RESULT)."
          (url (map-elt page 'url))
          (created (map-elt page 'created_time))
          (edited (map-elt page 'last_edited_time)))
-    (denote-sync-frontmatter-set file "notion_parent" parent-arg)
+    (denote-sync-frontmatter-set file (denote-sync--prop-key "notion" "parent") parent-arg)
     (denote-sync-notion--set-tags-from-properties file (map-elt page 'properties))
     (denote-sync-notion--set-page-title id (map-elt page 'properties)
                                         (denote-sync--export-title file))
@@ -346,7 +346,7 @@ Calls (CALLBACK ERROR RESULT)."
 
 (defun denote-sync-notion--update (file id content _force)
   "Update Notion page ID with CONTENT for FILE."
-  (let* ((stored-parent (string-trim (or (denote-sync-frontmatter-get file "notion_parent") "") "\"" "\""))
+  (let* ((stored-parent (string-trim (or (denote-sync-frontmatter-get file (denote-sync--prop-key "notion" "parent")) "") "\"" "\""))
          (registry-entry (denote-sync-notion--registry-entry-for-parent
                           (denote-sync-notion--parse-parent-arg stored-parent)))
          (default-properties (denote-sync-notion--registry-entry-properties registry-entry)))
@@ -400,7 +400,7 @@ Calls (CALLBACK ERROR RESULT)."
             (let* ((page (map-elt result2 'page))
                    (url (map-elt page 'url))
                    (edited (map-elt page 'last_edited_time))
-                   (stored-parent (string-trim (or (denote-sync-frontmatter-get file "notion_parent") "") "\"" "\""))
+                   (stored-parent (string-trim (or (denote-sync-frontmatter-get file (denote-sync--prop-key "notion" "parent")) "") "\"" "\""))
                    (registry-entry (denote-sync-notion--registry-entry-for-parent
                                     (denote-sync-notion--parse-parent-arg stored-parent)))
                    (default-properties (denote-sync-notion--registry-entry-properties registry-entry)))
@@ -417,7 +417,7 @@ Calls (CALLBACK ERROR RESULT)."
          (body (denote-sync-notion--clean-imported-body
                 (map-elt (map-elt result 'markdown) 'markdown))))
     (denote-sync--write-body file body)
-    (denote-sync-frontmatter-set file "notion_edited" (map-elt page 'last_edited_time))
+    (denote-sync-frontmatter-set file (denote-sync--prop-key "notion" "edited") (map-elt page 'last_edited_time))
     (denote-sync--record-synced-content file (alist-get 'notion denote-sync-backends) id body)
     (denote-sync-notion--set-tags-from-properties file (map-elt page 'properties))))
 
@@ -453,10 +453,10 @@ Calls (CALLBACK ERROR RESULT)."
             (cons "notion" tags) 'markdown-yaml nil created)
     (let ((new-file (buffer-file-name)))
       (denote-sync--write-body new-file body)
-      (denote-sync-frontmatter-set new-file "notion_id" id)
-      (denote-sync-frontmatter-set new-file "notion_tags" tags)
-      (denote-sync-frontmatter-set new-file "notion_created" created)
-      (denote-sync-frontmatter-set new-file "notion_edited" edited)
+      (denote-sync-frontmatter-set new-file (denote-sync--prop-key "notion" "id") id)
+      (denote-sync-frontmatter-set new-file (denote-sync--prop-key "notion" "tags") tags)
+      (denote-sync-frontmatter-set new-file (denote-sync--prop-key "notion" "created") created)
+      (denote-sync-frontmatter-set new-file (denote-sync--prop-key "notion" "edited") edited)
       (denote-sync--record-synced-content new-file (alist-get 'notion denote-sync-backends) id body)
       (save-buffer)
       (message "Imported %s" (file-name-nondirectory new-file))
@@ -496,8 +496,7 @@ Calls (CALLBACK ERROR RESULT)."
 (defconst denote-notion--dash-view-tracked-name "notion: tracked")
 (defconst denote-notion--dash-view-conflicts-name "notion: conflicts")
 (defconst denote-notion--dash-view-remote-updated-name "notion: remote-updated")
-(defconst denote-notion--dash-conflict-grep-filter "^notion_conflict:[ \t]*t[ \t]*$")
-(defconst denote-notion--dash-remote-dirty-grep-filter "^notion_remote_dirty:[ \t]*t[ \t]*$")
+(defconst denote-notion--dash-remote-dirty-grep-filter "^\\(?:#\\+\\)?\\(?:sync-notion-remote-dirty\\|notion_remote_dirty\\):[ \t]*t[ \t]*$")
 (defconst denote-notion--debug-buffer-name "*denote-sync-debug*")
 (defvaralias 'denote-notion--auto-push-in-flight 'denote-sync--auto-push-in-flight)
 

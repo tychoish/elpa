@@ -32,6 +32,69 @@
   :type 'string
   :group 'denote-sync-gdocs)
 
+(defcustom denote-sync-gdocs-default-account nil
+  "Default Google account (email address) for `denote-sync-gdocs'.
+Used when creating documents if no account is specified by parent, and
+as a fallback when syncing notes without a `sync-gdoc-account' front-matter property.
+If nil, `gog' uses its own default account."
+  :type '(choice (const :tag "None (use gog default)" nil)
+                 (string :tag "Email address"))
+  :group 'denote-sync-gdocs)
+
+(defcustom denote-sync-gdocs-insert-title t
+  "When non-nil, prepend the note title as a top-level heading in the Doc.
+The heading is added on push and stripped on pull, so it never enters
+the note body or the content hash.  The Drive document title is always
+set to the note title."
+  :type 'boolean
+  :group 'denote-sync-gdocs)
+
+(defvar denote-sync-gdocs--double-title-answers (make-hash-table :test #'equal)
+  "Per-session answers to the \"add title above existing H1?\" prompt, by file.")
+
+(defun denote-sync-gdocs--has-h1-p (content)
+  "Return non-nil if CONTENT has a level-1 Markdown heading outside code fences."
+  (let ((in-fence nil) found)
+    (dolist (line (split-string content "\n"))
+      (cond ((string-match-p "\\`[ \t]*\\(```\\|~~~\\)" line)
+             (setq in-fence (not in-fence)))
+            ((and (not in-fence) (string-match-p "\\`# " line))
+             (setq found t))))
+    found))
+
+(defun denote-sync-gdocs--add-title-p (title content file)
+  "Return non-nil if TITLE should be prepended to CONTENT of FILE.
+When CONTENT already has a level-1 heading, ask whether to add the title
+anyway (remembered per FILE for the session); without a way to ask,
+don't double up."
+  (and denote-sync-gdocs-insert-title title (not (string-empty-p title))
+       (or (not (denote-sync-gdocs--has-h1-p content))
+           (let ((key (or file title)))
+             (pcase (gethash key denote-sync-gdocs--double-title-answers 'unset)
+               ('unset
+                (and (not noninteractive)
+                     (puthash key
+                              (y-or-n-p (format "\"%s\" already has a level-1 heading; add the title heading above it too? "
+                                                title))
+                              denote-sync-gdocs--double-title-answers)))
+               (answer answer))))))
+
+(defun denote-sync-gdocs--with-title (title content &optional file)
+  "Return CONTENT prefixed with TITLE as a Markdown H1, if enabled.
+FILE keys the double-heading prompt; see `denote-sync-gdocs--add-title-p'."
+  (if (denote-sync-gdocs--add-title-p title content file)
+      (concat "# " title "\n\n" content)
+    content))
+
+(defun denote-sync-gdocs--strip-title (title body)
+  "Remove a leading Markdown H1 equal to TITLE from BODY, if enabled."
+  (if (and denote-sync-gdocs-insert-title body title
+           (string-match (concat "\\`[ \t\n]*# +" (regexp-quote title)
+                                 "[ \t]*\\(?:\n+\\|\\'\\)")
+                         body))
+      (substring body (match-end 0))
+    body))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Process execution
 
@@ -168,14 +231,39 @@ Calls (CALLBACK ERROR RESULT)."
           (or (car parent) "default")
           (or (cdr parent) "root")))
 
+(defun denote-sync-gdocs--available-accounts ()
+  "Return a list of authorized Google account emails from `gog'."
+  (condition-case nil
+      (let* ((out (denote-sync-gdocs--run-json '("auth" "list")))
+             (accts (map-elt out 'accounts)))
+        (seq-filter (lambda (e) (and (stringp e) (not (string-empty-p e))))
+                    (seq-map (lambda (a) (map-elt a 'email)) accts)))
+    (error nil)))
+
+(defun denote-sync-gdocs--prompt-account (&optional prompt default)
+  "Prompt for a Google account email with completion over authorized accounts.
+PROMPT is the prompt string.  DEFAULT is the initial default choice."
+  (let* ((accounts (denote-sync-gdocs--available-accounts))
+         (def (or default
+                  denote-sync-gdocs-default-account
+                  (car accounts)))
+         (prompt-str (if def
+                         (format "%s(default %s): " (or prompt "Google account: ") def)
+                       (or prompt "Google account: ")))
+         (choice (completing-read prompt-str accounts nil nil nil nil def)))
+    (if (string-empty-p (string-trim choice))
+        def
+      (string-trim choice))))
+
 ;;;###autoload
 (defun denote-sync-gdocs-add-parent (name account folder-id)
   "Add a Google Docs parent target to `denote-sync-parent-registry'."
   (interactive
-   (list (read-string "Registry entry name: ")
-         (let ((acct (read-string "Google account (email, or empty for default): ")))
-           (unless (string-empty-p acct) acct))
-         (let ((folder (read-string "Google Drive folder ID (or empty for root): ")))
+   (let* ((name (read-string "Registry entry name (e.g., Team Docs, Personal): "))
+          (acct (denote-sync-gdocs--prompt-account "Google account: "))
+          (folder (read-string "Google Drive folder ID (or empty for root): ")))
+     (list name
+           (unless (string-empty-p acct) acct)
            (unless (string-empty-p folder) folder))))
   (let* ((parent (cons account folder-id))
          (entry (cons name (list 'google-docs parent)))
@@ -190,10 +278,20 @@ Calls (CALLBACK ERROR RESULT)."
 ;; Backend protocol implementation
 
 (defun denote-sync-gdocs--file-account (file)
-  "Return the Google account associated with FILE, or nil."
-  (let ((acct (denote-sync-frontmatter-get file "gdoc_account")))
-    (when (and acct (not (string-empty-p acct)) (not (equal acct "\"\"")))
-      (string-trim acct "\"" "\""))))
+  "Return the Google account associated with FILE, or fallback to default.
+If no account is set on FILE and `denote-sync-gdocs-default-account' is nil,
+automatically uses the account if exactly one account is authorized in `gog'."
+  (let ((acct (denote-sync-frontmatter-get file (denote-sync--prop-key "gdoc" "account"))))
+    (cond
+     ((and acct (not (string-empty-p acct)) (not (equal acct "\"\"")))
+      (string-trim acct "\"" "\""))
+     ((and denote-sync-gdocs-default-account
+           (not (string-empty-p denote-sync-gdocs-default-account)))
+      denote-sync-gdocs-default-account)
+     (t
+      (let ((accounts (denote-sync-gdocs--available-accounts)))
+        (when (= (length accounts) 1)
+          (car accounts)))))))
 
 (defun denote-sync-gdocs--create (file parent content)
   "Create a new Google Doc for FILE under PARENT with CONTENT."
@@ -201,11 +299,13 @@ Calls (CALLBACK ERROR RESULT)."
                          ((and (consp parent) (consp (car parent))) (car parent))
                          ((consp parent) parent)
                          (t (cons nil nil))))
-         (account (car actual-parent))
+         (account (or (car actual-parent)
+                      (denote-sync-gdocs--file-account file)
+                      denote-sync-gdocs-default-account))
          (folder (cdr actual-parent))
          (title (denote-sync--export-title file))
          (temp-file (make-temp-file "gdoc-create-" nil ".md")))
-    (with-temp-file temp-file (insert content))
+    (with-temp-file temp-file (insert (denote-sync-gdocs--with-title title content file)))
     (unwind-protect
         (let* ((args (list "docs" "create" title "--file" temp-file "--json"))
                (args (if (and folder (not (string-empty-p folder)))
@@ -219,9 +319,9 @@ Calls (CALLBACK ERROR RESULT)."
                (edited-time (plist-get meta :edited-time))
                (url (or (map-elt created 'webViewLink) (denote-sync-gdocs--link-url id))))
           (when (and account (not (string-empty-p account)))
-            (denote-sync-frontmatter-set file "gdoc_account" account))
+            (denote-sync-frontmatter-set file (denote-sync--prop-key "gdoc" "account") account))
           (when (and folder (not (string-empty-p folder)))
-            (denote-sync-frontmatter-set file "gdoc_folder" folder))
+            (denote-sync-frontmatter-set file (denote-sync--prop-key "gdoc" "folder") folder))
           (list :id id :url url :created-time created-time :edited-time edited-time))
       (when (file-exists-p temp-file)
         (delete-file temp-file)))))
@@ -231,7 +331,7 @@ Calls (CALLBACK ERROR RESULT)."
   (let* ((account (denote-sync-gdocs--file-account file))
          (title (denote-sync--export-title file))
          (temp-file (make-temp-file "gdoc-write-" nil ".md")))
-    (with-temp-file temp-file (insert content))
+    (with-temp-file temp-file (insert (denote-sync-gdocs--with-title title content file)))
     (unwind-protect
         (progn
           (denote-sync-gdocs--run
@@ -262,9 +362,11 @@ Calls (CALLBACK ERROR RESULT)."
                     (denote-sync-gdocs--run
                      (list "docs" "export" id "--format" "md" "--out" temp-out "--overwrite")
                      account)
-                    (with-temp-buffer
-                      (insert-file-contents temp-out)
-                      (buffer-string)))
+                    (denote-sync-gdocs--strip-title
+                     name
+                     (with-temp-buffer
+                       (insert-file-contents temp-out)
+                       (buffer-string))))
                 (when (file-exists-p temp-out)
                   (delete-file temp-out)))))))
     (list :id id :name name :created-time created :edited-time edited :body body)))
@@ -290,9 +392,11 @@ Calls (CALLBACK ERROR RESULT)."
                 (unwind-protect
                     (if (or (stringp err-or-code) (not (zerop err-or-code)))
                         (funcall callback (format "Export failed: %s" err-or-code) nil)
-                      (let ((body (with-temp-buffer
-                                    (insert-file-contents temp-out)
-                                    (buffer-string))))
+                      (let ((body (denote-sync-gdocs--strip-title
+                                   name
+                                   (with-temp-buffer
+                                     (insert-file-contents temp-out)
+                                     (buffer-string)))))
                         (funcall callback nil (list :id id :name name :created-time created :edited-time edited :body body))))
                   (when (file-exists-p temp-out)
                     (delete-file temp-out))))
@@ -330,7 +434,7 @@ Calls (CALLBACK ERROR RESULT)."
       (denote-sync--write-body file body)
       (denote-sync--record-synced-content file (alist-get 'google-docs denote-sync-backends) id body edited))
     (when edited
-      (denote-sync-frontmatter-set file "gdoc_edited" edited))))
+      (denote-sync-frontmatter-set file (denote-sync--prop-key "gdoc" "edited") edited))))
 
 (defun denote-sync-gdocs--refresh-file (file id)
   "Synchronously refresh FILE from Google Doc ID."
@@ -351,9 +455,12 @@ Calls (CALLBACK ERROR RESULT)."
      t
      account)))
 
-(defun denote-sync-gdocs--import-doc (id)
-  "Import a new Denote note from Google Doc ID."
-  (let* ((meta (denote-sync-gdocs--fetch-remote id t))
+(defun denote-sync-gdocs--import-doc (id &optional account)
+  "Import a new Denote note from Google Doc ID.
+Optional ACCOUNT specifies the Google account email; defaults to
+`denote-sync-gdocs-default-account'."
+  (let* ((acct (or account denote-sync-gdocs-default-account))
+         (meta (denote-sync-gdocs--fetch-remote id t acct))
          (name (plist-get meta :name))
          (created (plist-get meta :created-time))
          (edited (plist-get meta :edited-time))
@@ -362,9 +469,11 @@ Calls (CALLBACK ERROR RESULT)."
             '("gdoc") 'markdown-yaml nil created)
     (let ((new-file (buffer-file-name)))
       (denote-sync--write-body new-file body)
-      (denote-sync-frontmatter-set new-file "gdoc_id" id)
-      (denote-sync-frontmatter-set new-file "gdoc_created" (or created ""))
-      (denote-sync-frontmatter-set new-file "gdoc_edited" (or edited ""))
+      (denote-sync-frontmatter-set new-file (denote-sync--prop-key "gdoc" "id") id)
+      (denote-sync-frontmatter-set new-file (denote-sync--prop-key "gdoc" "created") (or created ""))
+      (denote-sync-frontmatter-set new-file (denote-sync--prop-key "gdoc" "edited") (or edited ""))
+      (when (and acct (not (string-empty-p acct)))
+        (denote-sync-frontmatter-set new-file (denote-sync--prop-key "gdoc" "account") acct))
       (denote-sync--record-synced-content new-file (alist-get 'google-docs denote-sync-backends) id body edited)
       (save-buffer)
       (message "Imported %s" (file-name-nondirectory new-file))
@@ -372,7 +481,7 @@ Calls (CALLBACK ERROR RESULT)."
 
 (defun denote-sync-gdocs--read-parent ()
   "Interactively prompt for a Google Docs parent."
-  (let* ((acct (read-string "Google account (email, or empty for default): "))
+  (let* ((acct (denote-sync-gdocs--prompt-account "Google account: "))
          (folder (read-string "Google Drive folder ID (or empty for root): ")))
     (cons (unless (string-empty-p acct) acct)
           (unless (string-empty-p folder) folder))))
@@ -397,6 +506,43 @@ Calls (CALLBACK ERROR RESULT)."
   :read-parent-fn #'denote-sync-gdocs--read-parent
   :format-parent-fn #'denote-sync-gdocs--format-parent
   :parse-parent-fn nil))
+
+;;;###autoload
+(defun denote-sync-gdocs-set-account (&optional file account)
+  "Set the Google account for FILE (defaults to current note) to ACCOUNT.
+Interactively, prompts with completion over all authorized accounts in `gog'."
+  (interactive
+   (let* ((f (or (buffer-file-name) (denote-sync--prompt-file)))
+          (current (denote-sync-gdocs--file-account f))
+          (acct (denote-sync-gdocs--prompt-account
+                 (format "Set Google account for %s: " (file-name-nondirectory f))
+                 current)))
+     (list f acct)))
+  (let ((f (or file (buffer-file-name))))
+    (unless (and f (file-exists-p f))
+      (user-error "No valid file specified"))
+    (denote-sync-frontmatter-set f (denote-sync--prop-key "gdoc" "account") account)
+    (message "Set %s sync-gdoc-account to %s" (file-name-nondirectory f) account)))
+
+;;;###autoload
+(defun denote-sync-gdocs-add-account (email)
+  "Authorize a new Google Account EMAIL using `gog'.
+Runs the OAuth login flow interactively in a process buffer."
+  (interactive "sGoogle account email to authorize: ")
+  (let* ((email (string-trim email))
+         (buf (get-buffer-create "*gog-auth*")))
+    (when (string-empty-p email)
+      (user-error "Email address cannot be empty"))
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert (format "Starting OAuth authorization for %s...
+
+" email)))
+    (display-buffer buf)
+    (start-process "gog-auth" buf
+                   denote-sync-gdocs-gog-executable
+                   "auth" "add" email "--services=docs,drive")
+    (message "Started gog auth for %s in buffer *gog-auth*" email)))
 
 (provide 'denote-sync-gdocs)
 ;;; denote-sync-gdocs.el ends here

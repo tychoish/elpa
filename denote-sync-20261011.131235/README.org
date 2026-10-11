@@ -16,6 +16,13 @@ Two-way synchronization between Denote notes and remote services (Notion, Google
 
 - *Notion* (=denote-sync-notion.el=) via the =npx ntn= CLI wrapper.
 - *Google Docs* (=denote-sync-gdocs.el=) via the =gog= CLI wrapper.
+- *Silo* (=denote-sync-silo.el=) copies and syncs notes into another Denote
+  directory, optionally converting file type (Org, Markdown, text) and remapping
+  =denote-sequence= signatures.  =denote-sync-silo-add-rule= defines a tree rule and
+  =denote-sync-silo-export-tree= exports it, rewriting links between exported
+  notes.  Markdown to Org conversion uses =mdwn.el=, which needs the =markdown=
+  and =markdown-inline= tree-sitter grammars (set =mdwn-install-grammars= to
+  install them on demand).  The target directory must not overlap the source.
 
 ** Features
 - Push current Denote note to remote (=denote-sync-push=), creating or updating remote documents.
@@ -24,7 +31,7 @@ Two-way synchronization between Denote notes and remote services (Notion, Google
 - Three-way interactive conflict resolution via Ediff (=denote-sync-resolve-conflict=) with cached merge ancestors.
 - Bounded async batch sync across all tracked notes (=denote-sync-all=).
 - Integration with =denote-dash= saved views for tracked, conflicted, and remote-updated notes.
-- Automatic YAML front matter tracking (=<prefix>_id=, =<prefix>_created=, =<prefix>_edited=, =<prefix>_sync_hash=, =<prefix>_conflict=).
+- Automatic YAML front matter tracking (=sync-<backend>-id=, =sync-<backend>-created=, =sync-<backend>-edited=, =sync-<backend>-sync-hash=). Conflicts are not stored: a note is conflicted when both its local body and the remote changed since the stored hash. Notes using the older =<backend>_id= spelling are still read and are renamed the next time they sync.
 - Configurable parent registry (=denote-sync-parent-registry=) with ACR selection.
 
 * Installation
@@ -34,7 +41,7 @@ Two-way synchronization between Denote notes and remote services (Notion, Google
 
 ** Prerequisites
 - For Notion sync: Node.js and =ntn= (=npx ntn=).
-- For Google Docs sync: =gog= CLI (=go install github.com/openclaw/gogcli/cmd/gog@latest=).
+- For Google Docs sync: =gog= CLI (=go install github.com/openclaw/gogcli/cmd/gog@latest=). See [[file:docs/google-docs-setup.org][docs/google-docs-setup.org]] for complete GCP credentials, file keyring, and multi-account setup.
 
 ** Manual Installation
 #+begin_src bash
@@ -46,6 +53,7 @@ git clone https://github.com/tychoish/denote-sync.git ~/src/denote-sync
 (require 'denote-sync)
 (require 'denote-sync-notion) ; optional
 (require 'denote-sync-gdocs)  ; optional
+(require 'denote-sync-silo)   ; optional
 #+end_src
 
 * Configuration
@@ -68,6 +76,27 @@ Basic =use-package= configuration:
 (use-package denote-sync-gdocs
   :ensure t
   :after denote-sync)
+
+(use-package mdwn
+  :custom
+  ;; install the markdown tree-sitter grammars on first use
+  (mdwn-install-grammars t))
+
+(use-package denote-sync-silo
+  :after denote-sync
+  :custom
+  ;; set to t to allow a target directory that overlaps the source
+  (denote-sync-silo-allow-overlap nil)
+  :config
+  (denote-sync-silo-add-rule
+   :name "Public Documentation"
+   :source-prefix "1=2"
+   :target-directory "~/Documents/public-wiki/"
+   :target-prefix "5"
+   :target-format 'markdown-yaml
+   ;; optional: retag on the destination side (also :tags, a list or function)
+   :add-tags '("public")
+   :remove-tags '("draft")))
 #+end_src
 
 * Commands & API
@@ -81,6 +110,11 @@ Basic =use-package= configuration:
 | =denote-sync-pull=              | Refresh current note or import a new note from a remote ID/URL.   |
 | =denote-sync-resolve-conflict=  | Three-way Ediff merge session against cached sync ancestor.       |
 | =denote-sync-all=               | Bounded async batch sync over all tracked notes across backends.  |
+| =denote-sync-silo-add-rule=     | Define a tree rule: source prefix, target silo, prefix, format.  |
+| =denote-sync-silo-export-tree=  | Export and sync a rule's whole tree, rewriting internal links.    |
+| =denote-sync-gdocs-set-account= | Assign or change Google account email on current note.           |
+| =denote-sync-gdocs-add-account= | Authorize an additional Google account via OAuth in Emacs.       |
+| =denote-sync-gdocs-add-parent=  | Register named parent target with account and Drive folder ID.   |
 
 * Development
 :PROPERTIES:
@@ -90,7 +124,7 @@ Basic =use-package= configuration:
 Run the ERT test suite:
 
 #+begin_src bash
-emacs --batch --eval '(package-initialize)' -L . -l test/test-denote-sync.el -l test/test-denote-sync-notion.el -l test/test-denote-sync-gdocs.el -f ert-run-tests-batch-and-exit
+emacs --batch --eval '(package-initialize)' -L . -l test/test-denote-sync.el -l test/test-denote-sync-notion.el -l test/test-denote-sync-gdocs.el -l test/test-denote-sync-silo.el -l test/test-mdwn.el -f ert-run-tests-batch-and-exit
 #+end_src
 
 * License
