@@ -5,3 +5,4 @@ archives/*
 **.so
 **.o
 **.c.o
+elpaish-keyring.gpg
