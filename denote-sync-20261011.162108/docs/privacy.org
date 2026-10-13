@@ -1,0 +1,188 @@
+#+TITLE: Privacy Policy for denote-sync
+#+AUTHOR: Sam Kleinman
+#+EMAIL: garen@tychoish.com
+#+DATE: [2026-10-11 Sun]
+#+LANGUAGE: en
+#+OPTIONS: toc:2 num:nil
+
+* Effective Date
+:PROPERTIES:
+:CUSTOM_ID: effective-date
+:END:
+
+*October 11, 2026*
+
+* Introduction & Overview
+:PROPERTIES:
+:CUSTOM_ID: introduction
+:END:
+
+=denote-sync= is an open-source Emacs package developed by Sam Kleinman
+(=garen@tychoish.com=) that enables bidirectional synchronization between local
+[[https://github.com/protesilaos/denote][Denote]] notes and external cloud services, including Google Docs.
+
+Repository: [[https://github.com/tychoish/denote-sync][https://github.com/tychoish/denote-sync]] \\
+Developer Contact: *garen@tychoish.com*
+
+Your privacy is fundamental to the design of =denote-sync=. This Privacy Policy
+explains how =denote-sync= accesses, processes, and protects your information when you
+use Google Docs synchronization features.
+
+* Google API Services User Data Policy Compliance
+:PROPERTIES:
+:CUSTOM_ID: google-api-compliance
+:END:
+
+#+begin_quote
+denote-sync's use and transfer to any other app of information received from Google APIs
+will adhere to [[https://developers.google.com/terms/api-services-user-data-policy][Google API Services User Data Policy]], including the Limited Use requirements.
+#+end_quote
+
+* Architecture: Local-First & Zero Central Servers
+:PROPERTIES:
+:CUSTOM_ID: architecture
+:END:
+
+=denote-sync= is designed around a strictly *local-first* architecture:
+
+1. *Direct Client-to-API Communication*: Synchronization occurs exclusively between
+   your local machine and Google's official API endpoints (=docs.googleapis.com= and
+   =drive.googleapis.com=) via the local =gog= CLI helper.
+2. *No Central Backend*: =denote-sync= operates without any central server, cloud proxy,
+   intermediate relay, or remote database. The developer does not host, operate, or maintain
+   any servers that receive or process your note contents or authentication tokens.
+3. *No Third-Party Access*: Because there are no intermediate servers, neither the author
+   of =denote-sync= nor any third party has access to your notes, Google credentials, or
+   account metadata.
+
+* Google OAuth Scopes Requested
+:PROPERTIES:
+:CUSTOM_ID: oauth-scopes
+:END:
+
+When configuring Google Docs synchronization, =denote-sync= requests only the minimal
+scopes strictly necessary to provide note synchronization:
+
+| Scope | Category | Justification |
+|-------+----------+---------------|
+| =https://www.googleapis.com/auth/documents= | Sensitive | Used to create new Google Docs from local notes, retrieve document text and structure during note pull/refresh, and write updated content to Google Docs during note push. |
+| =https://www.googleapis.com/auth/drive.file= | Sensitive | Used strictly to create, locate, and organize documents within folders created or opened by =denote-sync=. It does *not* read, list, or modify other files in your Google Drive. |
+| =https://www.googleapis.com/auth/userinfo.email= | Non-sensitive | Used to identify the authorized Google Account email address locally so =denote-sync= can associate notes with the correct account in multi-account environments. |
+| =openid= | Non-sensitive | Used to verify user authentication identity during the OAuth 2.0 handshake. |
+
+** Scope Minimization Guarantee
+=denote-sync= intentionally avoids broad Drive access (=https://www.googleapis.com/auth/drive=).
+By utilizing =drive.file=, the application's Drive permissions are permanently constrained
+strictly to files created by =denote-sync= or files explicitly selected by you.
+
+* Information Collected and How It Is Used
+:PROPERTIES:
+:CUSTOM_ID: information-collected
+:END:
+
+** 1. Authentication Credentials and Tokens
+- *What is stored*: OAuth 2.0 refresh tokens and short-lived access tokens.
+- *Where it is stored*: Stored exclusively on your local computer within an encrypted
+  file keyring managed by =gog= (=~/.local/share/gogcli/keyring=), protected by your
+  passphrase (=GOG_KEYRING_PASSWORD=).
+- *How it is used*: Used solely by local processes to authenticate requests directly to
+  Google APIs. Tokens are never transmitted to any other entity.
+
+** 2. Note Contents and Document Metadata
+- *What is processed*: Markdown and Org-mode text content, document titles, identifiers,
+  and revision timestamps.
+- *Where it is stored*: On your local storage drive in your Denote note files, and in
+  Google Docs within your personal or workspace Google Account.
+- *How it is used*: Used exclusively to perform synchronization (pushing local updates to
+  Google Docs and pulling remote revisions back into Emacs).
+
+** 3. Telemetry and Analytics
+- =denote-sync= contains *zero telemetry, tracking, analytics, or error-reporting beacons*.
+- No background logging or behavioral data is collected, monitored, or transmitted.
+
+* Data Sharing and Transfer
+:PROPERTIES:
+:CUSTOM_ID: data-sharing
+:END:
+
+- *No Sale of Data*: We do not sell, rent, monetize, or trade any user data.
+- *No Third-Party Sharing*: No user data is transferred or disclosed to advertising
+  networks, data brokers, AI model training platforms, or analytics vendors.
+- *No Cross-App Transfers*: Data obtained through Google APIs is used solely within
+  =denote-sync= and is never transferred to any secondary service.
+
+* Data Storage, Retention, and Deletion
+:PROPERTIES:
+:CUSTOM_ID: data-retention-deletion
+:END:
+
+** Local Storage
+All data stored by =denote-sync= resides entirely on your local filesystem:
+- Denote notes: in your configured =denote-directory=.
+- OAuth credentials and keys: in =~/.local/share/gogcli/= and =~/.config/gogcli/=.
+
+** Deletion and Revocation Procedures
+You maintain total control over your data and access permissions:
+
+1. *Revoke Google OAuth Access*:
+   You can revoke =denote-sync='s access to your Google account at any time via Google Account
+   Security Settings:
+   [[https://myaccount.google.com/permissions][https://myaccount.google.com/permissions]]
+   Revocation immediately invalidates all active and stored tokens.
+
+2. *Delete Local Tokens and Credentials*:
+   To remove all locally cached tokens for an account, run:
+   #+begin_src bash
+   gog auth remove <your-email@example.com>
+   #+end_src
+   Or delete the local keyring directory entirely:
+   #+begin_src bash
+   rm -rf ~/.local/share/gogcli/keyring
+   #+end_src
+
+3. *Delete Synced Documents*:
+   Documents created in Google Docs remain under your ownership and can be deleted directly
+   from [[https://drive.google.com/][Google Drive]].
+
+* Security
+:PROPERTIES:
+:CUSTOM_ID: security
+:END:
+
+We apply industry best practices to safeguard your data:
+- *In-Transit Security*: All communication with Google APIs is secured using modern TLS 1.3
+  encryption.
+- *At-Rest Security*: OAuth refresh tokens are encrypted at rest on your machine using
+  AES-GCM encryption in the =gog= file keyring backend.
+- *Minimal Privilege*: By restricting scopes to =drive.file=, the blast radius of any
+  local token compromise is strictly confined to files created by the application.
+
+* Children's Privacy
+:PROPERTIES:
+:CUSTOM_ID: children
+:END:
+
+=denote-sync= is not intended for or directed toward children under the age of 13.
+We do not knowingly collect or solicit personal data from children.
+
+* Changes to This Privacy Policy
+:PROPERTIES:
+:CUSTOM_ID: policy-changes
+:END:
+
+If this Privacy Policy is updated, revisions will be published in this repository and at:
+[[https://tychoish.github.io/denote-sync/privacy.html][https://tychoish.github.io/denote-sync/privacy.html]]
+
+Changes will be documented in the git commit history of the repository.
+
+* Contact Information
+:PROPERTIES:
+:CUSTOM_ID: contact
+:END:
+
+For questions, feedback, or data privacy inquiries regarding =denote-sync=, please contact:
+
+*Sam Kleinman* \\
+Email: [[mailto:garen@tychoish.com][garen@tychoish.com]] \\
+Website: [[https://tychoish.com][https://tychoish.com]] \\
+GitHub: [[https://github.com/tychoish][https://github.com/tychoish]]

@@ -1,0 +1,173 @@
+#+TITLE: Google OAuth App Verification Kit for denote-sync
+#+AUTHOR: Sam Kleinman
+#+EMAIL: garen@tychoish.com
+#+DATE: [2026-10-11 Sun]
+#+LANGUAGE: en
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+This verification kit provides all necessary metadata, form field values, scope justifications,
+and demonstration guidelines required to pass Google Cloud Trust & Safety OAuth 2.0 app verification
+for =denote-sync=.
+
+By restricting Drive scopes to Sensitive Scope (=drive.file=) rather than Restricted Scope (=drive=),
+=denote-sync= qualifies for Google's standard Sensitive Scope verification and is exempt from
+mandatory third-party CASA Tier 2 security assessment fees.
+
+* Google Cloud Console Form Fields
+:PROPERTIES:
+:CUSTOM_ID: form-fields
+:END:
+
+When configuring the OAuth consent screen in the Google Cloud Console
+([[https://console.cloud.google.com/apis/credentials/consent][APIs & Services -> OAuth consent screen]]), fill in the following exact values:
+
+| Field                               | Value                                                 | Notes                                                 |
+|-------------------------------------+-------------------------------------------------------+-------------------------------------------------------|
+| *App name*                          | =denote-sync=                                         | Must match branding in repo and docs                  |
+| *User support email*                | =garen@tychoish.com=                                  | Primary maintainer contact                            |
+| *App logo*                          | (Optional)                                            | If uploaded, must be 120x120px PNG                    |
+| *Application home page*             | =https://tychoish.github.io/denote-sync/=             | Publicly accessible documentation root                |
+| *Application privacy policy link*   | =https://tychoish.github.io/denote-sync/privacy.html= | Must contain Limited Use disclosure                   |
+| *Application terms of service link* | (Optional)                                            | Can link to GitHub repo or LICENSE                    |
+| *Authorized domains*                | =github.io=                                           | Google Cloud validates root domain                    |
+| *Developer contact email*           | =garen@tychoish.com=                                  | Direct notification address for Google Trust & Safety |
+
+* Scopes to Declare
+:PROPERTIES:
+:CUSTOM_ID: declared-scopes
+:END:
+
+Add the following four scopes in the *Scopes* step:
+
+1. =https://www.googleapis.com/auth/documents= (Sensitive)
+2. =https://www.googleapis.com/auth/drive.file= (Sensitive)
+3. =https://www.googleapis.com/auth/userinfo.email= (Non-sensitive)
+4. =openid= (Non-sensitive)
+
+* Scope Justifications (Ready to Copy & Paste)
+:PROPERTIES:
+:CUSTOM_ID: scope-justifications
+:END:
+
+When prompted by Google to explain how each sensitive scope is used, paste the following
+exact justification text:
+
+** Justification for =.../auth/documents=
+#+begin_quote
+denote-sync is an open-source, local-first note integration for Emacs. It requests Google Docs API
+access solely to synchronize user-selected local notes with Google Docs. When a user runs
+synchronization, denote-sync pushes local Markdown/Org content to create or update Google Docs, and
+pulls remote edits back into Emacs. It operates directly between the user's computer and Google's
+APIs without any intermediary server, tracking, or secondary storage.
+#+end_quote
+
+** Justification for =.../auth/drive.file=
+#+begin_quote
+denote-sync requests drive.file to create and organize synchronized documents within user-designated
+Drive folders. In strict adherence to Google's principle of least privilege, denote-sync intentionally
+avoids full Drive access (drive) and only requests drive.file. This guarantees that denote-sync can
+only access files and folders created or explicitly opened by the application, and has zero access
+to any other user documents or data in Google Drive.
+#+end_quote
+
+** Justification for =.../auth/userinfo.email=
+#+begin_quote
+denote-sync supports multi-account setups (e.g. personal and work accounts). This scope is used
+strictly on the user's local machine to display the active account email in Emacs and correctly
+route notes to their intended Google account.
+#+end_quote
+
+* Google Search Console Domain Verification
+:PROPERTIES:
+:CUSTOM_ID: search-console
+:END:
+
+Google requires you to prove ownership of the authorized domain (=tychoish.github.io=) in
+[[https://search.google.com/search-console][Google Search Console]].
+
+1. In Search Console, click *Add Property* and choose *URL prefix*:
+   =https://tychoish.github.io/denote-sync/=
+2. Select *HTML file* verification (e.g. =google[token].html=) or *HTML tag* (=<meta name="google-site-verification" content="..." />=).
+3. Place the verification file into the repository's =docs/= directory (or set the repository secret
+   =GSC_VERIFICATION_HTML= in GitHub repository settings).
+4. Run the GitHub Actions workflow to publish.
+5. In Search Console, click *Verify*. Ownership will be confirmed immediately.
+
+* Demonstration Video Requirements & Script
+:PROPERTIES:
+:CUSTOM_ID: video-requirements
+:END:
+
+Google requires a clear, continuous demonstration video (uploaded to YouTube as *Unlisted*)
+illustrating the end-to-end OAuth flow and user data usage.
+
+** Google Video Requirements Checklist
+- [ ] *Resolution*: At least 1080p (1920x1080), 30fps or 60fps.
+- [ ] *Audio or Captions*: Plainly explain each step on screen.
+- [ ] *Client ID Visibility*: The OAuth Client ID in the browser URL address bar during consent
+      must match the Client ID registered in Google Cloud Console.
+- [ ] *Continuous Take*: No cuts or deceptive edits during the authorization and sync steps.
+
+** Recording with Real Desktop Interfaces
+You have two scripts for capturing real interfaces:
+
+*** Option A: Semi-Automated Co-Pilot (Recommended)
+The co-pilot automatically drives window switching in StumpWM, launches the required Chrome tabs, and executes Emacs commands, pausing only for you to perform the two interactive clicks Google requires (OAuth consent and permission revocation):
+
+#+begin_src bash
+./scripts/record-copilot.sh demo.mp4
+#+end_src
+
+*** Option B: Manual Interactive Recorder
+Displays a terminal prompter and timer while you manually drive your windows and browser:
+
+#+begin_src bash
+./scripts/record-real-demo.sh demo.mp4
+#+end_src
+
+This script:
+1. Displays a 5-second countdown to switch to your browser window.
+2. Captures your desktop (~DISPLAY=:0~) using =ffmpeg= at 1080p (1920x1080 @ 30fps).
+3. Displays a live step indicator and elapsed timer in your terminal.
+4. Press =ENTER= or =Ctrl+C= when finished to cleanly produce =demo.mp4=.
+
+** Video Script & Timing (Total ~60-75 seconds)
+1. *0:00 - 0:15 | Initiating Authorization from Emacs*:
+   - Start directly in Emacs.
+   - Run ~M-x denote-sync-bootstrap~ (or ~M-x denote-sync-gdocs-add-account~).
+   - Display setup wizard buffer showing scope minimization (=--drive-scope=file=).
+2. *0:15 - 0:35 | OAuth Consent Screen & Client ID Inspection*:
+   - Browser opens to Google's consent screen.
+   - *Crucial Step*: Highlight/zoom into the browser URL bar.
+   - Show the query parameter: ~client_id=988718620220-...apps.googleusercontent.com~.
+   - Show the permissions requested: "See, edit, create, and delete only the specific Google Drive files you use with this app" (=drive.file=) and "See, edit, create, and delete your Google Docs documents" (=documents=).
+   - Click *Continue* / *Allow*.
+3. *0:35 - 0:55 | Note Synchronization Demonstration*:
+   - Return to Emacs. Show successful authorization buffer.
+   - Open a Denote note, run ~M-x denote-sync-push~.
+   - Open Google Docs in browser, show the newly created Google Doc matching the Denote note content.
+   - Edit the Google Doc in browser, run ~M-x denote-sync-pull~ in Emacs, showing remote edits updated locally.
+4. *0:55 - 1:10 | Permission Revocation*:
+   - Navigate to [[https://myaccount.google.com/permissions][Google Account Permissions]].
+   - Locate =denote-sync= under Third-party apps with account access.
+   - Click *Remove Access* to prove complete revocability.
+
+* Pre-Submission Verification Audit
+:PROPERTIES:
+:CUSTOM_ID: audit-checklist
+:END:
+
+Before submitting the verification request in Google Cloud Console, ensure all of the following
+items are completed:
+
+- [ ] *Domain Verified*: =https://tychoish.github.io/denote-sync/= verified in Google Search Console.
+- [ ] *Privacy Policy Accessible*: =https://tychoish.github.io/denote-sync/privacy.html= returns HTTP 200 and displays Google API Limited Use disclosure.
+- [ ] *Scopes Minimal*: Only =documents= and =drive.file= are declared in GCP Console; =drive= (full access) is strictly excluded.
+- [ ] *Client ID in Video*: Video clearly shows =client_id=988718620220-...apps.googleusercontent.com= in the browser URL bar during the consent step.
+- [ ] *YouTube Video Uploaded*: Video uploaded to YouTube with visibility set to *Unlisted*.
+- [ ] *Form Filled*: Justification texts from this document copied into the verification request form.

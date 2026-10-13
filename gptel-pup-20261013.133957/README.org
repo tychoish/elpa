@@ -1,0 +1,251 @@
+#+TITLE: gptel-pup.el -- gptel backend for DataDog Pup / Bits AI
+#+OPTIONS: toc:2 num:nil
+
+[[https://github.com/tychoish/gptel-pup/actions/workflows/ci.yml][https://github.com/tychoish/gptel-pup/actions/workflows/ci.yml/badge.svg]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=gptel-pup= manages [[https://github.com/DataDog/pup][DataDog's Pup CLI]] and exposes its Bits AI agent as a
+[[https://github.com/karthink/gptel][gptel]] backend.
+
+Pup's ~pup acp serve~ command starts a local HTTP server that proxies to
+Datadog Bits AI. Despite the name, it is unrelated to Zed's
+[[https://agentclientprotocol.com][Agent Client Protocol]] (the stdio/JSON-RPC protocol =agent-shell= and
+similar tools use) -- Pup implements the different, HTTP/SSE-based
+[[https://agentcommunicationprotocol.dev][Agent Communication Protocol]], plus an OpenAI-compatible
+~/chat/completions~ endpoint for non-ACP clients. =gptel-pup= drives Pup
+through that OpenAI-compatible endpoint.
+
+Key features:
+
+- *Process management*: starts, stops, and monitors the ~pup acp serve~
+  subprocess, waiting for it to become ready before use.
+- *Binary installation*: optionally downloads the right ~pup~ release
+  binary for your platform from GitHub releases.
+- *gptel backend*: registers Pup's local server as an ordinary
+  ~gptel-backend~ (via ~gptel-make-openai~), so Bits AI shows up as a
+  regular model/backend choice in gptel.
+
+Authentication is handled entirely by Pup itself (~pup auth login~);
+=gptel-pup= never sees or stores Datadog credentials or API keys.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#elpaish-recommended][ELPAish (Recommended)]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#core-workflows--examples][Core Workflows & Examples]]
+  - [[#installing-the-pup-binary][Installing the Pup Binary]]
+  - [[#starting-a-chat][Starting a Chat]]
+  - [[#managing-the-server][Managing the Server]]
+- [[#api-reference][API Reference]]
+- [[#related-packages][Related Packages]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+Add the ELPAish repository to ~package-archives~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+#+END_SRC
+
+Install with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'gptel-pup)
+#+END_SRC
+
+To verify package signatures, import the ELPAish signing key into
+=package.el='s keyring and enable signature checking:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+Requires Emacs 30+. Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package gptel-pup
+  :vc (:url "https://github.com/tychoish/gptel-pup")
+  :after gptel)
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository into your =site-lisp= directory:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/gptel-pup ~/.emacs.d/site-lisp/gptel-pup
+#+END_SRC
+
+Add it to your ~load-path~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/gptel-pup")
+(require 'gptel-pup)
+#+END_SRC
+
+With Emacs 29.1+, you can also use ~package-vc-install~:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install '(gptel-pup
+                      :url "https://github.com/tychoish/gptel-pup"))
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Configure =gptel-pup= using ~use-package~:
+
+#+BEGIN_SRC emacs-lisp
+(use-package gptel-pup
+  :ensure t
+  :after gptel
+  :commands (gptel-pup-start gptel-pup-start-chat gptel-pup-stop gptel-pup-install)
+  :custom
+  (gptel-pup-site "datadoghq.com"))
+#+END_SRC
+
+Before first use, authenticate Pup against your Datadog site:
+
+#+BEGIN_SRC sh
+pup auth login
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+- ~gptel-pup-executable~: name or path of the ~pup~ binary (default ~"pup"~).
+- ~gptel-pup-install-directory~: where ~gptel-pup-install~ downloads ~pup~
+  to, if it isn't already on ~exec-path~.
+- ~gptel-pup-host~ / ~gptel-pup-port~: bind address for ~pup acp serve~
+  (default ~127.0.0.1:9099~).
+- ~gptel-pup-agent-id~: target a specific Bits AI agent instead of
+  auto-discovering one.
+- ~gptel-pup-site~ / ~gptel-pup-org~: passed to the ~pup~ subprocess as
+  ~DD_SITE~ / ~DD_ORG~, selecting which authenticated session to use.
+- ~gptel-pup-extra-serve-args~: additional flags appended to
+  ~pup acp serve~.
+- ~gptel-pup-models~: model names shown in gptel's UI (Pup proxies to a
+  single Bits AI agent regardless of the name requested).
+- ~gptel-pup-startup-timeout~: seconds to wait for the server to become
+  ready before signaling an error.
+
+* Core Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: core-workflows--examples
+:END:
+
+** Installing the Pup Binary
+:PROPERTIES:
+:CUSTOM_ID: installing-the-pup-binary
+:END:
+
+If ~pup~ isn't already installed (e.g. via Homebrew), download the
+latest release for your platform:
+
+#+BEGIN_SRC emacs-lisp
+(gptel-pup-install)
+#+END_SRC
+
+~gptel-pup-start~ offers to do this interactively the first time it
+can't find ~pup~.
+
+** Starting a Chat
+:PROPERTIES:
+:CUSTOM_ID: starting-a-chat
+:END:
+
+#+BEGIN_SRC emacs-lisp
+M-x gptel-pup-start-chat
+#+END_SRC
+
+This starts ~pup acp serve~ if it isn't already running, registers the
+Pup gptel backend, and opens a ~*Pup*~ chat buffer using it.
+
+** Managing the Server
+:PROPERTIES:
+:CUSTOM_ID: managing-the-server
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(gptel-pup-start)          ; start (or reuse) the server, register backend
+(gptel-pup-running-p)      ; check whether it's alive
+(gptel-pup-stop)           ; stop it
+(gptel-pup-start t)        ; force a fresh restart
+#+END_SRC
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command | Kind | Description |
+|------------------+------+-------------|
+| [[#gptel-pup-start][~gptel-pup-start~]] | Command | Start (or reuse) ~pup acp serve~ and register its gptel backend |
+| [[#gptel-pup-stop][~gptel-pup-stop~]] | Command | Stop the running ~pup acp serve~ process |
+| [[#gptel-pup-start-chat][~gptel-pup-start-chat~]] | Command | Start the server and open a gptel chat using it |
+| [[#gptel-pup-install][~gptel-pup-install~]] | Command | Download the latest ~pup~ release binary |
+| [[#gptel-pup-ensure-executable][~gptel-pup-ensure-executable~]] | Function | Resolve (or offer to install) the ~pup~ executable |
+| [[#gptel-pup-running-p][~gptel-pup-running-p~]] | Function | Whether the ~pup acp serve~ process is alive |
+| [[#gptel-pup-register-backend][~gptel-pup-register-backend~]] | Function | (Re)register the gptel backend for the local Pup server |
+
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+(org-docsgen-run
+ :scope '("gptel-pup-start" "gptel-pup-stop" "gptel-pup-start-chat"
+          "gptel-pup-install" "gptel-pup-ensure-executable"
+          "gptel-pup-running-p" "gptel-pup-register-backend")
+ :link-style 'org)
+#+END_SRC
+
+* Related Packages
+:PROPERTIES:
+:CUSTOM_ID: related-packages
+:END:
+
+- [[https://github.com/karthink/gptel][gptel]]: A LLM client for Emacs supporting multiple backends and tool calling.
+- [[https://github.com/DataDog/pup][DataDog/pup]]: The CLI this package wraps.
+- [[https://github.com/tychoish/gptel-mcp][gptel-mcp]]: Bridges mcpkit MCP tools onto gptel's tool-calling framework.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+Copyright (C) 2026 sam kleinman. GPL-3.0 or later. See the [[file:LICENSE][LICENSE]] file and source file header
+for the full license text.

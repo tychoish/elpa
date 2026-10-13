@@ -1,0 +1,41 @@
+#+TITLE: denote-sync Documentation
+#+AUTHOR: Sam Kleinman
+#+EMAIL: garen@tychoish.com
+#+DATE: [2026-10-11 Sun]
+#+LANGUAGE: en
+#+OPTIONS: toc:nil num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+[[https://github.com/tychoish/denote-sync][=denote-sync=]] is an open-source Emacs package for bidirectional synchronization
+between local [[https://github.com/protesilaos/denote][Denote]] notes and external cloud services, including Google Docs and Notion.
+
+* Documentation & Legal Resources
+:PROPERTIES:
+:CUSTOM_ID: documentation-resources
+:END:
+
+- [[file:privacy.org][*Privacy Policy*]]: Complete user privacy policy, Google API Limited Use compliance statement, scope justification, and data retention/deletion procedures.
+- [[file:google-docs-setup.org][*Google Docs Setup Guide*]]: Step-by-step instructions for configuring the =gog= CLI helper, managing OAuth credentials, and organizing notes across multiple Google accounts.
+- [[file:google-verification-kit.org][*OAuth Verification Kit*]]: App verification metadata, console field values, and video demo checklist for Google Cloud Trust & Safety review.
+
+* Key Features
+:PROPERTIES:
+:CUSTOM_ID: key-features
+:END:
+
+- *Local-First Security*: Direct synchronization between Emacs and cloud APIs. No central servers, proxies, or analytics beacons.
+- *Scope Minimization*: Operates within Google's Sensitive Scope tier (=drive.file=), ensuring access is restricted strictly to files created or opened by the user.
+- *Interactive Setup Wizard*: Guided onboarding via ~M-x denote-sync-gdocs-setup~ (or ~M-x denote-sync-bootstrap~).
+- *Encrypted Token Storage*: Credentials and refresh tokens are encrypted at rest using a dedicated file keyring backend.
+
+* Repository
+:PROPERTIES:
+:CUSTOM_ID: repository
+:END:
+
+Source code, issue tracking, and contributions:
+[[https://github.com/tychoish/denote-sync][https://github.com/tychoish/denote-sync]]
