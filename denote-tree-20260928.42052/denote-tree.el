@@ -287,8 +287,14 @@ Only exact matches are rewritten."
 
 ;;; Context file resolution and annotated selection
 
-(defun denote-tree--file-at-point ()
-  "Return the Denote file implied by current point/buffer context, or nil."
+;;;###autoload
+(defun denote-tree-file-at-point ()
+  "Return the Denote file implied by current point/buffer context, or nil.
+Inspects context in the following order:
+1. `denote-sequence-hierarchy-mode' row text property
+2. `tabulated-list-mode' / `denote-dash-mode' row via `tabulated-list-get-id'
+3. `dired-mode' file at point
+4. Active buffer visiting a Denote note file"
   (cond
    ((derived-mode-p 'denote-sequence-hierarchy-mode)
     (get-text-property (point) 'denote-sequence-hierarchy-file))
@@ -302,6 +308,8 @@ Only exact matches are rewritten."
       (when (and f (denote-file-has-identifier-p f)) f)))
    ((and buffer-file-name (denote-file-has-identifier-p buffer-file-name))
     buffer-file-name)))
+
+(defalias 'denote-tree--file-at-point #'denote-tree-file-at-point)
 
 (defun denote-tree--note-label (file)
   "Return label for FILE in completion."
@@ -356,17 +364,33 @@ PROMPT overrides the default prompt text.  DEFAULT-FILE, or
       (or (cdr (assoc choice labels))
           (user-error "No note selected")))))
 
+;;;###autoload
+(defun denote-tree-target-file (&optional prompt require-sequence)
+  "Return the target Denote file from context, or prompt.
+When `current-prefix-arg' is non-nil, ignores context and prompts.
+If REQUIRE-SEQUENCE is non-nil, ensures the resolved or selected file
+has a sequence (per `denote-sequence-file-p').  PROMPT overrides the
+default prompt string."
+  (let ((file (unless current-prefix-arg
+                (denote-tree-file-at-point))))
+    (if (and file (or (not require-sequence) (denote-sequence-file-p file)))
+        file
+      (let ((candidates (if require-sequence
+                            (seq-filter #'denote-sequence-file-p
+                                        (denote-directory-files))
+                          (denote-directory-files))))
+        (denote-tree-note-prompt (or prompt (if require-sequence "Sequence note: " "Note: "))
+                                 nil
+                                 candidates)))))
+
 (defun denote-tree--context-file ()
   "Return the context Denote file or prompt the user."
-  (or (denote-tree--file-at-point)
-      (denote-tree-note-prompt "File: " nil (denote-directory-files))))
+  (denote-tree-target-file "File: " nil))
 
 (defun denote-tree--target-file ()
   "Return the target file for sequence operations.
-Uses `denote-tree--file-at-point', else prompts among sequence-bearing notes."
-  (or (denote-tree--file-at-point)
-      (denote-tree-note-prompt "File: " nil (seq-filter #'denote-sequence-file-p
-                                                        (denote-directory-files)))))
+Legacy internal helper forwarding to `denote-tree-target-file'."
+  (denote-tree-target-file "Sequence note: " t))
 
 ;;; Sequence alignment lint / autofix
 
@@ -704,13 +728,19 @@ children at once never merges two of them into the same destination.
 
 Before touching any file, shows a preview buffer listing every rename
 that would happen and asks for confirmation; declining leaves every file
-untouched.  Works from `denote-tree-mode' or interactively."
+untouched.  Works from `denote-tree-mode', `denote-dash-mode',
+`denote-sequence-hierarchy-mode', a visited note buffer, or interactively."
   (interactive
-   (list (read-string "Sequence prefix (empty = root): "
-                      (when (derived-mode-p 'denote-tree-mode)
-                        (when-let* ((f (tabulated-list-get-id)))
-                          (denote-retrieve-filename-signature f))))))
-  (let* ((prefix (if (string-empty-p prefix) nil prefix))
+   (list
+    (let ((default-prefix
+           (unless current-prefix-arg
+             (when-let* ((f (denote-tree-file-at-point)))
+               (denote-retrieve-filename-signature f)))))
+      (read-string (if default-prefix
+                       (format "Sequence prefix (default %s, empty = root): " default-prefix)
+                     "Sequence prefix (empty = root): ")
+                   nil nil default-prefix))))
+  (let* ((prefix (if (or (null prefix) (string-empty-p prefix)) nil prefix))
          (children (denote-tree--sequence-direct-children prefix))
          (sorted (or (denote-sequence-sort-files children)
                      (user-error "No children found for %s" (or prefix "(root)")))))
@@ -1337,11 +1367,57 @@ already carry the old one."
 
 
 
+;;; First-class sequence creation
+
+;;;###autoload
+(defun denote-tree-new-sibling (&optional file)
+  "Create a new sibling sequence note of FILE.
+When FILE is nil, resolves it via `denote-tree-target-file' (requiring a sequence).
+When `current-prefix-arg' is non-nil, prompts for the sequence note.
+Creates a new note whose signature is the next sibling of FILE's sequence."
+  (interactive
+   (list (denote-tree-target-file "Make sibling of sequence note: " t)))
+  (let* ((target (or file (denote-tree-target-file "Make sibling of sequence note: " t)))
+         (seq (denote-retrieve-filename-signature target)))
+    (unless (and seq (denote-sequence-p seq))
+      (user-error "Target note has no valid sequence: %s" target))
+    (let* ((new-seq (denote-sequence-get-new 'sibling seq))
+           (denote-use-signature new-seq))
+      (call-interactively 'denote))))
+
+;;;###autoload
+(defun denote-tree-new-child (&optional file)
+  "Create a new child sequence note of FILE.
+When FILE is nil, resolves it via `denote-tree-target-file' (requiring a sequence).
+When `current-prefix-arg' is non-nil, prompts for the sequence note.
+Creates a new note whose signature is the next child of FILE's sequence."
+  (interactive
+   (list (denote-tree-target-file "Make child of sequence note: " t)))
+  (let* ((target (or file (denote-tree-target-file "Make child of sequence note: " t)))
+         (seq (denote-retrieve-filename-signature target)))
+    (unless (and seq (denote-sequence-p seq))
+      (user-error "Target note has no valid sequence: %s" target))
+    (let* ((new-seq (denote-sequence-get-new 'child seq))
+           (denote-use-signature new-seq))
+      (call-interactively 'denote))))
+
+;;;###autoload
+(defun denote-tree-new-parent ()
+  "Create a new top-level parent sequence note.
+Like `denote-sequence-new-parent'."
+  (interactive)
+  (let* ((new-sequence (denote-sequence-get-new 'parent))
+         (denote-use-signature new-sequence))
+    (call-interactively 'denote)))
+
 (with-eval-after-load 'savehist
   (add-to-list 'savehist-additional-variables 'denote-tree-hierarchy-fold-sequences))
 
 (with-eval-after-load 'denote-sequence
   (when (boundp 'denote-sequence-hierarchy-mode-map)
+    (define-key denote-sequence-hierarchy-mode-map (kbd "s")   #'denote-tree-new-sibling)
+    (define-key denote-sequence-hierarchy-mode-map (kbd "c")   #'denote-tree-new-child)
+    (define-key denote-sequence-hierarchy-mode-map (kbd "p")   #'denote-tree-new-parent)
     (define-key denote-sequence-hierarchy-mode-map (kbd "r")   #'denote-tree-repack-children)
     (define-key denote-sequence-hierarchy-mode-map (kbd "C-r") #'denote-tree-repack-children)
     (define-key denote-sequence-hierarchy-mode-map (kbd "M-r") #'denote-tree-swap-with-parent)

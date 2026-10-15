@@ -18,6 +18,7 @@
 
 (require 'transient)
 (require 'tabulated-list)
+(require 'keymap)
 (require 'seq)
 (require 'map)
 (require 'outline)
@@ -1713,18 +1714,53 @@ notes only, since sequence operations require one."
       (denote-dash-note-prompt "File: " nil (seq-filter #'denote-sequence-file-p
                                                         (denote-directory-files)))))
 
+;;; Buffer renaming and link formatting
+
+;;;###autoload
+(defun denote-dash-rename-buffer (&optional buffer)
+  "Rename denote BUFFER to `[d:SEQ] TITLE' or just TITLE when there is no sequence.
+Suitable as a value for `denote-rename-buffer-function'."
+  (when-let* ((file (buffer-file-name buffer))
+              ((denote-file-has-identifier-p file)))
+    (let* ((sig   (denote-retrieve-filename-signature file))
+           (title (or (denote-retrieve-filename-title file)
+                      (file-name-base file)))
+           (name  (if (and sig (not (string-empty-p sig)))
+                      (format "[d:%s] %s" sig title)
+                    title)))
+      (rename-buffer name :unique))))
+
+;;;###autoload
+(defun denote-dash-link-description-format (file &optional file-type)
+  "Format Denote link description for FILE with FILE-TYPE as `<title> [<signature>]`.
+Falls back to region text if active, or `<title>`, or `[<signature>]`.
+Suitable as a value for `denote-link-description-format'."
+  (let* ((type (or file-type (denote-filetype-heuristics file)))
+         (signature (denote-retrieve-filename-signature file))
+         (title (denote-retrieve-title-or-filename file type))
+         (region-text (when (fboundp 'denote--get-active-region-content)
+                        (denote--get-active-region-content))))
+    (cond
+     (region-text region-text)
+     ((and signature title (not (string-empty-p signature)))
+      (format "%s [%s]" title signature))
+     (title (format "%s" title))
+     ((and signature (not (string-empty-p signature)))
+      (format "[%s]" signature))
+     (t ""))))
+
 ;;; Annotated note selection
 ;;
 ;; The standard way to ask the user "which Denote note?" when the context
 ;; (buffer, Dired, denote-dash row, hierarchy row) doesn't already make it
 ;; obvious.  Candidates are labeled the way the note's buffer would be named
-;; by `tychoish--denote-rename-buffer' (`[D:SIGNATURE] TITLE') and annotated
+;; by `denote-dash-rename-buffer' (`[D:SIGNATURE] TITLE') and annotated
 ;; with keywords and last-modified date, and default to the file implied by
 ;; `denote-dash--file-at-point' so the obvious note can be accepted with RET.
 
 (defun denote-dash--note-label (file)
   "Return the `[D:SIGNATURE] TITLE' label FILE's buffer would be named.
-Mirrors `tychoish--denote-rename-buffer' so a candidate reads the same as
+Mirrors `denote-dash-rename-buffer' so a candidate reads the same as
 the buffer name a user would see after visiting FILE."
   (if-let* ((title (denote-retrieve-title-or-filename file (denote-filetype-heuristics file)))
             (sig (denote-retrieve-filename-signature file))
@@ -1809,14 +1845,22 @@ fallback to a plain `read-file-name'."
   (denote-dash--rename-with-prompts (denote-dash--resolve-file-interactive file) '(keywords)))
 
 ;;;###autoload
+(defun denote-dash-backlinks (&optional file)
+  "Display backlinks for FILE (or file from context / prompt)."
+  (interactive)
+  (let ((target (or file (denote-dash--resolve-file-interactive))))
+    (denote-backlinks target)))
+
+;;;###autoload
 (defun denote-dash-rename-file-using-front-matter (&optional file)
   "Rename FILE from its front matter, selecting FILE via `denote-dash-note-prompt'.
 Same effect as `denote-rename-file-using-front-matter', except FILE
-selection always uses the annotated, context-defaulting prompt.  That
-command's own fallback is only Dired or `buffer-file-name' — outside
-either, it errors instead of prompting at all."
+selection always uses the annotated, context-defaulting prompt.  Also
+suppresses confirmation prompts by let-binding `denote-rename-confirmations'
+to nil."
   (interactive)
-  (denote-rename-file-using-front-matter (denote-dash--resolve-file-interactive file)))
+  (let ((denote-rename-confirmations nil))
+    (denote-rename-file-using-front-matter (denote-dash--resolve-file-interactive file))))
 
 (defun denote-dash--resolve-file-interactive (&optional file)
   "Return FILE, or resolve it from context, prompting only as a last resort.
@@ -2011,10 +2055,119 @@ place afterward via `revert-buffer'."
         (denote-dash-refresh)))))
 
 (with-eval-after-load 'denote-tree
+  (denote-dash--update-sequence-map)
   (add-hook 'denote-tree-after-rename-functions (lambda (&rest _) (denote-dash-refresh-all-buffers)))
   (add-hook 'denote-tree-after-reseq-functions (lambda (&rest _) (denote-dash-refresh-all-buffers)))
   (add-hook 'denote-tree-after-swap-functions (lambda (&rest _) (denote-dash-refresh-all-buffers)))
   (add-hook 'denote-tree-after-lint-fix-functions (lambda (&rest _) (denote-dash-refresh-all-buffers))))
+
+;;; Keymaps and Global Minor Mode
+
+(defvar-keymap denote-dash-sequence-map
+  :doc "Keymap for Denote sequence commands."
+  "s" (if (fboundp 'denote-tree-new-sibling) #'denote-tree-new-sibling #'denote-sequence-new-sibling)
+  "c" (if (fboundp 'denote-tree-new-child)   #'denote-tree-new-child   #'denote-sequence-new-child)
+  "p" (if (fboundp 'denote-tree-new-parent)  #'denote-tree-new-parent  #'denote-sequence-new-parent)
+  "r" (if (fboundp 'denote-tree-repack-children) #'denote-tree-repack-children #'denote-sequence-rename-as-parent)
+  "m" (when (fboundp 'denote-tree-reparent) #'denote-tree-reparent)
+  "n" (when (fboundp 'denote-tree-renumber-recursive) #'denote-tree-renumber-recursive)
+  "i" (when (fboundp 'denote-tree-insert-sequence-note) #'denote-tree-insert-sequence-note)
+  "l" #'denote-sequence-link)
+
+(defvar-keymap denote-dash-org-map
+  :doc "Keymap for Denote Org-mode integration commands."
+  "l" #'denote-org-link-to-heading
+  "b" #'denote-org-backlinks-for-heading
+  "x" #'denote-org-extract-org-subtree
+  "d" #'denote-org-dblock-insert-links
+  "p" #'denote-org-dblock-insert-backlinks
+  "f" #'denote-org-dblock-insert-files)
+
+(defvar-keymap denote-dash-explore-map
+  :doc "Keymap for Denote Explore commands."
+  "n" #'denote-explore-count-notes
+  "c" #'denote-explore-count-keywords
+  "r" #'denote-explore-random-note
+  "l" #'denote-explore-random-link
+  "d" #'denote-explore-duplicate-notes
+  "s" #'denote-explore-single-keywords
+  "z" #'denote-explore-zero-keywords
+  "k" #'denote-explore-rename-keyword
+  "m" #'denote-explore-missing-links
+  "y" #'denote-explore-sync-metadata
+  "b" #'denote-explore-barchart-keywords
+  "t" #'denote-explore-barchart-timeline)
+
+(defvar-keymap denote-dash-review-map
+  :doc "Keymap for Denote Review commands."
+  "d" #'denote-review-set-date
+  "l" #'denote-review-display-list)
+
+(defvar-keymap denote-dash-hierarchy-map
+  :doc "Keymap for Denote sequence hierarchy commands."
+  "v" #'denote-dash-hierarchy-switch-or-view
+  "t" #'denote-dash-hierarchy-view-by-note)
+
+(defvar-keymap denote-dash-global-map
+  :doc "Global prefix keymap for Denote and denote-dash commands."
+  "," #'denote-dash
+  "." #'denote-dash-dispatch
+  "n" #'denote
+  "m" #'denote-open-or-create
+  "l" #'denote-link
+  "b" #'denote-dash-backlinks
+  "r" #'denote-dash-rename-file
+  "f" (if (fboundp 'consult-denote-find) #'consult-denote-find #'denote-find-file)
+  "u" (cons "rename-using-front-matter" #'denote-dash-rename-file-using-front-matter)
+  "k" #'denote-dash-save-and-kill-all-notes
+  "g" (if (fboundp 'consult-denote-grep) #'consult-denote-grep #'denote-grep)
+  "j" (when (fboundp 'denote-journal-new-entry) #'denote-journal-new-entry)
+  ";" (when (fboundp 'consult-notes) #'consult-notes)
+  "/" (when (fboundp 'consult-notes-search-in-all-notes) #'consult-notes-search-in-all-notes)
+  "s" (cons "sequence" denote-dash-sequence-map)
+  "o" (cons "org" denote-dash-org-map)
+  "e" (cons "explore" denote-dash-explore-map)
+  "c" (cons "review" denote-dash-review-map)
+  "h" (cons "hierarchy" denote-dash-hierarchy-map))
+
+(defun denote-dash--update-sequence-map ()
+  "Ensure `denote-dash-sequence-map' references `denote-tree' functions if available."
+  (when (fboundp 'denote-tree-new-sibling)
+    (keymap-set denote-dash-sequence-map "s" #'denote-tree-new-sibling))
+  (when (fboundp 'denote-tree-new-child)
+    (keymap-set denote-dash-sequence-map "c" #'denote-tree-new-child))
+  (when (fboundp 'denote-tree-new-parent)
+    (keymap-set denote-dash-sequence-map "p" #'denote-tree-new-parent))
+  (when (fboundp 'denote-tree-repack-children)
+    (keymap-set denote-dash-sequence-map "r" #'denote-tree-repack-children))
+  (when (fboundp 'denote-tree-reparent)
+    (keymap-set denote-dash-sequence-map "m" #'denote-tree-reparent))
+  (when (fboundp 'denote-tree-renumber-recursive)
+    (keymap-set denote-dash-sequence-map "n" #'denote-tree-renumber-recursive))
+  (when (fboundp 'denote-tree-insert-sequence-note)
+    (keymap-set denote-dash-sequence-map "i" #'denote-tree-insert-sequence-note)))
+
+(defcustom denote-dash-global-prefix "C-c d"
+  "Prefix key sequence for `denote-dash-global-mode'."
+  :type 'string
+  :group 'denote-dash)
+
+(defvar denote-dash-global-mode-map
+  (let ((map (make-sparse-keymap)))
+    map)
+  "Keymap used by `denote-dash-global-mode'.")
+
+;;;###autoload
+(define-minor-mode denote-dash-global-mode
+  "Global minor mode providing Denote dashboard, sequence, and note keybindings."
+  :global t
+  :group 'denote-dash
+  :keymap denote-dash-global-mode-map
+  (if denote-dash-global-mode
+      (when denote-dash-global-prefix
+        (keymap-set denote-dash-global-mode-map denote-dash-global-prefix denote-dash-global-map))
+    (when denote-dash-global-prefix
+      (keymap-unset denote-dash-global-mode-map denote-dash-global-prefix t))))
 
 (with-eval-after-load 'denote-convert
   (add-hook 'denote-convert-after-conversion-functions (lambda (&rest _) (denote-dash-refresh-all-buffers))))
