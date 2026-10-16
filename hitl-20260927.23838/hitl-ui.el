@@ -107,6 +107,9 @@
 
 (defalias 'hitl-list-questions #'hitl-list)
 
+;;;###autoload
+(defalias 'hitl-view-questions #'hitl-list)
+
 (defun hitl-ui-answer-at-point ()
   "Answer the question at point in the `*hitl-questions*' buffer."
   (interactive)

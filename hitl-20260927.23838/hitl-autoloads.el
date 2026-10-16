@@ -142,6 +142,8 @@ otherwise select from all pending questions.
 "Refresh the `*hitl-questions*' tabulated list buffer." t)
 (autoload 'hitl-list "hitl-ui"
 "Display the list of all HITL questions." t)
+(autoload 'hitl-view-questions "hitl-ui"
+"Display the list of all HITL questions." t)
 (defvar hitl-indicator-mode nil
 "Non-nil if Hitl-Indicator mode is enabled.
 See the `hitl-indicator-mode' command
