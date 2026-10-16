@@ -1,0 +1,128 @@
+#+TITLE: builder.el -- Project compilation driver, candidate discovery, and isolation engine
+#+OPTIONS: toc:2 num:nil
+
+[[https://github.com/tychoish/builder/actions/workflows/ci.yml][file:https://github.com/tychoish/builder/actions/workflows/ci.yml/badge.svg]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=builder= is an extensible compilation runner, task discovery framework, and
+process isolation environment for GNU Emacs. It replaces static compilation
+invocations with context-aware candidate generators, provides history and
+priority-ranked candidate completion, enhances Emacs compilation mode with
+modern error regexps and ANSI formatting, and integrates with the Model Context
+Protocol (MCP) via [[https://github.com/tychoish/mcpkit][mcpkit]].
+
+* Key Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+- *Context-Aware Candidate Discovery*: Dynamically inspects project layout,
+  detecting Makefiles, Justfiles, Go modules/packages, Rust Cargo crates,
+  Python pyproject/pip environments, Org Babel source blocks, Markdown/Vale
+  linting, and Emacs Lisp test suites.
+- *Ergonomic Candidate Selection*: Uses [[https://github.com/tychoish/annotated-completing-read][annotated-completing-read]] to present
+  richly annotated commands sorted by recency, task priority, and command length.
+- *Compilation Enhancements (`builder-mode`)*: Global minor mode providing ANSI
+  colorization, background process completion alerts, improved compilation
+  read-command advice, and specialized error matchers (Go test failures, Go
+  runtime panics, Rust pretty-log stack traces).
+- *In-Session Package Reloading*: Reloads in-development Emacs Lisp packages
+  directly into the running session without restarts, tracking loaded features,
+  load-paths, and dependency closures.
+- *Isolated Verification*: Executes byte-compile, load checks, and ERT test
+  suites in clean subprocesses (~emacs --batch~) to verify package declarations
+  without pollution from interactive state.
+- *Model Context Protocol (MCP) Server*: Optional =builder-mcp= service exposing
+  task discovery, non-blocking asynchronous compilation execution, buffer
+  reading, and completion polling to LLM assistants.
+
+* Architecture & Modules
+:PROPERTIES:
+:CUSTOM_ID: architecture
+:END:
+
+=builder= is organized into focused, modular libraries:
+
+| File | Purpose |
+|--------------------+-----------------------------------------------------------------|
+| =builder-core.el= | Candidate struct, registry, caching, selection, compilation driver|
+| =builder-mode.el= | Global minor mode, error regexps, ANSI colorization, keybindings |
+| =builder-elisp.el= | Path resolver registry, package reload, test, compile, lint |
+| =builder-isolate-elisp.el=| Subprocess & daemon isolation runners, clean-elc, native compile |
+| =builder-tasks.el= | 24 declarative candidate generator pipelines for supported tools|
+| =builder-mcp.el= | Model Context Protocol service on port 8765 via =mcpkit= |
+| =builder.el= | Primary package entry point, autoloads, and metadata |
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+Available via [[https://tychoish.github.io/elpaish/snapshot/][ELPAish]]:
+
+#+begin_src emacs-lisp
+(use-package builder
+  :ensure t
+  :commands (builder builder-compile-project)
+  :config
+  (builder-mode 1))
+#+end_src
+
+* Usage
+:PROPERTIES:
+:CUSTOM_ID: usage
+:END:
+
+** Interactive Compilation
+- =M-x builder= or =M-x builder-compile-project=: Prompts for compilation
+  command pre-populated with context-derived candidate actions, then prompts for
+  compilation buffer name.
+- In =compilation-mode= buffers:
+  - =d=: Run =builder-change-directory= to repoint the compilation buffer.
+  - =C=: Recompile with standard prompt.
+
+** Extending Candidate Generators
+Define new candidate generators with =builder-register-candidates=:
+
+#+begin_src emacs-lisp
+(builder-register-candidates
+ :name "custom-linter"
+ :predicate (file-exists-p (expand-file-name ".custom-lint" project-root-directory))
+ :pipeline
+ (list (make-builder-candidate
+        :name "run custom linter"
+        :command "custom-lint ./..."
+        :directory project-root-directory
+        :priority 1
+        :annotation "run project-specific linter")))
+#+end_src
+
+** Elisp Path Resolution
+Register custom package path resolvers for non-standard project layouts:
+
+#+begin_src emacs-lisp
+(builder-register-elisp-package-path-resolver
+ (lambda (root &optional name)
+   (let ((candidate (expand-file-name "src/lisp" root)))
+     (when (file-directory-p candidate)
+       candidate))))
+#+end_src
+
+** MCP Tools
+When =mcpkit= is loaded, =builder-mcp= registers the ='builder= service exposing:
+- =discover_tasks=: Returns discovered candidate tasks as JSON plists.
+- =run_task=: Spawns a non-interactive compilation process in a named buffer.
+- =read_buffer=: Reads lines, exit status, line count, and tail output.
+- =await_build=: Asynchronously waits for process termination with timeout.
+- =list_buffers=: Lists all active compilation buffers.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GNU General Public License v3.0 or later.
