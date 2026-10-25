@@ -1,0 +1,247 @@
+#+TITLE: gptel-mcp.el -- Gptel tool-calling bridge for mcpkit
+#+OPTIONS: toc:2 num:nil
+
+[[https://github.com/tychoish/gptel-mcp/actions/workflows/ci.yml][https://github.com/tychoish/gptel-mcp/actions/workflows/ci.yml/badge.svg]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=gptel-mcp= bridges [[https://github.com/tychoish/mcpkit][mcpkit.el]] service and tool registrations onto [[https://github.com/karthink/gptel][gptel]]'s LLM
+tool-calling framework.
+
+Instead of manually duplicating argument schemas and handlers across both frameworks,
+=gptel-mcp= automatically converts ~mcpkit-tool~ definitions into ~gptel-tool~ structs
+via ~gptel-make-tool~. Tools defined for MCP servers can thus be used immediately
+by LLMs inside gptel chat sessions.
+
+Key features include:
+
+- *Automatic Schema Conversion*: Recursively converts JSON-schema object definitions
+  (~:input-schema~) from mcpkit into gptel's ~:args~ format, mapping schema types
+  to Lisp symbols and preserving parameter metadata and optionality.
+- *Asynchronous Invocation Wrapper*: Adapts mcpkit's callback-based handler pattern
+  (~handler-args callback~) into gptel's positional asynchronous calling convention
+  (~callback &rest args~).
+- *Batch Service Registration*: Registers all tools attached to an ~mcpkit-service~
+  in a single call via ~gptel-mcp-register-service-tools~, grouping them under a
+  gptel category matching the service name.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#elpaish-recommended][ELPAish (Recommended)]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#core-workflows--examples][Core Workflows & Examples]]
+  - [[#defining-an-mcpkit-tool][Defining an mcpkit Tool]]
+  - [[#bridging-tools-to-gptel][Bridging Tools to gptel]]
+  - [[#using-tools-with-llm-queries][Using Tools with LLM Queries]]
+- [[#api-reference][API Reference]]
+  - [[#gptel-mcp-register-service-tools][gptel-mcp-register-service-tools]]
+- [[#related-packages][Related Packages]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+Add the ELPAish repository to ~package-archives~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'package-archives
+             '("elpaish" . "https://tychoish.github.io/elpaish/snapshot/") t)
+(package-refresh-contents)
+#+END_SRC
+
+Install with =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'gptel-mcp)
+#+END_SRC
+
+To verify package signatures, import the ELPAish signing key into
+=package.el='s keyring and enable signature checking:
+
+#+BEGIN_SRC emacs-lisp
+(url-copy-file "https://tychoish.github.io/elpaish/elpaish-keyring.gpg"
+               "elpaish-keyring.gpg" t)
+(package-import-keyring "elpaish-keyring.gpg")
+(setq package-check-signature t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+Requires Emacs 30+. Installs on first load if not already present:
+
+#+BEGIN_SRC emacs-lisp
+(use-package gptel-mcp
+  :vc (:url "https://github.com/tychoish/gptel-mcp")
+  :after (gptel mcpkit))
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository into your =site-lisp= directory:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/gptel-mcp ~/.emacs.d/site-lisp/gptel-mcp
+#+END_SRC
+
+Add it to your ~load-path~:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/gptel-mcp")
+(require 'gptel-mcp)
+#+END_SRC
+
+With Emacs 29.1+, you can also use ~package-vc-install~:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install '(gptel-mcp
+                      :url "https://github.com/tychoish/gptel-mcp"))
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Configure =gptel-mcp= using ~use-package~:
+
+#+BEGIN_SRC emacs-lisp
+(use-package gptel-mcp
+  :ensure t
+  :after (gptel mcpkit)
+  :commands (gptel-mcp-register-service-tools)
+  :config
+  ;; Bridge tools from mcpkit services into gptel
+  (with-eval-after-load 'mcpkit-emacs
+    (gptel-mcp-register-service-tools 'emacs)))
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+- *Tool Categories*: Tools registered via ~gptel-mcp-register-service-tools~
+  are assigned a gptel category matching the ~mcpkit-service~ name (e.g. ~"emacs"~
+  or ~"denote"~). You can selectively enable or disable categories in the gptel
+  transient menu (=C-u M-x gptel-send=).
+- *Asynchronous Execution*: All bridged tools execute asynchronously, preserving
+  Emacs responsiveness during long-running tool execution or network calls.
+
+* Core Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: core-workflows--examples
+:END:
+
+** Defining an mcpkit Tool
+:PROPERTIES:
+:CUSTOM_ID: defining-an-mcpkit-tool
+:END:
+
+Define a service and tool using =mcpkit=:
+
+#+BEGIN_SRC emacs-lisp
+(require 'mcpkit)
+
+(mcpkit-define-service 'calc-service :description "Calculator tools")
+
+(mcpkit-register-tool 'calculate_sum 'calc-service
+  :description "Add two integers together."
+  :input-schema '(:type "object"
+                  :properties (:a (:type "integer" :description "First addend")
+                               :b (:type "integer" :description "Second addend"))
+                  :required ["a" "b"])
+  (+ (plist-get args :a) (plist-get args :b)))
+#+END_SRC
+
+** Bridging Tools to gptel
+:PROPERTIES:
+:CUSTOM_ID: bridging-tools-to-gptel
+:END:
+
+Bridge all tools registered on ~calc-service~ to gptel:
+
+#+BEGIN_SRC emacs-lisp
+(require 'gptel-mcp)
+
+;; Generates a gptel-tool and registers it with gptel
+(gptel-mcp-register-service-tools 'calc-service)
+#+END_SRC
+
+** Using Tools with LLM Queries
+:PROPERTIES:
+:CUSTOM_ID: using-tools-with-llm-queries
+:END:
+
+Once registered, the tool is available in gptel's tool-calling system.
+In an active gptel chat session with tool calling enabled:
+
+#+BEGIN_EXAMPLE
+User: What is 42 + 58?
+LLM: [Calls calculate_sum(a=42, b=58)]
+Response: The sum of 42 and 58 is 100.
+#+END_EXAMPLE
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command | Kind | Description |
+|------------------+------+-------------|
+| [[#gptel-mcp-register-service-tools][~gptel-mcp-register-service-tools~]] | Function | Register a gptel tool for every ‘mcpkit-tool’ on SERVICE-NAME |
+
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+(org-docsgen-run
+ :scope '("gptel-mcp-register-service-tools")
+ :link-style 'org)
+#+END_SRC
+
+#+RESULTS:
+** [[file:gptel-mcp.el::100][gptel-mcp-register-service-tools]]
+:PROPERTIES:
+:CUSTOM_ID: gptel-mcp-register-service-tools
+:END:
+
+Register a gptel tool for every ‘mcpkit-tool’ on SERVICE-NAME. SERVICE-NAME is resolved via ~mcpkit-get-service~ (a symbol, string, or ‘mcpkit-service’ instance).  Each generated gptel tool wraps the underlying mcpkit tool’s handler, translating its JSON-schema ‘input-schema’ into gptel’s :args format and its callback-based ~handler~ into gptel’s asynchronous :function calling convention.  Tools are grouped in gptel’s UI under a :category matching the service name.
+
+Return the list of ‘gptel-tool’ structs created.
+
+* Related Packages
+:PROPERTIES:
+:CUSTOM_ID: related-packages
+:END:
+
+- [[https://github.com/karthink/gptel][gptel]]: A LLM client for Emacs supporting multiple backends and tool calling.
+- [[https://github.com/tychoish/mcpkit][mcpkit.el]]: Model Context Protocol toolkit and service framework for GNU Emacs.
+- [[https://github.com/tychoish/denote-mcp][denote-mcp]]: Denote knowledge-base integration for MCP agents.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+Copyright (C) 2026 sam kleinman. GPL-3.0 or later. See the [[file:LICENSE][LICENSE]] file and source file header
+for the full license text.

@@ -18,9 +18,12 @@
 
 (require 'compile)
 (require 'ansi-color)
-(require 'builder-core)
 
 (declare-function alert "alert" (message &rest args))
+(declare-function builder--read-command "builder-core" (command))
+(declare-function builder-candidate-command "builder-core" (candidate))
+(declare-function builder-compile-project "builder-core" ())
+(declare-function builder-change-directory "builder-core" ())
 
 (defgroup builder-mode nil
   "Compilation enhancements and global minor mode."
@@ -96,6 +99,7 @@ STR is the termination status string."
 (defun builder-compilation-read-command (command)
   "Advise `compilation-read-command' to prompt via builder candidate selection.
 COMMAND is the default compile command string."
+  (require 'builder-core)
   (let* ((results (builder--read-command command))
          (candidate (car results))
          (cmd (builder-candidate-command candidate)))
@@ -105,6 +109,7 @@ COMMAND is the default compile command string."
 (defun builder-compile ()
   "Run interactive compile operation via `builder-compile-project'."
   (interactive)
+  (require 'builder-core)
   (builder-compile-project))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
