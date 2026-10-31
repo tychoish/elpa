@@ -12,7 +12,7 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'package)
+(eval-when-compile (require 'package))
 (require 'gen nil t)
 
 (declare-function elpaish-recipe-p "elpaish" (object))
@@ -149,6 +149,7 @@ Returns `elpaish-install-upgrade-packages-list'."
 
 (defun elpaish-install--extract-header-requires (file)
   "Extract package requirements list from FILE header using `package-buffer-info'."
+  (require 'package)
   (when (and file (file-exists-p file))
     (with-temp-buffer
       (insert-file-contents file)
@@ -215,6 +216,7 @@ and invokes `package-install' for any uninstalled dependency."
   "Perform single package PKG operation for ACTION (\\='upgrade or \\='install).
 ACTION defaults to \\='upgrade, which installs PKG if missing or upgrades it
 if an update is available.  If REFRESH is non-nil, refresh archive contents."
+  (require 'package)
   (unless (bound-and-true-p package-archive-contents)
     (package-initialize))
   (when refresh
@@ -342,7 +344,7 @@ ACTION is \\='install or \\='upgrade.
 PARENT-USER-DIR and PARENT-ARCHIVES configure the remote package environment.
 If REFRESH is non-nil, refreshes package contents remotely."
   `(progn
-     (require 'package)
+     (eval-when-compile (require 'package))
      (let ((package-user-dir ,parent-user-dir)
            (package-archives ',parent-archives))
        (require 'elpaish-install)
