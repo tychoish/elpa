@@ -39,6 +39,7 @@
 (declare-function org-babel-execute:emacs-lisp "ob-emacs-lisp")
 (declare-function org-babel-execute:js "ob-js")
 (declare-function org-annotate-file "org-annotate-file")
+(declare-function org-id-store-link "org-id")
 (declare-function consult-org-heading "consult")
 (declare-function agent-shell-queue-org-refile-from-heading "agent-shell-queue-org")
 (declare-function orgx-denote-setup-agenda-commands "orgx-denote")
@@ -558,15 +559,32 @@ When optional TAG is supplied, search for that tag instead."
 (keymap-set orgx-archive-map "s" (cons "current→sibling" #'org-archive-to-archive-sibling))
 (keymap-set orgx-archive-map "d" (cons "done+archive" #'orgx-mark-done-and-archive))
 
-(defvaralias 'orgx-minor-mode-commands-map 'orgx-commands-map)
-(defvar-keymap orgx-commands-map
-  :name "orgx-commands"
-  :doc "Command keymap for `orgx-mode' mounted under C-c o.")
+(defvaralias 'orgx-minor-mode-link-map 'orgx-link-map)
+(defvar-keymap orgx-link-map
+  :name "org-link"
+  :doc "Org link commands under C-c o l (orgx-mode)."
+  "s" #'org-store-link
+  "a" #'org-id-store-link
+  "i" #'org-insert-link
+  "n" #'org-annotate-file)
 
+(defvaralias 'orgx-minor-mode-commands-map 'orgx-commands-map)
+(defvaralias 'orgx-global-map 'orgx-commands-map)
+(defvar-keymap orgx-commands-map
+  :name "org"
+  :doc "Command keymap for `orgx-mode' and global bindings mounted under C-c o.")
+
+(keymap-set orgx-commands-map "4" #'org-agenda)
 (keymap-set orgx-commands-map "a" #'orgx-agenda-view)
+(keymap-set orgx-commands-map "c" orgx-capture-map)
 (keymap-set orgx-commands-map "d" #'orgx-date-now)
+(keymap-set orgx-commands-map "f" #'orgx-agenda-files-open)
+(keymap-set orgx-commands-map "C-f" orgx-archive-map)
+(keymap-set orgx-commands-map "g" orgx-gist-map)
 (keymap-set orgx-commands-map "h" #'consult-org-heading)
+(keymap-set orgx-commands-map "j" #'orgx-capture)
 (keymap-set orgx-commands-map "k" #'org-capture)
+(keymap-set orgx-commands-map "l" orgx-link-map)
 (keymap-set orgx-commands-map "n" #'org-narrow-to-subtree)
 (keymap-set orgx-commands-map "o" #'orgx-agenda-files-open)
 (keymap-set orgx-commands-map "p" #'org-insert-property-drawer)
@@ -576,13 +594,9 @@ When optional TAG is supplied, search for that tag instead."
 (keymap-set orgx-commands-map "C-s" #'orgx-capture-shell-toggle)
 (keymap-set orgx-commands-map "C-t" #'orgx-capture-shell-transient)
 (keymap-set orgx-commands-map "t" #'org-set-tags-command)
-(keymap-set orgx-commands-map "u" #'orgx-agenda-untagged-in-file)
+(keymap-set orgx-commands-map "u" (cons "untagged-in-file" #'orgx-agenda-untagged-in-file))
 (keymap-set orgx-commands-map "w" #'org-refile)
 (keymap-set orgx-commands-map "/" #'orgx-agenda-for-file)
-(keymap-set orgx-commands-map "c" orgx-capture-map)
-(keymap-set orgx-commands-map "f" orgx-archive-map)
-(keymap-set orgx-commands-map "C-f" orgx-archive-map)
-(keymap-set orgx-commands-map "g" orgx-gist-map)
 
 (defvaralias 'orgx-minor-mode-map 'orgx-mode-map)
 (defvar-keymap orgx-mode-map
