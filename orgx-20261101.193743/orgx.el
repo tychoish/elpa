@@ -670,16 +670,62 @@ Activates `orgx-commands-map' under C-c o."
   (orgx-agenda-minor-mode 1))
 
 
+(defvar orgx-global--managed-settings
+  '((org-replace-disputed-keys . t)
+    (org-outline-path-complete-in-steps . nil)
+    (org-refile-allow-creating-parent-nodes . confirm)
+    (org-refile-use-outline-path . file)
+    (org-archive-default-command . org-archive-to-archive-sibling)
+    (org-blank-before-new-entry . ((heading . nil) (plain-list-item . nil)))
+    (org-refile-targets . ((org-agenda-files :maxlevel . 4)))
+    (org-agenda-sticky . t)
+    (org-agenda-include-diary . nil)
+    (org-agenda-block-separator . nil)
+    (org-agenda-columns-add-appointments-to-effort-sum . t)
+    (org-agenda-compact-blocks . t)
+    (org-agenda-default-appointment-duration . 60)
+    (org-agenda-inhibit-startup . nil)
+    (org-agenda-mouse-1-follows-link . t)
+    (org-agenda-use-time-grid . t)
+    (org-agenda-skip-deadline-if-done . nil)
+    (org-agenda-skip-scheduled-if-deadline-is-shown . nil)
+    (org-agenda-skip-scheduled-if-done . t)
+    (org-agenda-skip-unavailable-files . t)
+    (org-agenda-skip-timestamp-if-done . t)
+    (org-agenda-todo-ignore-deadlines . t)
+    (org-agenda-todo-ignore-scheduled . t)
+    (org-agenda-start-on-weekday . nil)
+    (org-agenda-skip-function-global . orgx-skip-child-of-project-tag))
+  "Alist of (SYMBOL . VALUE) settings managed globally by `orgx-global-mode'.")
+
+(defvar orgx-global--saved-settings nil
+  "Alist of (SYMBOL . (BOUNDP . VALUE)) saved before enabling.")
+
+(defun orgx-global--apply-settings ()
+  "Save previous values and apply `orgx-global--managed-settings'."
+  (setq orgx-global--saved-settings nil)
+  (dolist (pair orgx-global--managed-settings)
+    (let ((sym (car pair))
+          (val (cdr pair)))
+      (push (cons sym (if (boundp sym) (cons t (symbol-value sym)) (cons nil nil)))
+            orgx-global--saved-settings)
+      (set sym val))))
+
+(defun orgx-global--revert-settings ()
+  "Restore variables to their state prior to `orgx-global-mode'."
+  (dolist (entry orgx-global--saved-settings)
+    (let ((sym (car entry))
+          (status (cdr entry)))
+      (if (car status)
+          (set sym (cdr status))
+        (makunbound sym))))
+  (setq orgx-global--saved-settings nil))
+
 ;;;###autoload
 (defun orgx-setup ()
   "Centrally initialize and wire orgx features, templates, and agenda integration."
   (interactive)
-  (setq org-replace-disputed-keys t)
-  (setq org-outline-path-complete-in-steps nil)
-  (setq org-refile-allow-creating-parent-nodes 'confirm)
-  (setq org-refile-use-outline-path 'file)
-  (setq org-archive-default-command #'org-archive-to-archive-sibling)
-  (setq org-blank-before-new-entry '((heading . nil) (plain-list-item . nil)))
+  (orgx-global--apply-settings)
   (add-hook 'org-mode-hook #'orgx-mode-turn-on)
   (add-hook 'org-capture-mode-hook #'orgx-mode-turn-on)
   (add-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on)
@@ -694,7 +740,8 @@ Activates `orgx-commands-map' under C-c o."
   "Global mode for orgx.
 When enabled, runs `orgx-setup' and automatically enables `orgx-mode' in
 `org-mode' and `org-capture-mode' buffers, and `orgx-agenda-minor-mode' in
-`org-agenda-mode' buffers."
+`org-agenda-mode' buffers.
+When disabled, reverts managed configuration settings and removes hooks."
   :global t
   :group 'orgx
   (if orgx-global-mode
@@ -703,9 +750,11 @@ When enabled, runs `orgx-setup' and automatically enables `orgx-mode' in
         (add-hook 'org-mode-hook #'orgx-mode-turn-on)
         (add-hook 'org-capture-mode-hook #'orgx-mode-turn-on)
         (add-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on))
+    (orgx-global--revert-settings)
     (remove-hook 'org-mode-hook #'orgx-mode-turn-on)
     (remove-hook 'org-capture-mode-hook #'orgx-mode-turn-on)
-    (remove-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on)))
+    (remove-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on)
+    (setq orgx--setup-done nil)))
 
 ;;;###autoload
 (defalias 'orgx-global-minor-mode #'orgx-global-mode)
