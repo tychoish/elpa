@@ -40,26 +40,7 @@ When optional TAG is supplied, search for that tag instead.
 "Switch to an agenda buffer or other Org file using completing-read." t)
 (autoload 'orgx-find-heading "orgx"
 "Jump to any heading across all `org-agenda-files' using completing-read." t)
-(autoload 'orgx-mode "orgx"
-"Personal org-mode keybindings and buffer setup.
-
-Activates `orgx-commands-map' under C-c o.
-
-This is a minor mode.  If called interactively, toggle the `Orgx mode'
-mode.  If the prefix argument is positive, enable the mode, and if it is
-zero or negative, disable the mode.
-
-If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
-mode if ARG is nil, omitted, or is a positive number.  Disable the mode
-if ARG is a negative number.
-
-To check whether the minor mode is enabled in the current buffer,
-evaluate the variable `orgx-mode'.
-
-The mode's hook is called both when the mode is enabled and when it is
-disabled.
-
-(fn &optional ARG)" t)
+(defalias 'orgx-minor-mode #'orgx-mode)
 (autoload 'orgx-mode-turn-on "orgx"
 "Enable `orgx-mode' in the current buffer.")
 (autoload 'orgx-agenda-minor-mode "orgx"
@@ -79,13 +60,43 @@ evaluate the variable `orgx-agenda-minor-mode'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
-\\{orgx-agenda-minor-mode-map}
-
 (fn &optional ARG)" t)
 (autoload 'orgx-agenda-minor-mode-turn-on "orgx"
 "Enable `orgx-agenda-minor-mode' in the current buffer.")
 (autoload 'orgx-setup "orgx"
 "Centrally initialize and wire orgx features, templates, and agenda integration." t)
+(defvar orgx-global-mode nil
+"Non-nil if Orgx-Global mode is enabled.
+See the `orgx-global-mode' command
+for a description of this minor mode.
+Setting this variable directly does not take effect;
+either customize it (see the info node `Easy Customization')
+or call the function `orgx-global-mode'.")
+(custom-autoload 'orgx-global-mode "orgx" nil)
+(autoload 'orgx-global-mode "orgx"
+"Global mode for orgx.
+
+When enabled, runs `orgx-setup' and automatically enables `orgx-mode' in
+`org-mode' and `org-capture-mode' buffers, and `orgx-agenda-minor-mode' in
+`org-agenda-mode' buffers.
+
+This is a global minor mode.  If called interactively, toggle the
+`Orgx-Global mode' mode.  If the prefix argument is positive, enable the
+mode, and if it is zero or negative, disable the mode.
+
+If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
+mode if ARG is nil, omitted, or is a positive number.  Disable the mode
+if ARG is a negative number.
+
+To check whether the minor mode is enabled in the current buffer,
+evaluate `(default-value \\='orgx-global-mode)'.
+
+The mode's hook is called both when the mode is enabled and when it is
+disabled.
+
+(fn &optional ARG)" t)
+(defalias 'orgx-global-minor-mode #'orgx-global-mode)
+(register-definition-prefixes "orgx" '("org"))
 
 
 ;;; Generated autoloads from orgx-capture.el

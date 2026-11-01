@@ -618,13 +618,24 @@ When optional TAG is supplied, search for that tag instead."
 ;;;###autoload
 (defalias 'orgx-minor-mode #'orgx-mode)
 
+(defvar orgx--setup-done nil
+  "Non-nil if `orgx-setup' has already run.")
+
+(defcustom orgx-setup-hook nil
+  "Hook run after `orgx-setup' completes."
+  :type 'hook
+  :group 'orgx)
+
 (define-minor-mode orgx-mode
   "Personal org-mode keybindings and buffer setup.
 Activates `orgx-commands-map' under C-c o."
   :lighter " ox"
   :keymap orgx-mode-map
   (if orgx-mode
-      (orgx--set-up-buffer)
+      (progn
+        (unless orgx--setup-done
+          (orgx-setup))
+        (orgx--set-up-buffer))
     (orgx--tear-down-buffer)))
 
 ;;;###autoload
@@ -674,7 +685,30 @@ Activates `orgx-commands-map' under C-c o."
   (add-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on)
   (orgx-capture-setup-standard-templates)
   (when (require 'orgx-denote nil t)
-    (orgx-denote-setup-agenda-commands)))
+    (orgx-denote-setup-agenda-commands))
+  (setq orgx--setup-done t)
+  (run-hooks 'orgx-setup-hook))
+
+;;;###autoload
+(define-minor-mode orgx-global-mode
+  "Global mode for orgx.
+When enabled, runs `orgx-setup' and automatically enables `orgx-mode' in
+`org-mode' and `org-capture-mode' buffers, and `orgx-agenda-minor-mode' in
+`org-agenda-mode' buffers."
+  :global t
+  :group 'orgx
+  (if orgx-global-mode
+      (progn
+        (orgx-setup)
+        (add-hook 'org-mode-hook #'orgx-mode-turn-on)
+        (add-hook 'org-capture-mode-hook #'orgx-mode-turn-on)
+        (add-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on))
+    (remove-hook 'org-mode-hook #'orgx-mode-turn-on)
+    (remove-hook 'org-capture-mode-hook #'orgx-mode-turn-on)
+    (remove-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on)))
+
+;;;###autoload
+(defalias 'orgx-global-minor-mode #'orgx-global-mode)
 
 (provide 'orgx)
 ;;; orgx.el ends here
