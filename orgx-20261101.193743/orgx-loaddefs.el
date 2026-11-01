@@ -81,9 +81,9 @@ or call the function `orgx-global-mode'.")
 (autoload 'orgx-global-mode "orgx"
 "Global mode for orgx.
 
-When enabled, runs `orgx-setup' and automatically enables `orgx-mode' in
-`org-mode' and `org-capture-mode' buffers, and `orgx-agenda-minor-mode' in
-`org-agenda-mode' buffers.
+When enabled, runs `orgx-setup', activates `orgx-global-mode-map' (with `C-c o'),
+and automatically enables `orgx-mode' in `org-mode' and `org-capture-mode' buffers,
+and `orgx-agenda-minor-mode' in `org-agenda-mode' buffers.
 When disabled, reverts managed configuration settings and removes hooks.
 
 This is a global minor mode.  If called interactively, toggle the
