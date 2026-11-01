@@ -51,11 +51,11 @@ internally via `package--archives-initialize'."
   (car (map-elt package-alist name)))
 
 (defun arch-elpa--available-desc (name)
-  "Return the best available `package-desc' for NAME from archive contents, or nil."
+  "Return best available `package-desc' for NAME from archive, or nil."
   (car (map-elt package-archive-contents name)))
 
 (defun arch-elpa--upgradeable-p (name)
-  "Return non-nil if NAME has an installed version older than the available one."
+  "Return non-nil if NAME has an installed version older than available."
   (when-let* ((installed (arch-elpa--installed-desc name))
               (available (arch-elpa--available-desc name)))
     (version-list-< (package-desc-version installed) (package-desc-version available))))
@@ -155,7 +155,10 @@ Union of installed packages and packages available from configured archives."
 (define-key arch-elpa-list-mode-map (kbd "m")   #'arch-elpa-list-mark)
 (define-key arch-elpa-list-mode-map (kbd "M")   #'arch-elpa-list-unmark-all)
 (define-key arch-elpa-list-mode-map (kbd "DEL") #'arch-elpa-list-unmark)
-(define-key arch-elpa-list-mode-map (kbd "g")   #'arch-elpa-list-refresh)
+(define-key arch-elpa-list-mode-map (kbd "D")     #'arch-elpa-search-deps-of-dependents)
+(define-key arch-elpa-list-mode-map (kbd "v g")   #'arch-elpa-list-view-deps-of-dependents)
+(define-key arch-elpa-list-mode-map (kbd "v d g") #'arch-elpa-list-view-deps-of-dependents)
+(define-key arch-elpa-list-mode-map (kbd "g")     #'arch-elpa-list-refresh)
 (define-key arch-elpa-list-mode-map (kbd "C")   #'arch-elpa-list-refresh-contents)
 (define-key arch-elpa-list-mode-map (kbd "RET") #'arch-elpa-list-show-info)
 (define-key arch-elpa-list-mode-map (kbd "?")   #'arch-elpa-list-menu)
@@ -193,6 +196,7 @@ Wide mode: w toggles all-packages view (installed-only vs installed+available).
 (defun arch-elpa-list-refresh ()
   "Refresh the arch-elpa package list buffer from current package.el state."
   (interactive)
+  (arch-depgraph-clear 'elpa)
   (arch-elpa--ensure-initialized)
   (let* ((names (if arch-elpa--list-wide (arch-elpa--all-names) (map-keys package-alist)))
          (pkgs (seq-map #'arch-elpa--pkg-for-name names)))
@@ -211,6 +215,104 @@ Wide mode: w toggles all-packages view (installed-only vs installed+available).
   (arch-elpa-list-refresh)
   (message "arch-elpa: archive contents refreshed"))
 
+;;; Dependency analysis & driver graph
+
+(defun arch-elpa--installed-third-party-names ()
+  "Return list of symbols for third-party packages in `package-user-dir'."
+  (arch-elpa--ensure-initialized)
+  (let ((user-dir (and package-user-dir (file-name-as-directory (expand-file-name package-user-dir))))
+        (names nil))
+    (dolist (entry package-alist)
+      (let* ((name (car entry))
+             (desc (cadr entry))
+             (dir (and desc (package-desc-dir desc))))
+        (when (or (null user-dir)
+                  (null dir)
+                  (file-in-directory-p dir user-dir)
+                  (string-prefix-p user-dir (expand-file-name dir)))
+          (push name names))))
+    (sort (delete-dups names) (lambda (a b) (string-lessp (symbol-name a) (symbol-name b))))))
+
+(defun arch-elpa--package-direct-deps (name)
+  "Return direct dependency package symbols for package NAME."
+  (when-let* ((desc (or (arch-elpa--installed-desc name)
+                        (arch-elpa--available-desc name)))
+              (reqs (package-desc-reqs desc)))
+    (thread-last reqs
+      (mapcar #'car)
+      (seq-remove (lambda (req) (eq req 'emacs)))
+      (delete-dups))))
+
+(defun arch-elpa-depgraph (&optional force)
+  "Return the cached `arch-depgraph' for installed ELPA packages.
+When FORCE is non-nil, rebuild the graph from current `package.el' state."
+  (arch-depgraph-get
+   'elpa
+   (lambda ()
+     (arch-elpa--ensure-initialized)
+     (let ((pkgs (arch-elpa--installed-third-party-names)))
+       (arch-depgraph-build 'elpa pkgs #'arch-elpa--package-direct-deps)))
+   force))
+
+;;;###autoload
+(defun arch-elpa-package-dependencies (&optional pkg-name force)
+  "Find installed packages and list their dependencies and dependents.
+When PKG-NAME is non-nil (symbol or string), return a plist of dependency
+analysis for that package:
+  (:package               PKG-NAME (symbol)
+   :installed-p           boolean
+   :dependencies          direct dependencies (list of symbols)
+   :dependents            direct dependents (list of symbols)
+   :transitive-deps       all recursive dependencies (list of symbols)
+   :transitive-dependents all recursive dependents (list of symbols)
+   :deps-of-dependents    dependencies of all packages that depend on it
+   :zero-dependencies-p   boolean
+   :zero-dependents-p     boolean)
+
+When PKG-NAME is nil, return an alist mapping each installed package symbol
+to its dependency analysis plist.
+
+When called interactively, prompt for a package using ACR and display its
+dependency summary in the echo area (or show info with prefix argument)."
+  (interactive
+   (list (when current-prefix-arg
+           (intern (arch-elpa--select-package
+                    "Package dependencies: "
+                    (seq-map #'arch-elpa--pkg-for-name
+                             (arch-elpa--installed-third-party-names)))))))
+  (let* ((graph (arch-elpa-depgraph force)))
+    (if pkg-name
+        (let* ((sym (if (stringp pkg-name) (intern pkg-name) pkg-name))
+               (installed-p (and (arch-elpa--installed-desc sym) t))
+               (deps (arch-depgraph-dependencies graph sym))
+               (dependents (arch-depgraph-dependents graph sym))
+               (trans-deps (arch-depgraph-dependencies graph sym t))
+               (trans-dependents (arch-depgraph-dependents graph sym t))
+               (deps-of-deps (arch-depgraph-deps-of-dependents graph sym))
+               (result
+                (list :package sym
+                      :installed-p installed-p
+                      :dependencies deps
+                      :dependents dependents
+                      :transitive-deps trans-deps
+                      :transitive-dependents trans-dependents
+                      :deps-of-dependents deps-of-deps
+                      :zero-dependencies-p (null deps)
+                      :zero-dependents-p (null dependents))))
+          (when (called-interactively-p 'interactive)
+            (message "%s: %d dependencies, %d dependents, %d deps-of-dependents"
+                     sym (length deps) (length dependents) (length deps-of-deps)))
+          result)
+      (if (called-interactively-p 'interactive)
+          (let ((choice (intern (arch-elpa--select-package
+                                 "Package dependencies: "
+                                 (seq-map #'arch-elpa--pkg-for-name
+                                          (arch-elpa--installed-third-party-names))))))
+            (arch-elpa-show-info choice))
+        (mapcar (lambda (name)
+                  (cons name (arch-elpa-package-dependencies name force)))
+                (arch-depgraph-nodes graph))))))
+
 ;;; Filter predicates
 
 (defun arch-elpa--filter-upgradeable-p (pkg) (arch-elpa-pkg-upgradeable-p pkg))
@@ -218,11 +320,27 @@ Wide mode: w toggles all-packages view (installed-only vs installed+available).
 (defun arch-elpa--filter-available-p (pkg)   (not (arch-elpa-pkg-installed-p pkg)))
 (defun arch-elpa--filter-built-in-p (pkg)    (arch-elpa-pkg-built-in-p pkg))
 
+(defun arch-elpa--filter-zero-dependencies-p (pkg)
+  "Return non-nil if PKG is installed and has zero dependencies."
+  (let* ((name (arch-elpa-pkg-name pkg))
+         (graph (arch-elpa-depgraph)))
+    (and (arch-elpa-pkg-installed-p pkg)
+         (null (arch-depgraph-dependencies graph name)))))
+
+(defun arch-elpa--filter-zero-dependents-p (pkg)
+  "Return non-nil if PKG is installed and has zero dependents."
+  (let* ((name (arch-elpa-pkg-name pkg))
+         (graph (arch-elpa-depgraph)))
+    (and (arch-elpa-pkg-installed-p pkg)
+         (null (arch-depgraph-dependents graph name)))))
+
 (defconst arch-elpa--filter-options
-  '(("upgradeable" arch-elpa--filter-upgradeable-p "has an available upgrade")
-    ("installed"   arch-elpa--filter-installed-p   "currently installed")
-    ("available"   arch-elpa--filter-available-p   "available but not installed")
-    ("built-in"    arch-elpa--filter-built-in-p     "ships with Emacs, no package.el entry"))
+  '(("upgradeable"       arch-elpa--filter-upgradeable-p       "has an available upgrade")
+    ("installed"         arch-elpa--filter-installed-p         "currently installed")
+    ("available"         arch-elpa--filter-available-p         "available but not installed")
+    ("built-in"          arch-elpa--filter-built-in-p          "ships with Emacs, no package.el entry")
+    ("zero-dependencies" arch-elpa--filter-zero-dependencies-p "installed with no dependencies (leaf)")
+    ("zero-dependents"   arch-elpa--filter-zero-dependents-p   "installed with no dependents (top-level)"))
   "Alist of (label predicate-symbol description) for arch-elpa-list filters.")
 
 (defun arch-elpa-list-filter ()
@@ -247,6 +365,36 @@ Wide mode: w toggles all-packages view (installed-only vs installed+available).
   (tabulated-list-print t)
   (message "arch-elpa: filter cleared"))
 
+(defun arch-elpa-list-set-filter (predicate label)
+  "Filter the arch-elpa list buffer with PREDICATE labeled LABEL."
+  (setq arch-elpa--filter predicate)
+  (setq tabulated-list-entries
+        (seq-filter (lambda (e) (funcall arch-elpa--filter (car e))) arch-elpa--all-entries))
+  (tabulated-list-print t)
+  (message "arch-elpa: filter: %s" label))
+
+(defun arch-elpa-list-view-zero-dependencies ()
+  "Filter the list to installed packages with zero dependencies."
+  (interactive)
+  (arch-elpa-list-set-filter #'arch-elpa--filter-zero-dependencies-p "zero dependencies"))
+
+(defun arch-elpa-list-view-zero-dependents ()
+  "Filter the list to installed packages with zero dependents."
+  (interactive)
+  (arch-elpa-list-set-filter #'arch-elpa--filter-zero-dependents-p "zero dependents"))
+
+(defun arch-elpa-list-view-deps-of-dependents (&optional target-pkg)
+  "Filter the list to show dependencies of dependents of TARGET-PKG."
+  (interactive
+   (list (if (arch-elpa-list--pkg-at-point-p)
+             (arch-elpa-pkg-name (arch-elpa--pkg-at-point))
+           (intern (arch-elpa--select-package "Package: ")))))
+  (let* ((sym (if (stringp target-pkg) (intern target-pkg) target-pkg))
+         (graph (arch-elpa-depgraph))
+         (deps-of-deps (arch-depgraph-deps-of-dependents graph sym))
+         (pred (lambda (pkg) (memq (arch-elpa-pkg-name pkg) deps-of-deps))))
+    (arch-elpa-list-set-filter pred (format "deps of dependents of %s (%d)" sym (length deps-of-deps)))))
+
 ;;; Package actions
 
 (defun arch-elpa--pkg-at-point ()
@@ -259,7 +407,7 @@ Wide mode: w toggles all-packages view (installed-only vs installed+available).
   (tabulated-list-get-id))
 
 (defun arch-elpa--select-package (prompt &optional pkgs)
-  "ACR-select an elpa package with PROMPT; return the selected name string or nil.
+  "ACR-select an elpa package with PROMPT; return selected name or nil.
 PKGS restricts the candidate set; defaults to all known packages."
   (let* ((pkgs (or pkgs (seq-map #'arch-elpa--pkg-for-name (arch-elpa--all-names))))
          (index (map-into (seq-map (lambda (p) (cons (symbol-name (arch-elpa-pkg-name p)) p)) pkgs)
@@ -282,7 +430,43 @@ PKGS restricts the candidate set; defaults to all known packages."
   "ACR-search all known elisp packages and show info for the selection."
   (interactive)
   (when-let* ((name (arch-elpa--select-package "Search elisp packages: ")))
-    (describe-package (intern name))))
+    (arch-elpa-show-info (intern name))))
+
+;;;###autoload
+(defun arch-elpa-search-deps-of-dependents (&optional target-pkg)
+  "ACR-search dependencies of dependents for TARGET-PKG and show info.
+If TARGET-PKG is nil, prompt with ACR."
+  (interactive
+   (list (if (and (derived-mode-p 'arch-elpa-list-mode) (arch-elpa-list--pkg-at-point-p))
+             (arch-elpa-pkg-name (arch-elpa--pkg-at-point))
+           (intern (arch-elpa--select-package "Dependencies of dependents for: ")))))
+  (let* ((sym (if (stringp target-pkg) (intern target-pkg) target-pkg))
+         (graph (arch-elpa-depgraph))
+         (deps-of-deps (arch-depgraph-deps-of-dependents graph sym)))
+    (if (null deps-of-deps)
+        (message "arch-elpa: no dependencies of dependents found for %s" sym)
+      (let* ((dependents (arch-depgraph-dependents graph sym))
+             (table
+              (mapcar
+               (lambda (dep-sym)
+                 (let* ((pkg (arch-elpa--pkg-for-name dep-sym))
+                        (why (seq-filter (lambda (d)
+                                           (memq dep-sym (arch-depgraph-dependencies graph d)))
+                                         dependents))
+                        (why-str (mapconcat #'symbol-name why ", ")))
+                   (cons (symbol-name dep-sym)
+                         (format "[%s] %s | required by: %s"
+                                 (arch-elpa-pkg-archive pkg)
+                                 (arch-elpa-pkg-version pkg)
+                                 why-str))))
+               deps-of-deps))
+             (selected (annotated-completing-read
+                        table
+                        :prompt (format "Deps of dependents of %s: " sym)
+                        :require-match t
+                        :category 'arch-elpa-package)))
+        (when selected
+          (arch-elpa-show-info (intern selected)))))))
 
 ;;;###autoload
 (defun arch-elpa-install ()
@@ -331,7 +515,7 @@ PKGS restricts the candidate set; defaults to all known packages."
 
 ;;;###autoload
 (defun arch-elpa-list-upgrade-all ()
-  "Upgrade all elisp packages with an available upgrade via `package-upgrade-all'."
+  "Upgrade all packages with an available upgrade via `package-upgrade-all'."
   (interactive)
   (when (yes-or-no-p "Upgrade all elisp packages? ")
     (package-upgrade-all)
@@ -339,10 +523,162 @@ PKGS restricts the candidate set; defaults to all known packages."
       (arch-elpa-list-refresh))
     (message "arch-elpa: upgrade complete")))
 
-(defun arch-elpa-list-show-info ()
-  "Show package info for the entry at point via `describe-package'."
+;;; Package info view
+
+(defconst arch-elpa--info-buffer-prefix "*arch-elpa-info<"
+  "Prefix for arch-elpa info buffer names.")
+
+(defun arch-elpa--info-buffer-name (pkg-name)
+  "Return the buffer name for displaying PKG-NAME info."
+  (format "*arch-elpa-info<%s>*" pkg-name))
+
+(defvar-local arch-elpa--info-package nil
+  "Package symbol displayed in the current arch-elpa-info buffer.")
+
+(defvar arch-elpa-info-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map help-mode-map)
+    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "d") #'arch-elpa-info-describe-package)
+    (define-key map (kbd "D") #'arch-elpa-info-search-deps-of-dependents)
+    (define-key map (kbd "i") #'arch-elpa-info-install)
+    (define-key map (kbd "r") #'arch-elpa-info-remove)
+    (define-key map (kbd "u") #'arch-elpa-info-upgrade)
+    (define-key map (kbd "s") #'arch-elpa-search)
+    (define-key map (kbd "l") #'arch-elpa-list)
+    (define-key map (kbd "?") #'arch-elpa-info-menu)
+    map)
+  "Keymap for `arch-elpa-info-mode'.")
+
+(define-derived-mode arch-elpa-info-mode special-mode "arch-elpa-info"
+  "Major mode for viewing detailed package information in arch-elpa.
+
+\\{arch-elpa-info-mode-map}"
+  (setq-local revert-buffer-function
+              (lambda (_ignore-auto _noconfirm)
+                (when arch-elpa--info-package
+                  (arch-elpa-show-info arch-elpa--info-package)))))
+
+(defun arch-elpa-info-describe-package ()
+  "Show built-in `describe-package' for the current package."
   (interactive)
-  (describe-package (arch-elpa-pkg-name (arch-elpa--pkg-at-point))))
+  (when arch-elpa--info-package
+    (describe-package arch-elpa--info-package)))
+
+(defun arch-elpa-info-search-deps-of-dependents ()
+  "Search dependencies of dependents for the current package."
+  (interactive)
+  (when arch-elpa--info-package
+    (arch-elpa-search-deps-of-dependents arch-elpa--info-package)))
+
+(defun arch-elpa-info-install ()
+  "Install the current package via `package-install'."
+  (interactive)
+  (when arch-elpa--info-package
+    (package-install arch-elpa--info-package)
+    (arch-depgraph-clear 'elpa)
+    (arch-elpa-show-info arch-elpa--info-package)
+    (message "arch-elpa: installed %s" arch-elpa--info-package)))
+
+(defun arch-elpa-info-remove ()
+  "Remove the current package via `package-delete'."
+  (interactive)
+  (when arch-elpa--info-package
+    (if-let* ((desc (arch-elpa--installed-desc arch-elpa--info-package)))
+        (when (yes-or-no-p (format "Remove %s? " arch-elpa--info-package))
+          (package-delete desc)
+          (arch-depgraph-clear 'elpa)
+          (arch-elpa-show-info arch-elpa--info-package)
+          (message "arch-elpa: removed %s" arch-elpa--info-package))
+      (user-error "%s is not installed" arch-elpa--info-package))))
+
+(defun arch-elpa-info-upgrade ()
+  "Upgrade the current package via `package-upgrade'."
+  (interactive)
+  (when arch-elpa--info-package
+    (if (arch-elpa--upgradeable-p arch-elpa--info-package)
+        (progn
+          (package-upgrade arch-elpa--info-package)
+          (arch-depgraph-clear 'elpa)
+          (arch-elpa-show-info arch-elpa--info-package)
+          (message "arch-elpa: upgraded %s" arch-elpa--info-package))
+      (user-error "%s has no available upgrade" arch-elpa--info-package))))
+
+(transient-define-prefix arch-elpa-info-menu ()
+  "Actions for the arch-elpa info buffer."
+  [["Actions"
+    ("d"  "Describe (help)"     arch-elpa-info-describe-package)
+    ("D"  "Deps of dependents"  arch-elpa-info-search-deps-of-dependents)
+    ("i"  "Install"             arch-elpa-info-install)
+    ("r"  "Remove"              arch-elpa-info-remove)
+    ("u"  "Upgrade"             arch-elpa-info-upgrade)]
+   ["Navigation"
+    ("s"  "Search packages"     arch-elpa-search)
+    ("l"  "Package list"        arch-elpa-list)
+    ("q"  "Quit"                quit-window)]])
+
+(defun arch-elpa--render-pkg-button (pkg-sym)
+  "Insert a clickable button for PKG-SYM that opens its info buffer."
+  (let ((name-str (symbol-name pkg-sym)))
+    (insert-text-button name-str
+                        'action (lambda (_b) (arch-elpa-show-info pkg-sym))
+                        'follow-link t
+                        'face 'arch-face-pkg-link
+                        'help-echo (format "mouse-1: show info for %s" name-str))))
+
+(defun arch-elpa--insert-pkg-list (key pkg-symbols)
+  "Insert YAML KEY with clickable buttons for each symbol in PKG-SYMBOLS."
+  (insert (arch--yaml-key-str key) "\n")
+  (if (null pkg-symbols)
+      (insert "  - None\n")
+    (dolist (sym pkg-symbols)
+      (insert "  - ")
+      (arch-elpa--render-pkg-button sym)
+      (insert "\n"))))
+
+;;;###autoload
+(defun arch-elpa-show-info (pkg-name)
+  "Display detailed info for PKG-NAME in an arch-elpa info buffer."
+  (interactive
+   (list (intern (arch-elpa--select-package "Package info: "))))
+  (arch-elpa--ensure-initialized)
+  (let* ((sym (if (stringp pkg-name) (intern pkg-name) pkg-name))
+         (pkg (arch-elpa--pkg-for-name sym))
+         (desc (or (arch-elpa--installed-desc sym)
+                   (arch-elpa--available-desc sym)))
+         (dep-info (arch-elpa-package-dependencies sym))
+         (buf-name (arch-elpa--info-buffer-name sym)))
+    (with-current-buffer (get-buffer-create buf-name)
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (arch-elpa-info-mode)
+        (setq arch-elpa--info-package sym)
+        (arch--yaml-insert-pair "name" (symbol-name sym))
+        (arch--yaml-insert-pair "version" (arch-elpa-pkg-version pkg))
+        (arch--yaml-insert-pair "archive" (arch-elpa-pkg-archive pkg))
+        (arch--yaml-insert-pair "status" (if (arch-elpa-pkg-installed-p pkg) "installed" "available"))
+        (when-let* ((summary (arch-elpa-pkg-summary pkg))
+                    ((not (string-empty-p summary))))
+          (arch--yaml-insert-pair "summary" summary))
+        (when-let* ((desc desc)
+                    (extras (package-desc-extras desc))
+                    (url (or (alist-get :url extras) (alist-get 'url extras))))
+          (arch--yaml-insert-url "url" (format "%s" url)))
+        (when-let* ((inst-desc (arch-elpa--installed-desc sym))
+                    (dir (package-desc-dir inst-desc)))
+          (arch--yaml-insert-pair "directory" dir))
+        (arch-elpa--insert-pkg-list "depends-on" (plist-get dep-info :dependencies))
+        (arch-elpa--insert-pkg-list "required-by" (plist-get dep-info :dependents))
+        (arch-elpa--insert-pkg-list "deps-of-dependents" (plist-get dep-info :deps-of-dependents))
+        (arch--yaml-insert-pair "zero-dependencies" (if (plist-get dep-info :zero-dependencies-p) "true" "false"))
+        (arch--yaml-insert-pair "zero-dependents" (if (plist-get dep-info :zero-dependents-p) "true" "false"))
+        (goto-char (point-min)))
+      (pop-to-buffer (current-buffer)))))
+
+(defun arch-elpa-list-show-info ()
+  "Show package info for the entry at point via `arch-elpa-show-info'."
+  (interactive)
+  (arch-elpa-show-info (arch-elpa-pkg-name (arch-elpa--pkg-at-point))))
 
 (defun arch-elpa-list-find ()
   "Jump to a package in the current list using ACR."
@@ -446,12 +782,15 @@ PKGS restricts the candidate set; defaults to all known packages."
          (name (arch-elpa-pkg-name pkg))
          (actions
           (list
-           (cons "show info"    (cons #'arch-elpa-list-show-info "Display package details"))
-           (cons "install"      (cons #'arch-elpa-list-install   "Install this package"))
-           (cons "remove"       (cons #'arch-elpa-list-remove    "Remove this package"))
-           (cons "upgrade"      (cons #'arch-elpa-list-upgrade   "Upgrade to latest version"))
-           (cons "mark"         (cons #'arch-elpa-list-mark      "Add to marked set"))
-           (cons "unmark"       (cons #'arch-elpa-list-unmark    "Remove from marked set"))))
+           (cons "show info"          (cons #'arch-elpa-list-show-info           "Display package details"))
+           (cons "describe (help)"    (cons (lambda () (describe-package name)) "Display standard help buffer"))
+           (cons "search deps of deps" (cons (lambda () (arch-elpa-search-deps-of-dependents name)) "ACR search deps of dependents"))
+           (cons "view deps of deps"  (cons (lambda () (arch-elpa-list-view-deps-of-dependents name)) "Filter list to deps of dependents"))
+           (cons "install"            (cons #'arch-elpa-list-install             "Install this package"))
+           (cons "remove"             (cons #'arch-elpa-list-remove              "Remove this package"))
+           (cons "upgrade"            (cons #'arch-elpa-list-upgrade             "Upgrade to latest version"))
+           (cons "mark"               (cons #'arch-elpa-list-mark                "Add to marked set"))
+           (cons "unmark"             (cons #'arch-elpa-list-unmark              "Remove from marked set"))))
          (choice (annotated-completing-read
                   (seq-map (lambda (a) (cons (car a) (cddr a))) actions)
                   :prompt (format "[%s]: " name)
@@ -481,12 +820,17 @@ PKGS restricts the candidate set; defaults to all known packages."
     ("M"   "Unmark all"      arch-elpa-list-unmark-all)
     ("xi"  "Install marked"  arch-elpa-list-install-marked)
     ("xr"  "Remove marked"   arch-elpa-list-remove-marked)]
-   ["View"
+   ["View & Filter"
     ("RET" "Package info"    arch-elpa-list-show-info
      :inapt-if-not arch-elpa-list--pkg-at-point-p)
     ("/"   "Find in list"    arch-elpa-list-find)
     ("w"   "Toggle wide"     arch-elpa-list-toggle-wide)
     ("f"   "Filter"          arch-elpa-list-filter)
+    ("0d"  "Zero deps view"  arch-elpa-list-view-zero-dependencies)
+    ("0r"  "Zero dependents view" arch-elpa-list-view-zero-dependents)
+    ("D"   "Deps of dependents" arch-elpa-search-deps-of-dependents)
+    ("vg"  "View deps of dependents" arch-elpa-list-view-deps-of-dependents)
+    ("vdg" "View deps of dependents (alias)" arch-elpa-list-view-deps-of-dependents)
     ("xc"  "Clear filter"    arch-elpa-list-filter-clear)
     ("s"   "Search"          arch-elpa-search)
     ("g"   "Refresh"         arch-elpa-list-refresh)

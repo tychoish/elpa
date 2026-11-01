@@ -12,9 +12,9 @@
 ;;; Generated autoloads from arch.el
 
 (autoload 'arch-cache-drop "arch"
-"Clear all cached package info." t)
+"Clear all cached package info and dependency graphs." t)
 (autoload 'arch-cache-reload "arch"
-"Clear and repopulate the package info cache from pacman -Qi." t)
+"Clear and repopulate the package info cache and dependency graphs." t)
 (autoload 'arch-sync "arch"
 "Sync package databases (`pacman --sync --refresh')." t)
 (autoload 'arch-sync-force "arch"
@@ -26,7 +26,7 @@
 
 (fn PKG-NAME)" t)
 (autoload 'arch-abs-rebuild "arch"
-"Rebuild PKG-NAME from existing AUR clone via `arch-aur-backend' abs-rebuild-fn.
+"Rebuild PKG-NAME from AUR clone via `arch-aur-backend' abs-rebuild-fn.
 
 (fn PKG-NAME)" t)
 (autoload 'arch-search "arch"
@@ -60,7 +60,7 @@ See `arch-kill-progress-buffers' and `arch-kill-info-buffers'." t)
 (autoload 'arch-list "arch"
 "Open the arch package list showing installed packages." t)
 (autoload 'arch-install "arch"
-"Install PKG-NAME via the default backend, selecting via ACR when interactive.
+"Install PKG-NAME via default backend, selecting via ACR when interactive.
 
 (fn PKG-NAME)" t)
 (autoload 'arch-remove "arch"
@@ -68,7 +68,7 @@ See `arch-kill-progress-buffers' and `arch-kill-info-buffers'." t)
 
 (fn PKG-NAME)" t)
 (autoload 'arch-upgrade "arch"
-"Upgrade PKG-NAME via the default backend, selecting via ACR when interactive.
+"Upgrade PKG-NAME via default backend, selecting via ACR when interactive.
 
 (fn PKG-NAME)" t)
 (autoload 'arch-upgrade-all "arch"
@@ -77,20 +77,48 @@ See `arch-kill-progress-buffers' and `arch-kill-info-buffers'." t)
 "Upgrade all pacman-managed packages via `arch-aur-backend'.
 AUR/foreign packages are not upgraded; a warning is logged.  Rebuild those
 individually via `arch-abs-install'." t)
-(register-definition-prefixes "arch" '("arch-"))
 
 
 ;;; Generated autoloads from arch-elpa.el
 
+(autoload 'arch-elpa-package-dependencies "arch-elpa"
+"Find installed packages and list their dependencies and dependents.
+When PKG-NAME is non-nil (symbol or string), return a plist of dependency
+analysis for that package:
+  (:package               PKG-NAME (symbol)
+   :installed-p           boolean
+   :dependencies          direct dependencies (list of symbols)
+   :dependents            direct dependents (list of symbols)
+   :transitive-deps       all recursive dependencies (list of symbols)
+   :transitive-dependents all recursive dependents (list of symbols)
+   :deps-of-dependents    dependencies of all packages that depend on it
+   :zero-dependencies-p   boolean
+   :zero-dependents-p     boolean)
+
+When PKG-NAME is nil, return an alist mapping each installed package symbol
+to its dependency analysis plist.
+
+When called interactively, prompt for a package using ACR and display its
+dependency summary in the echo area (or show info with prefix argument).
+
+(fn &optional PKG-NAME FORCE)" t)
 (autoload 'arch-elpa-search "arch-elpa"
 "ACR-search all known elisp packages and show info for the selection." t)
+(autoload 'arch-elpa-search-deps-of-dependents "arch-elpa"
+"ACR-search dependencies of dependents for TARGET-PKG and show info.
+If TARGET-PKG is nil, prompt with ACR.
+
+(fn &optional TARGET-PKG)" t)
 (autoload 'arch-elpa-install "arch-elpa"
 "ACR-select and install an elisp package via `package-install'." t)
 (autoload 'arch-elpa-list-upgrade-all "arch-elpa"
-"Upgrade all elisp packages with an available upgrade via `package-upgrade-all'." t)
+"Upgrade all packages with an available upgrade via `package-upgrade-all'." t)
+(autoload 'arch-elpa-show-info "arch-elpa"
+"Display detailed info for PKG-NAME in an arch-elpa info buffer.
+
+(fn PKG-NAME)" t)
 (autoload 'arch-elpa-list "arch-elpa"
 "Open the arch-elpa package list." t)
-(register-definition-prefixes "arch-elpa" '("arch-elpa-"))
 
 
 ;;; Generated autoloads from arch-sets.el
@@ -112,7 +140,6 @@ Never installs anything on its own; use `arch-sets-install-at-point' or
 `arch-sets-install-missing' in the resulting buffer to do that.
 
 (fn FILE)" t)
-(register-definition-prefixes "arch-sets" '("arch-sets-"))
 
 ;;; End of scraped data
 

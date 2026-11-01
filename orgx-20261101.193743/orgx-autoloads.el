@@ -79,12 +79,13 @@ evaluate the variable `orgx-agenda-minor-mode'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
+\\{orgx-agenda-minor-mode-map}
+
 (fn &optional ARG)" t)
 (autoload 'orgx-agenda-minor-mode-turn-on "orgx"
 "Enable `orgx-agenda-minor-mode' in the current buffer.")
 (autoload 'orgx-setup "orgx"
 "Centrally initialize and wire orgx features, templates, and agenda integration." t)
-(register-definition-prefixes "orgx" '("orgx-"))
 
 
 ;;; Generated autoloads from orgx-capture.el
@@ -116,7 +117,6 @@ into `org-load-hook'.
 (fn &rest ARGS)" nil t)
 (autoload 'orgx-capture-setup-standard-templates "orgx-capture"
 "Install standard orgx capture templates using customizable default files." t)
-(register-definition-prefixes "orgx-capture" '("orgx-capture-"))
 
 
 ;;; Generated autoloads from orgx-capture-shell.el
@@ -129,7 +129,6 @@ If the shell window is visible and active, hide it and return to the previous
 window.  If it is hidden or not active, display it in the bottom popup window." t)
  (autoload 'orgx-capture-shell-transient "orgx-capture-shell" nil t)
  (autoload 'orgx-capture-shell-transient "orgx-capture-shell" nil t)
-(register-definition-prefixes "orgx-capture-shell" '("orgx-capture-shell-"))
 
 
 ;;; Generated autoloads from orgx-denote.el
@@ -150,7 +149,6 @@ Replaces the original heading with a denote link to the newly created note.
 Preserves timestamps in CREATED property if present." t)
 (autoload 'orgx-denote-setup-capture-templates "orgx-denote"
 "Register Denote templates into `org-capture-templates'." t)
-(register-definition-prefixes "orgx-denote" '("orgx-denote-"))
 
 ;;; End of scraped data
 

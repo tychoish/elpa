@@ -54,7 +54,8 @@
   upgrade-fn      ; (fn pkg-name) — nil means unsupported
   upgrade-all-fn  ; (fn) — nil means unsupported
   abs-install-fn  ; (fn pkg-name) — install/upgrade from source (clone/pull + build); nil = unsupported
-  abs-rebuild-fn) ; (fn pkg-name) — rebuild from existing source clone; nil = unsupported
+  abs-rebuild-fn  ; (fn pkg-name) — rebuild from existing source clone; nil = unsupported
+  depgraph-fn)    ; (fn) → arch-depgraph; nil = unsupported
 
 (defvar arch--backends (make-hash-table :test #'equal)
   "Registry of arch backends keyed by name string.")
@@ -230,17 +231,19 @@ actually populated\".")
 
 ;;;###autoload
 (defun arch-cache-drop ()
-  "Clear all cached package info."
+  "Clear all cached package info and dependency graphs."
   (interactive)
   (clrhash arch--info-cache)
+  (arch-depgraph-clear)
   (setq arch--cache-populated-p nil)
   (message "arch: package cache cleared"))
 
 ;;;###autoload
 (defun arch-cache-reload ()
-  "Clear and repopulate the package info cache from pacman -Qi."
+  "Clear and repopulate the package info cache and dependency graphs."
   (interactive)
   (clrhash arch--info-cache)
+  (arch-depgraph-clear)
   (setq arch--cache-populated-p nil)
   (arch--populate-cache)
   (message "arch: cache reloaded (%d packages)" (hash-table-count arch--info-cache)))
@@ -260,6 +263,147 @@ actually populated\".")
                               (plist-put plist 'repository repo)
                             plist))))
      (arch--parse-multi-info (arch--run-sync (list "pacman" "--query" "--info"))))))
+
+;;; Dependency graph & driver cache
+
+(cl-defstruct (arch-depgraph (:constructor arch-depgraph--make) (:copier nil))
+  "Directed dependency graph and cached index for package drivers."
+  driver-key       ; symbol or string identifier (e.g. 'elpa, "pacman")
+  nodes            ; list of all package symbols/strings in the graph
+  deps-map         ; hash-table: pkg -> list of direct dependencies
+  dependents-map   ; hash-table: pkg -> list of direct dependents (reverse deps)
+  zero-deps        ; list of packages with zero dependencies (sorted)
+  zero-dependents  ; list of packages with zero dependents (sorted)
+  timestamp        ; float-time when built
+  extra)           ; plist of driver-specific metadata
+
+(defvar arch-depgraph--cache (make-hash-table :test #'equal)
+  "Driver-keyed cache of `arch-depgraph' instances.")
+
+(defun arch--depgraph-compare (a b)
+  "Return non-nil if A should be sorted before B (handles symbols and strings)."
+  (let ((sa (if (symbolp a) (symbol-name a) (format "%s" a)))
+        (sb (if (symbolp b) (symbol-name b) (format "%s" b))))
+    (string-lessp sa sb)))
+
+(defun arch-depgraph-clear (&optional driver-key)
+  "Clear the cached dependency graph for DRIVER-KEY, or all drivers when nil."
+  (if driver-key
+      (map-delete arch-depgraph--cache driver-key)
+    (clrhash arch-depgraph--cache)))
+
+(defun arch-depgraph-get (driver-key &optional builder-fn force)
+  "Return the cached `arch-depgraph' for DRIVER-KEY.
+When FORCE is non-nil or no graph is cached, call BUILDER-FN (which takes no
+arguments and returns an `arch-depgraph') to populate and cache the graph."
+  (let ((cached (map-elt arch-depgraph--cache driver-key)))
+    (if (and cached (not force))
+        cached
+      (when builder-fn
+        (let ((graph (funcall builder-fn)))
+          (setf (map-elt arch-depgraph--cache driver-key) graph)
+          graph)))))
+
+(defun arch-depgraph-build (driver-key packages deps-fn &optional extra)
+  "Build an `arch-depgraph' for DRIVER-KEY.
+PACKAGES is a list of package identifiers (symbols or strings).
+DEPS-FN is a function called with a package identifier that returns its
+list of direct dependencies.
+EXTRA is an optional plist of driver metadata."
+  (let* ((nodes (delete-dups (copy-sequence packages)))
+         (deps-table (make-hash-table :test #'equal))
+         (dependents-table (make-hash-table :test #'equal))
+         (zero-deps nil)
+         (zero-dependents nil))
+    (dolist (pkg nodes)
+      (puthash pkg nil deps-table)
+      (puthash pkg nil dependents-table))
+    (dolist (pkg nodes)
+      (let ((raw-deps (funcall deps-fn pkg)))
+        (puthash pkg raw-deps deps-table)
+        (dolist (dep raw-deps)
+          (puthash dep (cons pkg (gethash dep dependents-table nil)) dependents-table))))
+    (dolist (pkg nodes)
+      (let ((deps (gethash pkg deps-table))
+            (dependents (gethash pkg dependents-table)))
+        (when (null deps)
+          (push pkg zero-deps))
+        (when (null dependents)
+          (push pkg zero-dependents))))
+    (arch-depgraph--make
+     :driver-key driver-key
+     :nodes (sort (copy-sequence nodes) #'arch--depgraph-compare)
+     :deps-map deps-table
+     :dependents-map dependents-table
+     :zero-deps (sort zero-deps #'arch--depgraph-compare)
+     :zero-dependents (sort zero-dependents #'arch--depgraph-compare)
+     :timestamp (float-time)
+     :extra extra)))
+
+(defun arch--depgraph-walk (table start-node)
+  "Walk adjacency TABLE from START-NODE, returning all reachable nodes."
+  (let ((visited (make-hash-table :test #'equal))
+        (queue (copy-sequence (gethash start-node table nil)))
+        (result nil))
+    (dolist (item queue)
+      (puthash item t visited))
+    (while queue
+      (let* ((curr (pop queue))
+             (neighbors (gethash curr table nil)))
+        (push curr result)
+        (dolist (next neighbors)
+          (unless (gethash next visited)
+            (puthash next t visited)
+            (push next queue)))))
+    (sort (delete-dups result) #'arch--depgraph-compare)))
+
+(defun arch-depgraph-dependencies (graph pkg &optional transitive)
+  "Return direct dependencies of PKG in GRAPH.
+When TRANSITIVE is non-nil, return all recursive dependencies (cycle-safe)."
+  (if (not transitive)
+      (sort (copy-sequence (gethash pkg (arch-depgraph-deps-map graph))) #'arch--depgraph-compare)
+    (arch--depgraph-walk (arch-depgraph-deps-map graph) pkg)))
+
+(defun arch-depgraph-dependents (graph pkg &optional transitive)
+  "Return direct dependents (reverse dependencies) of PKG in GRAPH.
+When TRANSITIVE is non-nil, return all recursive dependents (cycle-safe)."
+  (if (not transitive)
+      (sort (copy-sequence (gethash pkg (arch-depgraph-dependents-map graph))) #'arch--depgraph-compare)
+    (arch--depgraph-walk (arch-depgraph-dependents-map graph) pkg)))
+
+(defun arch-depgraph-deps-of-dependents (graph pkg &optional transitive)
+  "Return all dependencies of all dependents of PKG in GRAPH.
+Finds all packages D that depend on PKG, then collects all dependencies of
+each D.  When TRANSITIVE is non-nil, collects recursive dependencies of each D.
+Excludes PKG itself from the resulting list."
+  (let* ((dependents (arch-depgraph-dependents graph pkg transitive))
+         (acc nil))
+    (dolist (d dependents)
+      (let ((d-deps (arch-depgraph-dependencies graph d transitive)))
+        (setq acc (append d-deps acc))))
+    (sort (delete pkg (delete-dups acc)) #'arch--depgraph-compare)))
+
+(defalias 'arch-depgraph-zero-dependencies #'arch-depgraph-zero-deps
+  "Return list of packages in GRAPH that have zero dependencies.")
+
+(defun arch-pacman-depgraph (&optional force)
+  "Return the cached `arch-depgraph' for installed pacman packages.
+When FORCE is non-nil, rebuild the graph from `arch--info-cache'."
+  (arch-depgraph-get
+   "pacman"
+   (lambda ()
+     (unless arch--cache-populated-p (arch--populate-cache))
+     (let* ((names (map-keys arch--info-cache))
+            (deps-fn (lambda (pkg-name)
+                       (when-let* ((plist (arch--cache-get pkg-name))
+                                   (deps-str (plist-get plist 'depends-on))
+                                   ((not (equal deps-str "None"))))
+                         (seq-remove #'string-empty-p
+                                     (mapcar (lambda (d)
+                                               (car (split-string d "[><=]")))
+                                             (arch--yaml-split deps-str)))))))
+       (arch-depgraph-build "pacman" names deps-fn)))
+   force))
 
 (defun arch--populate-cache ()
   "Populate the package info cache via the current backend's populate-cache-fn."
@@ -463,7 +607,7 @@ and build-percentage output), and auto-scrolling displaying windows."
               (set-window-point win (point-max)))))))))
 
 (defun arch--pkg-sentinel (proc event)
-  "Append completion notice for PROC to its buffer and run post-operation hooks."
+  "Append completion notice for PROC and run post-operation hooks."
   (let ((status (process-status proc))
         (exit-code (process-exit-status proc))
         (buf (process-buffer proc)))
@@ -780,7 +924,7 @@ versions, so upgrading those requires rebuilding individually via
 
 (defun arch--aur-abs-install (pkg-name &optional pkg)
   "Install PKG-NAME from AUR: clone to abs dir, then run makepkg -sfi.
-Registered as the AUR backend's `abs-install-fn'; called via `arch-abs-install'."
+Registered as AUR backend's `abs-install-fn'; called via `arch-abs-install'."
   (make-directory arch-abs-directory t)
   (let* ((pkg-dir (arch--aur-abs-pkg-dir pkg-name))
          (fetch-cmd (if (file-directory-p pkg-dir)
@@ -798,7 +942,7 @@ Registered as the AUR backend's `abs-install-fn'; called via `arch-abs-install'.
 
 (defun arch--aur-abs-rebuild (pkg-name &optional pkg)
   "Rebuild PKG-NAME in its existing abs directory without pulling.
-Registered as the AUR backend's `abs-rebuild-fn'; called via `arch-abs-rebuild'."
+Registered as AUR backend's `abs-rebuild-fn'; called via `arch-abs-rebuild'."
   (let ((pkg-dir (arch--aur-abs-pkg-dir pkg-name)))
     (unless (file-directory-p pkg-dir)
       (user-error "No abs directory for %s; use arch-abs-install first" pkg-name))
@@ -820,7 +964,7 @@ Registered as the AUR backend's `abs-rebuild-fn'; called via `arch-abs-rebuild'.
 
 ;;;###autoload
 (defun arch-abs-rebuild (pkg-name)
-  "Rebuild PKG-NAME from existing AUR clone via `arch-aur-backend' abs-rebuild-fn."
+  "Rebuild PKG-NAME from AUR clone via `arch-aur-backend' abs-rebuild-fn."
   (interactive "sAUR package name: ")
   (funcall (or (arch-backend-abs-rebuild-fn (arch--aur-backend))
               (user-error "Backend %S does not support AUR source rebuilds"
@@ -1103,6 +1247,25 @@ lookup used by the package list view."
     (when files
       (arch--yaml-insert-list "files" files))))
 
+(defvar arch-info-map
+  (make-sparse-keymap)
+  "Keymap for arch info help buffers.  Inherits `help-mode-map' once loaded.")
+
+(with-eval-after-load 'help-mode
+  (set-keymap-parent arch-info-map help-mode-map))
+
+(define-key arch-info-map (kbd "q") #'quit-window)
+(define-key arch-info-map (kbd "i") #'arch-info-install)
+(define-key arch-info-map (kbd "r") #'arch-info-remove)
+(define-key arch-info-map (kbd "u") #'arch-info-upgrade)
+(define-key arch-info-map (kbd "s") #'arch-search)
+(define-key arch-info-map (kbd "S") #'arch-search-aur)
+(define-key arch-info-map (kbd "l") #'arch-list)
+(define-key arch-info-map (kbd "p") #'arch-find-package)
+(define-key arch-info-map (kbd "K") #'arch-kill-buffers)
+(define-key arch-info-map (kbd "b") #'arch-switch-to-buffer)
+(define-key arch-info-map (kbd "?") #'arch-info-menu)
+
 ;;;###autoload
 (defun arch-show-info (pkg-name)
   "Display detailed info for PKG-NAME in a read-only buffer."
@@ -1126,24 +1289,6 @@ lookup used by the package list view."
       (with-current-buffer buf
         (use-local-map arch-info-map)))))
 
-(defvar arch-info-map
-  (make-sparse-keymap)
-  "Keymap for arch info help buffers.  Inherits `help-mode-map' once loaded.")
-
-(with-eval-after-load 'help-mode
-  (set-keymap-parent arch-info-map help-mode-map))
-
-(define-key arch-info-map (kbd "q") #'quit-window)
-(define-key arch-info-map (kbd "i") #'arch-info-install)
-(define-key arch-info-map (kbd "r") #'arch-info-remove)
-(define-key arch-info-map (kbd "u") #'arch-info-upgrade)
-(define-key arch-info-map (kbd "s") #'arch-search)
-(define-key arch-info-map (kbd "S") #'arch-search-aur)
-(define-key arch-info-map (kbd "l") #'arch-list)
-(define-key arch-info-map (kbd "p") #'arch-find-package)
-(define-key arch-info-map (kbd "K") #'arch-kill-buffers)
-(define-key arch-info-map (kbd "b") #'arch-switch-to-buffer)
-(define-key arch-info-map (kbd "?") #'arch-info-menu)
 
 (transient-define-prefix arch-info-menu ()
   "Actions for the arch package info buffer."
@@ -1204,7 +1349,7 @@ See `arch-kill-progress-buffers' and `arch-kill-info-buffers'."
   (arch-kill-info-buffers))
 
 (defun arch-info-install ()
-  "Install package shown in buffer, selecting method via `arch--install-dispatch'.
+  "Install package in buffer, selecting method via `arch--install-dispatch'.
 If it is already installed, prompts to select a different package instead of
 reinstalling; use `arch-info-upgrade' to upgrade/reinstall it."
   (interactive)
@@ -1245,7 +1390,7 @@ See `arch-abs-rebuild'."
 ;; than popping a new one, but never displace the arch package list window
 
 (defun arch--progress-buffer-p (buf _action)
-  "Return non-nil if BUF is an *arch:<pkg>* or the shared worker progress buffer.
+  "Return non-nil if BUF is *arch:<pkg>* or the shared worker buffer.
 BUF may be a buffer or a buffer name, per the `display-buffer-alist'
 condition-function contract."
   (let ((name (if (bufferp buf) (buffer-name buf) buf)))
@@ -1674,7 +1819,7 @@ falls back to `arch--install-dispatch' per package."
       (seq-do (lambda (name) (funcall fn name)) names))))
 
 (defun arch-list-find ()
-  "Jump to a package in the current list using ACR with table-column annotations."
+  "Jump to package in list using ACR with table-column annotations."
   (interactive)
   (let* ((pkg-index (map-into
                      (seq-map (lambda (e) (cons (arch-pkg-name (car e)) (car e)))
@@ -1760,7 +1905,7 @@ Clones the abs directory if absent; otherwise pulls and rebuilds."
   (arch-abs-install (arch-pkg-name (arch-list--pkg-at-point))))
 
 (defun arch-list-abs-rebuild ()
-  "Reinstall the package at point from its existing abs clone (`arch-abs-rebuild').
+  "Reinstall package at point from existing abs clone (`arch-abs-rebuild').
 Rebuilds without pulling; use `arch-list-abs-install' to update source first."
   (interactive)
   (arch-abs-rebuild (arch-pkg-name (arch-list--pkg-at-point))))
@@ -1852,7 +1997,7 @@ Rebuilds without pulling; use `arch-list-abs-install' to update source first."
 
 ;;;###autoload
 (defun arch-install (pkg-name)
-  "Install PKG-NAME via the default backend, selecting via ACR when interactive."
+  "Install PKG-NAME via default backend, selecting via ACR when interactive."
   (interactive
    (let* ((backend (arch--default-backend))
           (pkgs (if-let* ((fn (arch-backend-list-all-fn backend)))
@@ -1897,7 +2042,7 @@ Rebuilds without pulling; use `arch-list-abs-install' to update source first."
 
 ;;;###autoload
 (defun arch-upgrade (pkg-name)
-  "Upgrade PKG-NAME via the default backend, selecting via ACR when interactive."
+  "Upgrade PKG-NAME via default backend, selecting via ACR when interactive."
   (interactive
    (progn
      (unless arch--cache-populated-p
@@ -1956,7 +2101,8 @@ individually via `arch-abs-install'."
   :install-batch-fn #'arch--pacman-install-batch
   :remove-fn #'arch--pacman-remove
   :upgrade-fn #'arch--pacman-upgrade
-  :upgrade-all-fn #'arch--pacman-upgrade-all))
+  :upgrade-all-fn #'arch--pacman-upgrade-all
+  :depgraph-fn    #'arch-pacman-depgraph))
 
 (when (executable-find "yay")
   (arch-register-backend

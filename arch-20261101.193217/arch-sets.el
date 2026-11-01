@@ -93,7 +93,7 @@ rather than treating an unknown/newer backend as an error."
      (t nil))))
 
 (defun arch-sets--resolve-backend (entry)
-  "Resolve ENTRY's source to a registered `arch-backend', or nil with a warning."
+  "Resolve ENTRY's source to registered `arch-backend', or nil with a warning."
   (let ((backend-name (arch-sets--resolve-backend-name entry)))
     (or (and backend-name (map-elt arch--backends backend-name))
         (progn
@@ -150,7 +150,7 @@ to review install status before installing anything."
   (and (map-elt installed (alist-get 'name entry)) t))
 
 (defun arch-sets--build-entry-row (entry installed)
-  "Build a tabulated-list entry for package-set ENTRY against the INSTALLED table."
+  "Build a tabulated-list entry for ENTRY against the INSTALLED table."
   (let ((installed-p (arch-sets--entry-installed-p entry installed)))
     (list entry
           (vector (alist-get 'name entry)
@@ -172,7 +172,7 @@ to review install status before installing anything."
       (user-error "No package at point")))
 
 (defun arch-sets-refresh ()
-  "Recompute install status for the loaded package-set file against this system."
+  "Recompute install status for the loaded package-set file."
   (interactive)
   (let ((installed (arch-sets--installed-names)))
     (setq tabulated-list-entries
