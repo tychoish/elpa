@@ -77,7 +77,8 @@
                                       (call-interactively
                                        #'agent-shell-queue-capture-from-context))))))
 
-(add-hook 'org-capture-mode-hook #'orgx-capture-setup-asq-template)
+(with-eval-after-load 'org-capture
+  (orgx-capture-setup-asq-template))
 
 ;;; Reset and helper functions
 
@@ -86,6 +87,8 @@
   "Launch Org capture using `orgx-capture' configured templates.
 GOTO and KEYS are passed directly to `org-capture'."
   (interactive "P")
+  (unless (and (boundp 'org-capture-templates) org-capture-templates)
+    (orgx-capture-setup-standard-templates))
   (org-capture goto keys))
 
 ;;;###autoload
@@ -360,6 +363,9 @@ into `org-load-hook'."
 (defun orgx-capture-setup-standard-templates ()
   "Install standard orgx capture templates using customizable default files."
   (interactive)
+  (require 'org-capture)
+  (unless (boundp 'org-capture-templates)
+    (setq org-capture-templates nil))
   (orgx-capture-add-note-templates
    :name "notes"
    :path orgx-capture-default-notes-file)
@@ -376,7 +382,10 @@ into `org-load-hook'."
   (orgx-capture-add-journal-templates
    :name "agentic"
    :path orgx-capture-default-agent-file
-   :key "a"))
+   :key "a")
+  (orgx-capture-setup-asq-template)
+  (when (fboundp 'orgx-denote-setup-capture-templates)
+    (orgx-denote-setup-capture-templates)))
 
 (provide 'orgx-capture)
 ;;; orgx-capture.el ends here

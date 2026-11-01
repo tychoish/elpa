@@ -331,8 +331,9 @@ Preserves timestamps in CREATED property if present."
                      :kill-buffer t
                      :jump-to-captured t)))))
 
-;; Wire capture templates into org-capture-mode-hook
-(add-hook 'org-capture-mode-hook #'orgx-denote-setup-capture-templates)
+;; Wire capture templates into org-capture
+(with-eval-after-load 'org-capture
+  (orgx-denote-setup-capture-templates))
 
 (provide 'orgx-denote)
 ;;; orgx-denote.el ends here
