@@ -458,8 +458,43 @@ When optional TAG is supplied, search for that tag instead."
 (advice-add 'org-link-open-as-file :around #'orgx-link-github-line-support)
 (add-hook 'org-open-link-functions #'orgx-open-custom-id-slug-fallback)
 
+;;; Auxiliary packages and export tools
+
+(defvar orgx--auxiliary-packages
+  '(org-contrib toc-org ox-gist ox-hugo ox-rst ox-leanpub ob-mermaid)
+  "Supporting org packages used with orgx.")
+
+(autoload 'org-gist-export-to-gist "ox-gist" nil t)
+(autoload 'toc-org-insert-toc "toc-org" nil t)
+(autoload 'org-leanpub-book-export-markdown "ox-leanpub" nil t)
+(autoload 'org-rst-export-to-rst "ox-rst" nil t)
+(autoload 'org-rst-export-as-rst "ox-rst" nil t)
+
+(defvar org-rst-headline-underline-characters)
+(setq org-rst-headline-underline-characters (list ?= ?- ?~ ?' ?^ ?`))
+
+(defun orgx-gist-export-private ()
+  "Export current Org buffer or region to a private Gist."
+  (interactive)
+  (org-gist-export-to-gist nil 'open))
+
+(defun orgx-gist-export-public ()
+  "Export current Org buffer or region to a public Gist."
+  (interactive)
+  (org-gist-export-to-gist 'public))
+
+(defalias 'org-gist-export-private-gist #'orgx-gist-export-private)
+(defalias 'org-gist-export-public-gist #'orgx-gist-export-public)
+
+(defvar-keymap orgx-gist-map
+  :name "orgx-gist"
+  :doc "Gist export commands under C-c o g (orgx-mode)."
+  "p" #'orgx-gist-export-private
+  "g" #'orgx-gist-export-public)
+
 ;;; Keymaps and minor modes
 
+(defvaralias 'orgx-minor-mode-capture-map 'orgx-capture-map)
 (defvar-keymap orgx-capture-map
   :name "orgx-capture"
   :doc "Capture commands under C-c o c (orgx-mode).")
@@ -474,6 +509,7 @@ When optional TAG is supplied, search for that tag instead."
 (keymap-set orgx-capture-map "s" #'orgx-capture-shell)
 (keymap-set orgx-capture-map "C-t" #'orgx-capture-shell-transient)
 
+(defvaralias 'orgx-minor-mode-archive-map 'orgx-archive-map)
 (defvar-keymap orgx-archive-map
   :name "orgx-archive"
   :doc "Archive commands under C-c o C-f (orgx-mode).")
@@ -483,6 +519,7 @@ When optional TAG is supplied, search for that tag instead."
 (keymap-set orgx-archive-map "s" (cons "current→sibling" #'org-archive-to-archive-sibling))
 (keymap-set orgx-archive-map "d" (cons "done+archive" #'orgx-mark-done-and-archive))
 
+(defvaralias 'orgx-minor-mode-commands-map 'orgx-commands-map)
 (defvar-keymap orgx-commands-map
   :name "orgx-commands"
   :doc "Command keymap for `orgx-mode' mounted under C-c o.")
@@ -504,8 +541,11 @@ When optional TAG is supplied, search for that tag instead."
 (keymap-set orgx-commands-map "w" #'org-refile)
 (keymap-set orgx-commands-map "/" #'orgx-agenda-for-file)
 (keymap-set orgx-commands-map "c" orgx-capture-map)
+(keymap-set orgx-commands-map "f" orgx-archive-map)
 (keymap-set orgx-commands-map "C-f" orgx-archive-map)
+(keymap-set orgx-commands-map "g" orgx-gist-map)
 
+(defvaralias 'orgx-minor-mode-map 'orgx-mode-map)
 (defvar-keymap orgx-mode-map
   :doc "Buffer-local minor mode keymap activating commands under C-c o.")
 
@@ -516,6 +556,24 @@ When optional TAG is supplied, search for that tag instead."
   (setq-local fill-column 72)
   (setq-local org-return-follows-link t)
   (setq-local org-use-speed-commands #'orgx--use-speed-commands)
+  (setq-local org-startup-folded 'content)
+  (setq-local org-startup-indented nil)
+  (setq-local org-log-into-drawer t)
+  (setq-local org-reverse-note-order t)
+  (setq-local org-fontify-done-headline t)
+  (setq-local org-provide-todo-statistics t)
+  (setq-local org-blank-before-new-entry '((heading . nil) (plain-list-item . nil)))
+  (setq-local org-enforce-todo-dependencies t)
+  (setq-local org-enforce-todo-checkbox-dependencies t)
+  (setq-local org-fast-tag-selection-include-todo t)
+  (setq-local org-use-fast-todo-selection 'auto)
+  (setq-local org-use-fast-tag-selection 'auto)
+  (setq-local org-tags-column -70)
+  (setq-local org-tags-exclude-from-inheritance '("project"))
+  (setq-local org-track-ordered-property-with-tag t)
+  (setq-local org-footnote-auto-label nil)
+  (setq-local org-footnote-define-inline nil)
+  (setq-local org-footnote-section nil)
   (add-hook 'org-ctrl-c-ctrl-c-hook #'orgx-set-weekday-of-timestamp nil t)
   (add-hook 'org-after-todo-state-change-hook #'orgx-enforce-question-answered nil t)
   (when (fboundp 'windmove-up)
@@ -528,6 +586,27 @@ When optional TAG is supplied, search for that tag instead."
 
 (defun orgx--tear-down-buffer ()
   "Tear down buffer settings for `orgx-mode'."
+  (kill-local-variable 'fill-column)
+  (kill-local-variable 'org-return-follows-link)
+  (kill-local-variable 'org-use-speed-commands)
+  (kill-local-variable 'org-startup-folded)
+  (kill-local-variable 'org-startup-indented)
+  (kill-local-variable 'org-log-into-drawer)
+  (kill-local-variable 'org-reverse-note-order)
+  (kill-local-variable 'org-fontify-done-headline)
+  (kill-local-variable 'org-provide-todo-statistics)
+  (kill-local-variable 'org-blank-before-new-entry)
+  (kill-local-variable 'org-enforce-todo-dependencies)
+  (kill-local-variable 'org-enforce-todo-checkbox-dependencies)
+  (kill-local-variable 'org-fast-tag-selection-include-todo)
+  (kill-local-variable 'org-use-fast-todo-selection)
+  (kill-local-variable 'org-use-fast-tag-selection)
+  (kill-local-variable 'org-tags-column)
+  (kill-local-variable 'org-tags-exclude-from-inheritance)
+  (kill-local-variable 'org-track-ordered-property-with-tag)
+  (kill-local-variable 'org-footnote-auto-label)
+  (kill-local-variable 'org-footnote-define-inline)
+  (kill-local-variable 'org-footnote-section)
   (remove-hook 'org-ctrl-c-ctrl-c-hook #'orgx-set-weekday-of-timestamp t)
   (remove-hook 'org-after-todo-state-change-hook #'orgx-enforce-question-answered t)
   (remove-hook 'org-shiftup-final-hook #'windmove-up t)
@@ -537,6 +616,8 @@ When optional TAG is supplied, search for that tag instead."
   (remove-hook 'before-save-hook #'whitespace-cleanup t))
 
 ;;;###autoload
+(defalias 'orgx-minor-mode #'orgx-mode)
+
 (define-minor-mode orgx-mode
   "Personal org-mode keybindings and buffer setup.
 Activates `orgx-commands-map' under C-c o."
@@ -582,6 +663,15 @@ Activates `orgx-commands-map' under C-c o."
 (defun orgx-setup ()
   "Centrally initialize and wire orgx features, templates, and agenda integration."
   (interactive)
+  (setq org-replace-disputed-keys t)
+  (setq org-outline-path-complete-in-steps nil)
+  (setq org-refile-allow-creating-parent-nodes 'confirm)
+  (setq org-refile-use-outline-path 'file)
+  (setq org-archive-default-command #'org-archive-to-archive-sibling)
+  (setq org-blank-before-new-entry '((heading . nil) (plain-list-item . nil)))
+  (add-hook 'org-mode-hook #'orgx-mode-turn-on)
+  (add-hook 'org-capture-mode-hook #'orgx-mode-turn-on)
+  (add-hook 'org-agenda-mode-hook #'orgx-agenda-minor-mode-turn-on)
   (orgx-capture-setup-standard-templates)
   (when (require 'orgx-denote nil t)
     (orgx-denote-setup-agenda-commands)))
