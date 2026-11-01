@@ -9,6 +9,13 @@
 
 ;;; Generated autoloads from orgx.el
 
+(autoload 'orgx-set-notes-directory "orgx"
+"Set the notes directory to PATH (or `local-notes-directory') and update Org paths.
+Updates `local-notes-directory', `org-directory', `org-agenda-files',
+`org-annotate-file-storage-file', `deft-directory', and `denote-directory'.
+
+(fn &optional PATH)" t)
+(defalias 'bootstrap-set-notes-directory #'orgx-set-notes-directory)
 (autoload 'orgx-agenda-files-open "orgx"
 "Open all files listed in `org-agenda-files'." t)
 (autoload 'orgx-agenda-files-reload "orgx"
@@ -95,7 +102,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (defalias 'orgx-global-minor-mode #'orgx-global-mode)
-(register-definition-prefixes "orgx" '("org"))
+(register-definition-prefixes "orgx" '("deft-directory" "denote-directory" "local-notes-directory" "org" "user-org-directories"))
 
 
 ;;; Generated autoloads from orgx-capture.el

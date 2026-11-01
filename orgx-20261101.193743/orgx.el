@@ -126,6 +126,53 @@ When SHORT is non-nil, format as date-only."
 
 ;;; Agenda file management
 
+(defvar local-notes-directory nil
+  "Directory where notes (org, roam, deft, etc.) are stored.")
+
+(defvar user-org-directories nil
+  "Additional directories that may contain org files.")
+
+(defvar deft-directory nil
+  "Directory for deft notes.")
+
+(defvar denote-directory nil
+  "Directory for denote notes.")
+
+(defvar org-annotate-file-storage-file nil
+  "File for org-annotate-file storage.")
+
+;;;###autoload
+(defun orgx-set-notes-directory (&optional path)
+  "Set the notes directory to PATH (or `local-notes-directory') and update Org paths.
+Updates `local-notes-directory', `org-directory', `org-agenda-files',
+`org-annotate-file-storage-file', `deft-directory', and `denote-directory'."
+  (interactive
+   (list (read-directory-name "Notes directory: " (or local-notes-directory "~/notes"))))
+  (when path
+    (setq local-notes-directory (expand-file-name path)))
+
+  (unless local-notes-directory
+    (error "Must define `local-notes-directory'"))
+
+  (setq org-directory (file-name-concat local-notes-directory "org"))
+  (setq org-agenda-files (thread-last (list org-directory user-org-directories)
+                                      (flatten-tree)
+                                      (seq-map #'expand-file-name)
+                                      (seq-filter #'identity)
+                                      (seq-map #'string-trim)
+                                      (seq-remove #'string-empty-p)
+                                      (seq-uniq)))
+  (setq org-annotate-file-storage-file (file-name-concat org-directory "records.org"))
+  (setq org-default-notes-file (file-name-concat org-directory "records.org"))
+  (setq org-archive-location (file-name-concat org-directory "archive/%s::datetree/"))
+  (setq deft-directory (file-name-concat local-notes-directory "deft"))
+  (setq denote-directory (file-name-concat local-notes-directory "denote"))
+  local-notes-directory)
+
+;;;###autoload
+(defalias 'bootstrap-set-notes-directory #'orgx-set-notes-directory)
+
+
 ;;;###autoload
 (defun orgx-agenda-files-open ()
   "Open all files listed in `org-agenda-files'."
