@@ -11,15 +11,14 @@
 
 ;;; Generated autoloads from ollama-tailnet.el
 
+ (autoload 'ollama-tailnet-command-map "ollama-tailnet" nil t 'keymap)
 (autoload 'ollama-tailnet-bind-hud-keys "ollama-tailnet"
 "Bind `ollama-tailnet' commands to `hud-robot-ollama-tailnet-map' if available.")
+(make-obsolete 'ollama-tailnet-bind-hud-keys '"keybindings are managed directly by hud-mode" "0.2.0")
 (defvar ollama-tailnet-mode nil
 "Non-nil if Ollama-Tailnet mode is enabled.
 See the `ollama-tailnet-mode' command
-for a description of this minor mode.
-Setting this variable directly does not take effect;
-either customize it (see the info node `Easy Customization')
-or call the function `ollama-tailnet-mode'.")
+for a description of this minor mode.")
 (custom-autoload 'ollama-tailnet-mode "ollama-tailnet" nil)
 (autoload 'ollama-tailnet-mode "ollama-tailnet"
 "Global minor mode for `ollama-tailnet' integrations.

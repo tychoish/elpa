@@ -4,11 +4,11 @@
 
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/agent-shell
-;; Package-Version: 20261101.2318
-;; Package-Revision: 0a770575b8fe
+;; Package-Version: 20261102.110
+;; Package-Revision: 5f3a8525c979
 ;; Package-Requires: ((emacs "29.1") (shell-maker "0.98.2") (acp "0.17.1"))
 
-(defconst agent-shell--version "0.89.6")
+(defconst agent-shell--version "0.90.1")
 
 ;; Minimum dependency versions, as declared in the `Package-Requires'
 ;; header above.  Package managers that resolve versions enforce the
@@ -7042,11 +7042,12 @@ Example usage:
   (agent-shell-subscribe-to
    :shell-buffer shell-buffer
    :event \\='usage-update
-   :on-event (lambda (event)
-               (message \"context: %s/%s rate limit: %S\"
-                        (map-nested-elt event \\='(:data :usage :context-used))
-                        (map-nested-elt event \\='(:data :usage :context-size))
-                        (map-nested-elt event \\='(:data :meta _claude/rateLimit)))))
+   :on-event
+     (lambda (event)
+       (message \"context: %s/%s rate limit: %S\"
+                (map-nested-elt event \\='(:data :usage :context-used))
+                (map-nested-elt event \\='(:data :usage :context-size))
+                (map-nested-elt event \\='(:data :meta _claude/rateLimit)))))
 
   ;; Unsubscribe
   (let ((token (agent-shell-subscribe-to

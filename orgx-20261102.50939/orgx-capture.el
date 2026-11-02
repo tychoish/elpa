@@ -364,6 +364,8 @@ into `org-load-hook'."
   (require 'org-capture)
   (unless (boundp 'org-capture-templates)
     (setq org-capture-templates nil))
+  (seq-do (lambda (header) (add-to-list 'org-capture-templates header t))
+          '(("t" "tasks") ("j" "journal") ("n" "notes") ("a" "agent")))
   (orgx-capture-add-note-templates
    :name "notes"
    :path orgx-capture-default-notes-file)

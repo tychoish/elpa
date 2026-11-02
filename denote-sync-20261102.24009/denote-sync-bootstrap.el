@@ -3,7 +3,7 @@
 ;; Author: Sam Kleinman <sam@tychoish.com>
 ;; Maintainer: Sam Kleinman <sam@tychoish.com>
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (denote-sync "0.2.0"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: convenience, tools
 ;; URL: https://github.com/tychoish/denote-sync
 
