@@ -201,6 +201,7 @@ Updates `local-notes-directory', `org-directory', `org-agenda-files',
 
 (defun orgx--ad-org-agenda-redo (orig-fun &rest args)
   "Advice to background-revert buffers before re-running agenda view."
+  (orgx-refresh-todo-faces)
   (orgx--background-revbufs)
   (apply orig-fun args))
 
@@ -673,6 +674,7 @@ Activates `orgx-command-map' under C-c o."
       (progn
         (unless orgx--setup-done
           (orgx-setup))
+        (orgx-refresh-todo-faces)
         (orgx--set-up-buffer))
     (orgx--tear-down-buffer)))
 
@@ -700,6 +702,7 @@ Activates `orgx-command-map' under C-c o."
   :lighter " oxa"
   :keymap orgx-agenda-minor-mode-map
   (when orgx-agenda-minor-mode
+    (orgx-refresh-todo-faces)
     (orgx--background-revbufs)))
 
 ;;;###autoload
@@ -757,6 +760,12 @@ Activates `orgx-command-map' under C-c o."
       ("CANCELED" . (:foreground ,dim))
       ("ABANDONED" . (:foreground ,dim))
       ("PROJECT" . (:foreground ,blue-warmer :weight bold)))))
+
+;;;###autoload
+(defun orgx-refresh-todo-faces ()
+  "Refresh `org-todo-keyword-faces' from active theme palette."
+  (interactive)
+  (setq org-todo-keyword-faces (orgx--default-todo-faces)))
 
 (defvar orgx-tag-alist
   '((:startgroup . nil)
@@ -838,7 +847,6 @@ Activates `orgx-command-map' under C-c o."
     (org-modules . ,orgx-default-modules)
     (org-todo-keywords . ,orgx-todo-keywords)
     (org-tag-alist . ,orgx-tag-alist)
-    (org-todo-keyword-faces . ,(orgx--default-todo-faces))
     (org-agenda-custom-commands . ,orgx-agenda-default-commands)
     (org-replace-disputed-keys . t)
     (org-outline-path-complete-in-steps . nil)
@@ -878,7 +886,13 @@ Activates `orgx-command-map' under C-c o."
           (val (cdr pair)))
       (push (cons sym (if (boundp sym) (cons t (symbol-value sym)) (cons nil nil)))
             orgx-global--saved-settings)
-      (set sym val))))
+      (set sym val)))
+  (push (cons 'org-todo-keyword-faces
+              (if (boundp 'org-todo-keyword-faces)
+                  (cons t (symbol-value 'org-todo-keyword-faces))
+                (cons nil nil)))
+        orgx-global--saved-settings)
+  (orgx-refresh-todo-faces))
 
 (defun orgx-global--revert-settings ()
   "Restore variables to their state prior to `orgx-global-mode'."
