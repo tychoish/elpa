@@ -80,6 +80,35 @@ to consult later.
 "Start every service registered via `mcpkit-register-autostart'.
 A registered service starts only when its predicate is nil or returns
 non-nil. Runs at most once per Emacs session; safe to call more than once." t)
+(defvar mcpkit-mode nil
+"Non-nil if Mcpkit mode is enabled.
+See the `mcpkit-mode' command
+for a description of this minor mode.
+Setting this variable directly does not take effect;
+either customize it (see the info node `Easy Customization')
+or call the function `mcpkit-mode'.")
+(custom-autoload 'mcpkit-mode "mcpkit" nil)
+(autoload 'mcpkit-mode "mcpkit"
+"Global minor mode for `mcpkit' automatic service lifecycle.
+
+When enabled, services registered in `mcpkit-autostart-alist' are automatically
+started on `after-init-hook' (or immediately if Emacs has already initialized).
+
+This is a global minor mode.  If called interactively, toggle the
+`Mcpkit mode' mode.  If the prefix argument is positive, enable the
+mode, and if it is zero or negative, disable the mode.
+
+If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
+mode if ARG is nil, omitted, or is a positive number.  Disable the mode
+if ARG is a negative number.
+
+To check whether the minor mode is enabled in the current buffer,
+evaluate `(default-value \\='mcpkit-mode)'.
+
+The mode's hook is called both when the mode is enabled and when it is
+disabled.
+
+(fn &optional ARG)" t)
 (autoload 'mcpkit-service-list-mode "mcpkit"
 "Major mode for browsing and managing MCP services.
 

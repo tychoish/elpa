@@ -875,14 +875,10 @@ Respects `denote-dash-hierarchy--show-tags'
                 denote-dash-hierarchy--show-tags)))
     (funcall orig-fn indent sequence title (if show keywords nil))))
 
-(advice-add 'denote-sequence--format-hierarchy-entry :around #'ad:denote-dash--hierarchy-format-entry)
-
 (defun ad:denote-dash--hierarchy-insert (orig-fn file)
   "Conditionally insert FILE in hierarchy if it matches tag filter."
   (when (denote-dash--hierarchy-file-matches-filter-p file)
     (funcall orig-fn file)))
-
-(advice-add 'denote-sequence--hierarchy-insert :around #'ad:denote-dash--hierarchy-insert)
 
 (defun denote-dash--hierarchy-setup-filters ()
   "Initialize hierarchy buffer local variables for filtering and tag display."
@@ -937,9 +933,6 @@ TAG can be a tag string or a filter expression."
   (revert-buffer)
   (message "Cleared hierarchy tag filters"))
 
-(define-key denote-sequence-hierarchy-mode-map (kbd "/") #'denote-dash-hierarchy-filter)
-(define-key denote-sequence-hierarchy-mode-map (kbd "C-f") #'denote-dash-hierarchy-clear-filter)
-(define-key denote-sequence-hierarchy-mode-map (kbd "T") #'denote-dash-hierarchy-toggle-show-tags)
 
 ;;; Sequence hierarchy origin tracking
 
@@ -966,7 +959,6 @@ called is always that origin."
       (setq-local denote-dash--hierarchy-origin-buffer origin)
       (add-hook 'kill-buffer-hook #'denote-dash--hierarchy-kill-return-to-origin nil t))))
 
-(advice-add 'denote-sequence-hierarchy-find-file :around #'ad:denote-dash--hierarchy-track-origin)
 
 ;;; Navigation
 
@@ -997,7 +989,6 @@ called is always that origin."
         (when (derived-mode-p 'denote-dash-mode)
           (denote-dash-refresh))))))
 
-(advice-add 'denote-review-set-date :around #'ad:denote-dash--review-set-date-target-file)
 
 (defun denote-dash-schedule-review-at-point ()
   "Set today's reviewdate on the note at point, without leaving denote-dash."
@@ -1122,7 +1113,6 @@ With a prefix argument C-u when called interactively, prompts for a filter."
       (denote-dash-review-display-list filter)
     (denote-dash-review-display-list 'due)))
 
-(advice-add 'denote-review-display-list :around #'ad:denote-dash--review-display-list)
 ;;; Filter commands
 
 (defun denote-dash--all-keywords ()
@@ -2070,8 +2060,6 @@ place afterward via `revert-buffer'."
     (when (derived-mode-p 'denote-sequence-hierarchy-mode)
       (revert-buffer))))
 
-(define-key denote-sequence-hierarchy-mode-map (kbd "a")
-            #'denote-dash-hierarchy-actions-menu)
 
 ;;; Dispatch transient
 ;;
@@ -2245,12 +2233,6 @@ When FORCE is non-nil, re-initialize even if already initialized."
     ("op" "dblock: backlinks"  denote-org-dblock-insert-backlinks)
     ("of" "dblock: files"      denote-org-dblock-insert-files)]])))
 
-(if (featurep 'transient)
-    (denote-dash--setup-transients)
-  (add-hook 'after-load-functions
-            (lambda (file)
-              (when (string-match-p "transient" file)
-                (denote-dash--setup-transients)))))
 
 (defun denote-dash-sort-transient (&optional args)
   "Select and modify the active sort column in the *denote-dash* buffer.
@@ -2461,6 +2443,68 @@ Also updates `denote-dash-global-map' to bind the active commands."
   :type 'string
   :group 'denote-dash)
 
+(defvar denote-dash-global--managed-settings
+  `((denote-rename-buffer-function . ,#'denote-dash-rename-buffer)
+    (denote-link-description-format . ,#'denote-dash-link-description-format))
+  "Alist of (SYMBOL . VALUE) settings managed globally.
+Used by `denote-dash-global-mode'.")
+
+(defvar denote-dash-global--saved-settings nil
+  "Alist of (SYMBOL . (BOUNDP . VALUE)) saved before enabling mode.
+Restored when `denote-dash-global-mode' is disabled.")
+
+(defun denote-dash-global--apply-settings ()
+  "Save previous values and apply `denote-dash-global--managed-settings'."
+  (setq denote-dash-global--saved-settings nil)
+  (dolist (pair denote-dash-global--managed-settings)
+    (let ((sym (car pair))
+          (val (cdr pair)))
+      (push (cons sym (if (boundp sym) (cons t (symbol-value sym)) (cons nil nil)))
+            denote-dash-global--saved-settings)
+      (set sym val))))
+
+(defun denote-dash-global--revert-settings ()
+  "Restore variables to their state prior to `denote-dash-global-mode'."
+  (dolist (entry denote-dash-global--saved-settings)
+    (let ((sym (car entry))
+          (status (cdr entry)))
+      (if (car status)
+          (set sym (cdr status))
+        (makunbound sym))))
+  (setq denote-dash-global--saved-settings nil))
+
+(defun denote-dash-global--enable-advice ()
+  "Enable advice managed by `denote-dash-global-mode'."
+  (advice-add 'denote-sequence--format-hierarchy-entry :around #'ad:denote-dash--hierarchy-format-entry)
+  (advice-add 'denote-sequence--hierarchy-insert :around #'ad:denote-dash--hierarchy-insert)
+  (advice-add 'denote-sequence-hierarchy-find-file :around #'ad:denote-dash--hierarchy-track-origin)
+  (advice-add 'denote-review-set-date :around #'ad:denote-dash--review-set-date-target-file)
+  (advice-add 'denote-review-display-list :around #'ad:denote-dash--review-display-list))
+
+(defun denote-dash-global--disable-advice ()
+  "Disable advice managed by `denote-dash-global-mode'."
+  (advice-remove 'denote-sequence--format-hierarchy-entry #'ad:denote-dash--hierarchy-format-entry)
+  (advice-remove 'denote-sequence--hierarchy-insert #'ad:denote-dash--hierarchy-insert)
+  (advice-remove 'denote-sequence-hierarchy-find-file #'ad:denote-dash--hierarchy-track-origin)
+  (advice-remove 'denote-review-set-date #'ad:denote-dash--review-set-date-target-file)
+  (advice-remove 'denote-review-display-list #'ad:denote-dash--review-display-list))
+
+(defun denote-dash-global--enable-hierarchy-keys ()
+  "Bind denote-dash keys in `denote-sequence-hierarchy-mode-map'."
+  (when (boundp 'denote-sequence-hierarchy-mode-map)
+    (keymap-set denote-sequence-hierarchy-mode-map "/" #'denote-dash-hierarchy-filter)
+    (keymap-set denote-sequence-hierarchy-mode-map "C-f" #'denote-dash-hierarchy-clear-filter)
+    (keymap-set denote-sequence-hierarchy-mode-map "T" #'denote-dash-hierarchy-toggle-show-tags)
+    (keymap-set denote-sequence-hierarchy-mode-map "a" #'denote-dash-hierarchy-actions-menu)))
+
+(defun denote-dash-global--disable-hierarchy-keys ()
+  "Unbind denote-dash keys in `denote-sequence-hierarchy-mode-map'."
+  (when (boundp 'denote-sequence-hierarchy-mode-map)
+    (keymap-unset denote-sequence-hierarchy-mode-map "/" t)
+    (keymap-unset denote-sequence-hierarchy-mode-map "C-f" t)
+    (keymap-unset denote-sequence-hierarchy-mode-map "T" t)
+    (keymap-unset denote-sequence-hierarchy-mode-map "a" t)))
+
 (defvar denote-dash-global-mode-map
   (let ((map (make-sparse-keymap)))
     map)
@@ -2474,6 +2518,13 @@ Also updates `denote-dash-global-map' to bind the active commands."
   :keymap denote-dash-global-mode-map
   (if denote-dash-global-mode
       (progn
+        (denote-dash-global--apply-settings)
+        (denote-dash-global--enable-advice)
+        (denote-dash-global--enable-hierarchy-keys)
+        (add-hook 'denote-sequence-hierarchy-mode-hook #'denote-dash-global--enable-hierarchy-keys)
+        (with-eval-after-load 'denote-sequence
+          (when denote-dash-global-mode
+            (denote-dash-global--enable-hierarchy-keys)))
         (when denote-dash-global-prefix
           (keymap-set denote-dash-global-mode-map denote-dash-global-prefix denote-dash-global-map))
         (when denote-dash--consult-timer
@@ -2482,6 +2533,10 @@ Also updates `denote-dash-global-map' to bind the active commands."
         (when (numberp denote-dash-consult-delay)
           (setq denote-dash--consult-timer
                 (run-with-idle-timer denote-dash-consult-delay nil #'denote-dash--setup-consult))))
+    (denote-dash-global--revert-settings)
+    (denote-dash-global--disable-advice)
+    (remove-hook 'denote-sequence-hierarchy-mode-hook #'denote-dash-global--enable-hierarchy-keys)
+    (denote-dash-global--disable-hierarchy-keys)
     (when denote-dash-global-prefix
       (keymap-unset denote-dash-global-mode-map denote-dash-global-prefix t))
     (when denote-dash--consult-timer

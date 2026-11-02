@@ -72,12 +72,6 @@ modes derived from `text-mode'\".  An element with value t means \"use\"
 and nil means \"don't use\".  There's an implicit nil at the end of the
 list.")
 (custom-autoload 'global-corfu-modes "corfu" t)
-(register-definition-prefixes "corfu" '("corfu-" "global-corfu-minibuffer"))
-
-
-;;; Generated autoloads from corfu-auto.el
-
-(register-definition-prefixes "corfu-auto" '("corfu-auto-"))
 
 
 ;;; Generated autoloads from corfu-echo.el
@@ -105,7 +99,6 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "corfu-echo" '("corfu-echo-"))
 
 
 ;;; Generated autoloads from corfu-history.el
@@ -136,7 +129,6 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "corfu-history" '("corfu-history"))
 
 
 ;;; Generated autoloads from corfu-indexed.el
@@ -164,7 +156,6 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "corfu-indexed" '("corfu-indexed-"))
 
 
 ;;; Generated autoloads from corfu-info.el
@@ -179,7 +170,6 @@ If called with a prefix ARG, the buffer is persistent.
 If called with a prefix ARG, the buffer is persistent.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "corfu-info" '("corfu-info--"))
 
 
 ;;; Generated autoloads from corfu-mouse.el
@@ -207,7 +197,6 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "corfu-mouse" '("corfu-mouse-"))
 
 
 ;;; Generated autoloads from corfu-popupinfo.el
@@ -235,7 +224,6 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "corfu-popupinfo" '("corfu-popupinfo-"))
 
 
 ;;; Generated autoloads from corfu-quick.el
@@ -246,7 +234,6 @@ disabled.
 "Insert candidate using quick keys." t)
 (autoload 'corfu-quick-complete "corfu-quick"
 "Complete candidate using quick keys." t)
-(register-definition-prefixes "corfu-quick" '("corfu-quick"))
 
 ;;; End of scraped data
 

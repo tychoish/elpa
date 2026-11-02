@@ -650,13 +650,18 @@ non-nil. Runs at most once per Emacs session; safe to call more than once."
            (mcpkit-start-service name :port (or port t) :on-collision (or on-collision 'namespace)))))
      mcpkit-autostart-alist)))
 
-(add-hook 'after-init-hook #'mcpkit-run-autostart)
-
-;; If mcpkit is loaded after `after-init-hook' has already fired (e.g. loaded
-;; lazily via an autoloaded command well after startup), that hook will never
-;; run again, so run autostart immediately instead.
-(when after-init-time
-  (mcpkit-run-autostart))
+;;;###autoload
+(define-minor-mode mcpkit-mode
+  "Global minor mode for `mcpkit' automatic service lifecycle.
+When enabled, services registered in `mcpkit-autostart-alist' are automatically
+started on `after-init-hook' (or immediately if Emacs has already initialized)."
+  :global t
+  :group 'mcpkit
+  (if mcpkit-mode
+      (if after-init-time
+          (mcpkit-run-autostart)
+        (add-hook 'after-init-hook #'mcpkit-run-autostart))
+    (remove-hook 'after-init-hook #'mcpkit-run-autostart)))
 
 ;;; Tabulated List Mode
 

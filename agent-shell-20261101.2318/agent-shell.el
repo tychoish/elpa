@@ -4,8 +4,8 @@
 
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/agent-shell
-;; Package-Version: 20261101.1312
-;; Package-Revision: ec2319486d3c
+;; Package-Version: 20261101.2318
+;; Package-Revision: 0a770575b8fe
 ;; Package-Requires: ((emacs "29.1") (shell-maker "0.98.2") (acp "0.17.1"))
 
 (defconst agent-shell--version "0.89.6")
@@ -10678,14 +10678,13 @@ Uses AGENT-CWD to shorten file paths where necessary."
          (processed-text (if (map-elt region :file)
                              (let* ((line-start (map-elt region :line-start))
                                     (line-end (map-elt region :line-end))
-                                    (lines-spec (if (= line-start line-end)
-                                                    (number-to-string line-start)
-                                                  (format "%d-%d" line-start line-end)))
                                     (file-path (if (and agent-cwd (file-in-directory-p (map-elt region :file) agent-cwd))
                                                    (file-relative-name (map-elt region :file) agent-cwd)
                                                  (map-elt region :file)))
                                     (file-link (agent-shell--make-file-link
-                                                :label (format "%s:%s" file-path lines-spec)
+                                                :label (if (= line-start line-end)
+                                                           (format "%s:%d" file-path line-start)
+                                                         (format "%s:%d-%d" file-path line-start line-end))
                                                 :file (map-elt region :file)
                                                 :line-start line-start
                                                 :line-end line-end
