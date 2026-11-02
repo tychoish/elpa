@@ -54,9 +54,22 @@
 (require 'ollama-tailnet-control)
 (require 'ollama-tailnet-models)
 
+;;;###autoload (autoload 'ollama-tailnet-command-map "ollama-tailnet" nil t 'keymap)
+(defvar-keymap ollama-tailnet-command-map
+  :doc "Keymap for `ollama-tailnet' commands."
+  "s" #'ollama-tailnet-status
+  "d" #'ollama-tailnet-discover-hosts
+  "p" #'ollama-tailnet-pull-model
+  "r" #'ollama-tailnet-service-restart
+  "t" #'ollama-tailnet-service-status
+  "b" #'ollama-tailnet-set-gptel-backend
+  "l" #'ollama-tailnet-models
+  "S" #'ollama-tailnet-search-model)
+
 ;;;###autoload
 (defun ollama-tailnet-bind-hud-keys ()
   "Bind `ollama-tailnet' commands to `hud-robot-ollama-tailnet-map' if available."
+  (declare (obsolete "keybindings are managed directly by hud-mode" "0.2.0"))
   (when (boundp 'hud-robot-ollama-tailnet-map)
     (keymap-set hud-robot-ollama-tailnet-map "s" #'ollama-tailnet-status)
     (keymap-set hud-robot-ollama-tailnet-map "d" #'ollama-tailnet-discover-hosts)
@@ -71,12 +84,7 @@
 (define-minor-mode ollama-tailnet-mode
   "Global minor mode for `ollama-tailnet' integrations."
   :global t
-  :group 'ollama-tailnet
-  (if ollama-tailnet-mode
-      (ollama-tailnet-bind-hud-keys)
-    (when (boundp 'hud-robot-ollama-tailnet-map)
-      (dolist (k '("s" "d" "p" "r" "t" "b" "l" "S"))
-        (keymap-unset hud-robot-ollama-tailnet-map k t)))))
+  :group 'ollama-tailnet)
 
 (provide 'ollama-tailnet)
 ;;; ollama-tailnet.el ends here
