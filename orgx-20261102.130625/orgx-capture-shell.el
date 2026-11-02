@@ -27,7 +27,6 @@
 (require 'org)
 (require 'transient)
 
-(declare-function annotated-completing-read "annotated-completing-read")
 (declare-function denote-directory-files "denote")
 (declare-function denote-retrieve-filename-title "denote")
 

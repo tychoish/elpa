@@ -43,11 +43,22 @@ When optional TAG is supplied, search for that tag instead.
 
 (fn QUESTION &optional CONTEXT)" t)
 (autoload 'orgx-agenda-view "orgx"
-"Select and dispatch an `org-agenda' view via completing-read." t)
+"Select an org-agenda view via annotated completing read.
+Includes both the standard built-in views and any entries in
+`org-agenda-custom-commands'.  Each candidate is labeled with its
+dispatch key (e.g. \"da: Denote Agenda ALL\") and annotated with its
+command type, match string or filter function, overriding header, and
+file scope.  Candidates are grouped by file scope via
+`orgx--agenda-view-group'." t)
 (autoload 'orgx-agenda-switch-buffer "orgx"
-"Switch to an agenda buffer or other Org file using completing-read." t)
+"Switch to an Org or Org Agenda buffer via `annotated-completing-read'.
+Lists every buffer in `org-mode' or `org-agenda-mode', annotated with
+whether it is currently visible in a window and its major mode." t)
 (autoload 'orgx-find-heading "orgx"
-"Jump to any heading across all `org-agenda-files' using completing-read." t)
+"Jump to any org heading via `org-refile-get-targets'.
+Candidates come from `annotated-completing-read'.  Scope and depth
+follow `org-refile-targets', annotated with the target's file and
+buffer position." t)
 (defalias 'orgx-minor-mode #'orgx-mode)
 (autoload 'orgx-mode-turn-on "orgx"
 "Enable `orgx-mode' in the current buffer.")
@@ -116,7 +127,11 @@ disabled.
 
 (autoload 'orgx-capture "orgx-capture"
 "Launch Org capture using `orgx-capture' configured templates.
-GOTO and KEYS are passed directly to `org-capture'.
+GOTO is passed directly to `org-capture'.  When KEYS is nil (the
+interactive case), a template is selected via `annotated-completing-read'
+through `orgx-capture--select-template' instead of Org's own key-menu;
+passing KEYS explicitly dispatches straight to that template, as with
+plain `org-capture'.
 
 (fn &optional GOTO KEYS)" t)
 (autoload 'orgx-capture-reset-templates "orgx-capture"

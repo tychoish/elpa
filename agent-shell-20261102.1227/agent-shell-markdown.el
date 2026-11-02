@@ -755,6 +755,42 @@ bold `let vs let*', still stashing `**let vs let\\***' for copy."
   (or (not (any "\n`" delimiters))
       (seq "`" (zero-or-more (not (any "\n`"))) "`")))
 
+(defun agent-shell-markdown--flanking-kind (char)
+  "Return CHAR's CommonMark flanking kind: `:space', `:punct' or nil.
+Uses Unicode categories rather than the buffer's syntax table.  A nil
+CHAR (a buffer edge) counts as `:space'.
+
+For example nil, ?\\s and ?\\n are `:space', ?* and ?（ are `:punct',
+while ?a and ?中 are nil."
+  (let ((category (and char (get-char-code-property char 'general-category))))
+    (cond
+     ((or (null char) (memq char '(?\t ?\n ?\r ?\f)) (eq category 'Zs))
+      :space)
+     ((memq category '(Pc Pd Pe Pf Pi Po Ps Sc Sk Sm So))
+      :punct))))
+
+(cl-defun agent-shell-markdown--emphasis-delimiter-p (&key position length opening)
+  "Return non-nil if the delimiter at POSITION can open or close emphasis.
+LENGTH is the delimiter's char count (2 for `**').  OPENING non-nil
+checks an opener; nil checks a closer.  Follows the CommonMark
+left/right-flanking rules, where `_' additionally may not open or
+close inside a word.
+
+For example, both star pairs in \"中**bold**文\" and \"中*it*文\"
+qualify, while neither underscore pair in \"a__b__c\" does."
+  (let* ((before (agent-shell-markdown--flanking-kind (char-before position)))
+         (after (agent-shell-markdown--flanking-kind
+                 (char-after (+ position length))))
+         (left (and (not (eq after :space))
+                    (or (not (eq after :punct)) before)))
+         (right (and (not (eq before :space))
+                     (or (not (eq before :punct)) after))))
+    (if opening
+        (and left (or (not (eq (char-after position) ?_))
+                      (not right) (eq before :punct)))
+      (and right (or (not (eq (char-after position) ?_))
+                     (not left) (eq after :punct))))))
+
 (cl-defun agent-shell-markdown--replace-bolds (&key avoid-ranges)
   "Replace `**X**' / `__X__' spans in current buffer with bold X.
 
@@ -771,15 +807,13 @@ world.\" with face `agent-shell-markdown-bold' on \"world\"."
         (changed nil))
     (goto-char (point-min))
     (while (re-search-forward
-            (rx (or line-start (syntax whitespace))
-                (group
+            (rx (group
                  (or (seq "**" (group (one-or-more
                                        (agent-shell-markdown--emphasis-content "*")))
                           "**")
                      (seq "__" (group (one-or-more
                                        (agent-shell-markdown--emphasis-content "_")))
-                          "__")))
-                (or (syntax punctuation) (syntax whitespace) line-end))
+                          "__"))))
             nil t)
       (let* ((markup-start (match-beginning 1))
              (markup-end (match-end 1))
@@ -790,6 +824,11 @@ world.\" with face `agent-shell-markdown-bold' on \"world\"."
           (goto-char (cdr avoid)))
          ((agent-shell-markdown--straddles-avoid-range-p
            markup-start markup-end avoid-ranges)
+          (goto-char (1+ markup-start)))
+         ((not (and (agent-shell-markdown--emphasis-delimiter-p
+                     :position markup-start :length 2 :opening t)
+                    (agent-shell-markdown--emphasis-delimiter-p
+                     :position (- markup-end 2) :length 2)))
           (goto-char (1+ markup-start)))
          (t
           (agent-shell-markdown--emphasize-span
@@ -808,13 +847,14 @@ Markup characters are deleted; remaining inner text carries face
 properties.  Spans that fall inside any of AVOID-RANGES are left
 untouched.  Returns non-nil if at least one replacement was made.
 
-A `_X_' span must be followed by punctuation, whitespace, or a line
-end, so intraword underscores such as \"_hello_world\" are left as
-literal text rather than emphasized.  X may not start or end with
-whitespace, so a lone delimiter like the one in \"a * b *\" stays
-literal, as in CommonMark.  Spans reaching into an AVOID-RANGES
-entry (e.g. ending on the `*' of \"* and `*`\") are left alone too,
-since code spans bind tighter than emphasis.
+Delimiters follow the CommonMark flanking rules (see
+`agent-shell-markdown--emphasis-delimiter-p'), so intraword
+underscores such as \"_hello_world\" and a lone delimiter like the
+one in \"a * b *\" stay literal, while \"中*it*文\" is italic.  A
+delimiter that is part of a longer run (e.g. \"**bold**\") is left to
+`agent-shell-markdown--replace-bolds'.  Spans reaching into an
+AVOID-RANGES entry (e.g. ending on the `*' of \"* and `*`\") are left
+alone too, since code spans bind tighter than emphasis.
 
 For example, the buffer \"hello *world*.\" becomes \"hello
 world.\" with face `agent-shell-markdown-italic' on \"world\"."
@@ -822,24 +862,16 @@ world.\" with face `agent-shell-markdown-italic' on \"world\"."
         (changed nil))
     (goto-char (point-min))
     (while (re-search-forward
-            (rx (or (seq (or bol (one-or-more (any "\n \t")))
-                         (group "*"
-                                (group (agent-shell-markdown--emphasis-content "\t *")
-                                       (optional (zero-or-more
-                                                  (agent-shell-markdown--emphasis-content "*"))
-                                                 (agent-shell-markdown--emphasis-content "\t *")))
-                                "*"))
-                    (seq (or bol (one-or-more (any "\n \t")))
-                         (group "_"
-                                (group (agent-shell-markdown--emphasis-content "\t _")
-                                       (optional (zero-or-more
-                                                  (agent-shell-markdown--emphasis-content "_"))
-                                                 (agent-shell-markdown--emphasis-content "\t _")))
-                                "_")
-                         (or (syntax punctuation) (syntax whitespace) line-end))))
+            (rx (group
+                 (or (seq "*" (group (one-or-more
+                                      (agent-shell-markdown--emphasis-content "*")))
+                          "*")
+                     (seq "_" (group (one-or-more
+                                      (agent-shell-markdown--emphasis-content "_")))
+                          "_"))))
             nil t)
-      (let* ((markup-start (or (match-beginning 1) (match-beginning 3)))
-             (markup-end (or (match-end 1) (match-end 3)))
+      (let* ((markup-start (match-beginning 1))
+             (markup-end (match-end 1))
              (avoid (agent-shell-markdown-in-avoid-range-p
                      markup-start markup-end avoid-ranges)))
         (cond
@@ -848,11 +880,18 @@ world.\" with face `agent-shell-markdown-italic' on \"world\"."
          ((agent-shell-markdown--straddles-avoid-range-p
            markup-start markup-end avoid-ranges)
           (goto-char (1+ markup-start)))
+         ((or (eq (char-before markup-start) (char-after markup-start))
+              (eq (char-after markup-end) (char-before markup-end))
+              (not (and (agent-shell-markdown--emphasis-delimiter-p
+                         :position markup-start :length 1 :opening t)
+                        (agent-shell-markdown--emphasis-delimiter-p
+                         :position (1- markup-end) :length 1))))
+          (goto-char (1+ markup-start)))
          (t
           (agent-shell-markdown--emphasize-span
            :markup-start markup-start :markup-end markup-end
-           :content-start (or (match-beginning 2) (match-beginning 4))
-           :content-end (or (match-end 2) (match-end 4))
+           :content-start (or (match-beginning 2) (match-beginning 3))
+           :content-end (or (match-end 2) (match-end 3))
            :face 'agent-shell-markdown-italic)
           (setq changed t)))))
     changed))

@@ -3,7 +3,7 @@
 ;; Author: tychoish <tychoish@tychoish.com>
 ;; URL: https://github.com/tychoish/orgx
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (org "9.6"))
+;; Package-Requires: ((emacs "29.1") (org "9.6") (annotated-completing-read "0.1"))
 ;; Keywords: org, capture, convenience
 
 ;;; Commentary:
@@ -19,6 +19,7 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'subr-x)
+(require 'annotated-completing-read)
 
 (eval-when-compile
   (require 'org))
@@ -29,7 +30,6 @@
 (declare-function denote-journal-capture-entry-today "denote-journal-capture")
 (declare-function denote-journal-capture-timestamp "denote-journal-capture")
 (declare-function agent-shell-queue-capture-from-context "agent-shell-queue")
-(declare-function annotated-completing-read "annotated-completing-read")
 (declare-function org-agenda-files "org")
 
 (defvar org-capture-templates)
@@ -80,14 +80,59 @@
 
 ;;; Reset and helper functions
 
+(defun orgx-capture--select-template ()
+  "Interactively select an `org-capture-templates' key.
+Uses `annotated-completing-read', grouping candidates primarily by
+target file. Templates with no file target (e.g. function-based
+integration targets) fall back to their key-prefix's root description
+when even that is unknown."
+  (let* ((key-table (make-hash-table :test #'equal))
+         (annotation-table (make-hash-table :test #'equal))
+         (group-table (make-hash-table :test #'equal))
+         (prefix-map (map-into
+                      (seq-map (lambda (it) (cons (nth 0 it) (nth 1 it)))
+                               (seq-filter (lambda (it) (<= (length it) 4))
+                                           org-capture-templates))
+                      '(hash-table :test equal))))
+    (seq-do
+     (lambda (template)
+       (let* ((key-char (nth 0 template))
+              (description (nth 1 template))
+              (target-loc (cadr (nth 3 template)))
+              (target-file (if (stringp target-loc) (file-name-nondirectory target-loc) ""))
+              (content (nth 4 template))
+              (raw (if (stringp content) (string-replace "\n" " " content) ""))
+              (preview (if (> (length raw) 32) (concat (substring raw 0 29) "...") raw))
+              (group (cond
+                      ((not (string-empty-p target-file)) target-file)
+                      ((map-elt prefix-map (substring key-char 0 1)))
+                      (t "Other"))))
+         (setf (map-elt key-table description) key-char)
+         (setf (map-elt annotation-table description)
+               (format "[%s] <%s> '%s'" key-char target-file preview))
+         (setf (map-elt group-table description) group)))
+     (seq-filter (lambda (it) (< 4 (length it))) org-capture-templates))
+    (map-elt key-table
+             (annotated-completing-read
+              annotation-table
+              :prompt "org-capture => "
+              :category 'org-capture
+              :require-match nil
+              :group-name (lambda (candidate)
+                            (map-elt group-table candidate ""))))))
+
 ;;;###autoload
 (defun orgx-capture (&optional goto keys)
   "Launch Org capture using `orgx-capture' configured templates.
-GOTO and KEYS are passed directly to `org-capture'."
+GOTO is passed directly to `org-capture'.  When KEYS is nil (the
+interactive case), a template is selected via `annotated-completing-read'
+through `orgx-capture--select-template' instead of Org's own key-menu;
+passing KEYS explicitly dispatches straight to that template, as with
+plain `org-capture'."
   (interactive "P")
   (unless (and (boundp 'org-capture-templates) org-capture-templates)
     (orgx-capture-setup-standard-templates))
-  (org-capture goto keys))
+  (org-capture goto (or keys (orgx-capture--select-template))))
 
 ;;;###autoload
 (defun orgx-capture-reset-templates ()

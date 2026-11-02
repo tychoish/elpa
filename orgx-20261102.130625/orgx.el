@@ -3,7 +3,7 @@
 ;; Author: tychoish <tychoish@tychoish.com>
 ;; URL: https://github.com/tychoish/orgx
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (org "9.6"))
+;; Package-Requires: ((emacs "29.1") (org "9.6") (annotated-completing-read "0.1"))
 ;; Keywords: org, convenience
 
 ;;; Commentary:
@@ -28,6 +28,7 @@
 (require 'org)
 (require 'org-fold)
 (require 'org-capture)
+(require 'annotated-completing-read)
 (require 'org-refile)
 (require 'org-agenda)
 (require 'org-archive)
@@ -65,8 +66,10 @@
   "Org-mode personal extensions."
   :group 'org)
 
-(defcustom orgx-project-tags '("project" "task" "epic" "plan" "scope" "tracker")
-  "Tags that identify projects for skip functions."
+(defcustom orgx-project-tags '("PROJECT" "EPIC" "project" "task" "epic" "plan" "scope" "tracker")
+  "Tags that identify projects for skip functions.
+Matching against a heading's tags is case-insensitive, so casing here
+is cosmetic; both conventions are listed since real notes use either."
   :type '(repeat string)
   :group 'orgx)
 
@@ -220,12 +223,13 @@ Updates `local-notes-directory', `org-directory', `org-agenda-files',
       (insert (format-time-string "<%Y-%m-%d %a>" time)))))
 
 (defun orgx-skip-child-of-project-tag ()
-  "Skip children of headings tagged with any element of `orgx-project-tags'."
+  "Skip children of headings tagged with any element of `orgx-project-tags'.
+Tag comparison is case-insensitive."
   (save-restriction
     (widen)
     (let (skip)
       (while (and (not skip) (org-up-heading-safe))
-        (when (seq-intersection orgx-project-tags (org-get-tags nil t))
+        (when (seq-intersection orgx-project-tags (org-get-tags nil t) #'string-equal-ignore-case)
           (setq skip (save-excursion (org-end-of-subtree t) (point)))))
       skip)))
 
@@ -383,99 +387,77 @@ When optional TAG is supplied, search for that tag instead."
 
 ;;;###autoload
 (defun orgx-agenda-view ()
-  "Select and dispatch an `org-agenda' view via completing-read."
+  "Select an org-agenda view via annotated completing read.
+Includes both the standard built-in views and any entries in
+`org-agenda-custom-commands'.  Each candidate is labeled with its
+dispatch key (e.g. \"da: Denote Agenda ALL\") and annotated with its
+command type, match string or filter function, overriding header, and
+file scope.  Candidates are grouped by file scope via
+`orgx--agenda-view-group'."
   (interactive)
-  (let* ((custom (seq-remove (lambda (x) (stringp (cdr x)))
+  (let* ((customs (seq-filter (lambda (e) (and (proper-list-p e) (stringp (cadr e))))
                               (or (and (boundp 'org-agenda-custom-commands) org-agenda-custom-commands) nil)))
-         (entries (append orgx-agenda-builtin-views custom))
-         (max-key-len (apply #'max (mapcar (lambda (e) (length (car e))) entries)))
-         (table (make-hash-table :test 'equal))
-         candidates)
-    (dolist (entry entries)
-      (let ((cand (orgx--agenda-view-candidate entry max-key-len)))
-        (puthash cand entry table)
-        (push cand candidates)))
-    (setq candidates (nreverse candidates))
-    (let* ((collection
-            (lambda (str pred action)
-              (if (eq action 'metadata)
-                  `(metadata
-                    (category . org-agenda-view)
-                    (annotation-function
-                     . ,(lambda (c)
-                          (when-let* ((entry (gethash c table)))
-                            (concat "   " (orgx--agenda-view-annotation entry)))))
-                    (group-function
-                     . ,(lambda (c transform)
-                          (if transform c
-                            (when-let* ((entry (gethash c table)))
-                              (orgx--agenda-view-group entry))))))
-                (complete-with-action action candidates str pred))))
-           (choice (completing-read "Agenda view: " collection nil t)))
-      (when-let* ((entry (gethash choice table)))
-        (org-agenda nil (car entry))))))
+         (all (append orgx-agenda-builtin-views customs))
+         (key-width (apply #'max (seq-map (lambda (e) (length (car e))) all)))
+         (acr-table (seq-map (lambda (e)
+                                (cons (orgx--agenda-view-candidate e key-width)
+                                      (cons (orgx--agenda-view-annotation e) e)))
+                              all))
+         (entry (annotated-completing-read
+                 acr-table
+                 :prompt "Agenda view: "
+                 :require-match t
+                 :category 'org-agenda-view
+                 :group-name (lambda (candidate)
+                               (when-let* ((e (cddr (assoc candidate acr-table))))
+                                 (orgx--agenda-view-group e))))))
+    (org-agenda nil (car entry))))
 
 ;;; Heading search and navigation
 
 ;;;###autoload
 (defun orgx-agenda-switch-buffer ()
-  "Switch to an agenda buffer or other Org file using completing-read."
+  "Switch to an Org or Org Agenda buffer via `annotated-completing-read'.
+Lists every buffer in `org-mode' or `org-agenda-mode', annotated with
+whether it is currently visible in a window and its major mode."
   (interactive)
-  (let* ((agenda-bufs (seq-filter (lambda (b)
-                                    (with-current-buffer b
-                                      (derived-mode-p 'org-mode 'org-agenda-mode)))
-                                  (buffer-list)))
-         (names (mapcar #'buffer-name agenda-bufs)))
-    (if names
-        (switch-to-buffer (completing-read "Org buffer: " names nil t))
-      (message "No active Org or Agenda buffers."))))
-
-(defun orgx--heading-context (point)
-  "Return path of ancestor headings leading to POINT."
-  (save-excursion
-    (goto-char point)
-    (let (path)
-      (while (org-up-heading-safe)
-        (push (org-get-heading t t t t) path))
-      path)))
-
-(defun orgx--format-heading-candidate (heading path file max-file-len max-path-len)
-  "Format candidate line aligning FILE, PATH, and HEADING."
-  (let ((file-part (string-pad (file-name-sans-extension file) max-file-len))
-        (path-part (string-pad (if path (string-join path " > ") "") max-path-len)))
-    (format "%s  %s  %s" file-part path-part heading)))
+  (let ((buffers (seq-filter (lambda (buf)
+                               (with-current-buffer buf
+                                 (derived-mode-p 'org-mode 'org-agenda-mode)))
+                             (buffer-list))))
+    (unless buffers
+      (user-error "No active Org or Agenda buffers"))
+    (switch-to-buffer
+     (annotated-completing-read
+      (seq-map (lambda (buf)
+                 (cons (buffer-name buf)
+                       (format "%s, %s"
+                               (if (get-buffer-window buf) "visible" "not visible")
+                               (with-current-buffer buf (symbol-name major-mode)))))
+               buffers)
+      :prompt "Switch to Org buffer: "
+      :category 'buffer
+      :require-match t))))
 
 ;;;###autoload
 (defun orgx-find-heading ()
-  "Jump to any heading across all `org-agenda-files' using completing-read."
+  "Jump to any org heading via `org-refile-get-targets'.
+Candidates come from `annotated-completing-read'.  Scope and depth
+follow `org-refile-targets', annotated with the target's file and
+buffer position."
   (interactive)
-  (let (targets max-file-len max-path-len)
-    (dolist (file (org-agenda-files))
-      (when (file-exists-p file)
-        (with-current-buffer (find-file-noselect file)
-          (org-map-entries
-           (lambda ()
-             (let* ((heading (org-get-heading t t t t))
-                    (path (orgx--heading-context (point)))
-                    (pos (point))
-                    (fname (file-name-nondirectory file)))
-               (push (list fname path heading pos file) targets)
-               (setq max-file-len (max (or max-file-len 0) (length (file-name-sans-extension fname))))
-               (when path
-                 (setq max-path-len (max (or max-path-len 0) (length (string-join path " > ")))))))))))
-    (setq targets (nreverse targets))
-    (let* ((candidates
-            (mapcar (lambda (tgt)
-                      (cons (orgx--format-heading-candidate (nth 2 tgt) (nth 1 tgt) (nth 0 tgt)
-                                                            (or max-file-len 0) (or max-path-len 0))
-                            tgt))
-                    targets))
-           (choice (completing-read "Heading: " (mapcar #'car candidates) nil t))
-           (selected (cdr (assoc choice candidates))))
-      (when selected
-        (find-file (nth 4 selected))
-        (goto-char (nth 3 selected))
-        (org-fold-show-context 'agenda)))))
+  (let* ((targets (org-refile-get-targets))
+         (choice (annotated-completing-read
+                  (seq-map (lambda (target)
+                             (cons (car target)
+                                   (format "%s:%d" (nth 1 target) (nth 3 target))))
+                           targets)
+                  :prompt "Heading: "
+                  :require-match t)))
+    (when-let* ((target (seq-find (lambda (tgt) (equal (car tgt) choice)) targets)))
+      (find-file (nth 1 target))
+      (goto-char (nth 3 target))
+      (org-fold-show-context 'agenda))))
 
 ;;; Link handling
 
