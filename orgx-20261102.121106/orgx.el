@@ -385,7 +385,8 @@ When optional TAG is supplied, search for that tag instead."
 (defun orgx-agenda-view ()
   "Select and dispatch an `org-agenda' view via completing-read."
   (interactive)
-  (let* ((custom (or (and (boundp 'org-agenda-custom-commands) org-agenda-custom-commands) nil))
+  (let* ((custom (seq-remove (lambda (x) (stringp (cdr x)))
+                              (or (and (boundp 'org-agenda-custom-commands) org-agenda-custom-commands) nil)))
          (entries (append orgx-agenda-builtin-views custom))
          (max-key-len (apply #'max (mapcar (lambda (e) (length (car e))) entries)))
          (table (make-hash-table :test 'equal))

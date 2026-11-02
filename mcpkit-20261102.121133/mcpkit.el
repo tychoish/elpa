@@ -430,6 +430,7 @@ Invoke DONE-CALLBACK with status, resp, tool-name, dur, msg, req, resp-pl."
                (id (plist-get request :id))
                (method (plist-get request :method))
                (params (plist-get request :params))
+               (notification-p (not (plist-member request :id)))
                (inner-done
                 (lambda (status resp tool-name dur msg &optional req resp-pl)
                   (mcpkit--invoke-done-callback
@@ -438,6 +439,9 @@ Invoke DONE-CALLBACK with status, resp, tool-name, dur, msg, req, resp-pl."
                    (or req body-string)
                    (or resp-pl resp)))))
           (cond
+           (notification-p
+            (let ((dur (* (- (float-time) start-time) 1000.0)))
+              (funcall inner-done 'notification nil method dur nil)))
            ((equal method "initialize")
             (let* ((dur (* (- (float-time) start-time) 1000.0))
                    (resp (mcpkit--handle-initialize id params)))
@@ -526,15 +530,19 @@ when `mcpkit-log-verbose' is non-nil."
      body
      mcpkit--active-services
      (lambda (status response-payload tool-name duration-ms err-msg &optional req-payload resp-payload)
-       (let* ((json-str (if (stringp response-payload)
-                            response-payload
-                          (mcpkit--serialize-response response-payload)))
-              (bytes (string-bytes json-str)))
-         (ws-response-header proc 200
-                             '("Content-Type" . "application/json; charset=utf-8")
-                             (cons "Content-Length" (number-to-string bytes)))
-         (process-send-string proc json-str)
-         (mcpkit--log status tool-name duration-ms err-msg (or req-payload body) (or resp-payload json-str)))))))
+       (if (eq status 'notification)
+           (progn
+             (ws-response-header proc 202 (cons "Content-Length" "0"))
+             (mcpkit--log status tool-name duration-ms err-msg (or req-payload body) ""))
+         (let* ((json-str (if (stringp response-payload)
+                              response-payload
+                            (mcpkit--serialize-response response-payload)))
+                (bytes (string-bytes json-str)))
+           (ws-response-header proc 200
+                               '("Content-Type" . "application/json; charset=utf-8")
+                               (cons "Content-Length" (number-to-string bytes)))
+           (process-send-string proc json-str)
+           (mcpkit--log status tool-name duration-ms err-msg (or req-payload body) (or resp-payload json-str))))))))
 
 ;;;###autoload
 (cl-defun mcpkit-start-service (name-or-service &key (on-collision 'namespace) port)

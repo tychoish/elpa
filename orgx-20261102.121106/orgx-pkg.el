@@ -1,4 +1,4 @@
 ;; -*- no-byte-compile: t -*-
-(define-package "orgx" "20261102.50939" "Personal org-mode extensions and navigation"
+(define-package "orgx" "20261102.121106" "Personal org-mode extensions and navigation"
   '((emacs "29.1") (org "9.6"))
   :url "https://github.com/tychoish/orgx" :keywords "org" "convenience")
