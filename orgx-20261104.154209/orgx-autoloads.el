@@ -59,6 +59,9 @@ whether it is currently visible in a window and its major mode." t)
 Candidates come from `annotated-completing-read'.  Scope and depth
 follow `org-refile-targets', annotated with the target's file and
 buffer position." t)
+(autoload 'orgx-table-shrink-wide-columns "orgx"
+"Shrink wide columns of all Org tables in the buffer.
+Only the display changes.  Widths are `orgx-table-shrink-width'." t)
 (defalias 'orgx-minor-mode #'orgx-mode)
 (autoload 'orgx-mode-turn-on "orgx"
 "Enable `orgx-mode' in the current buffer.")
@@ -128,11 +131,45 @@ disabled.
 ;;; Generated autoloads from orgx-bulk.el
 
 (autoload 'orgx-bulk-todo-state "orgx-bulk"
-"Move many tasks to STATE after reviewing them in a buffer.
+"Create a bulk plan moving headings to STATE and open its plan buffer.
 Scope is the agenda's marked (or all) entries when called from an agenda,
 otherwise the current buffer, the agenda files, or the denote files.
 
 (fn STATE)" t)
+
+
+;;; Generated autoloads from orgx-bulk-agenda.el
+
+(autoload 'orgx-agenda-bulk-action "orgx-bulk-agenda"
+"Plan or execute a bulk operation on marked entries in the current agenda.
+By default, builds and saves an `orgx-bulk-plan' and opens its plan buffer.
+With `\\[universal-argument]' (ARG = `(4)'), executes the plan immediately.
+With a numeric prefix ARG, sets `orgx-bulk-log-notes' for the plan (`0' =
+`ignore', `1' = `one', `2+' = `each').
+
+(fn &optional ARG)" t)
+
+
+;;; Generated autoloads from orgx-bulk-asq.el
+
+(autoload 'orgx-bulk-asq-enqueue "orgx-bulk-asq"
+"Enqueue PLAN-OR-OP on agenda buffer BUF in `agent-shell-queue'.
+Freezes the batch's step list at enqueue time and locks marks in BUF until
+queued bulk operations on BUF finish.  Enforces `orgx-bulk-asq-max-items'
+and the `:queueable' flag on operations.  Optional DELAY-AFTER sets the
+post-completion pause delay in seconds before the next queued item runs.
+
+(fn &optional BUF PLAN-OR-OP DELAY-AFTER)" t)
+
+
+;;; Generated autoloads from orgx-bulk-buffer.el
+
+(autoload 'orgx-bulk-resume "orgx-bulk-buffer"
+"Resume unfinished plan PLAN-ID (or prompt if omitted).
+Prompts with `annotated-completing-read' over plans in `draft', `paused', or
+`running' status, rebuilds the plan's agenda batch, and opens its plan buffer.
+
+(fn &optional PLAN-ID)" t)
 
 
 ;;; Generated autoloads from orgx-capture.el
@@ -172,6 +209,10 @@ into `org-load-hook'.
 
 ;;; Generated autoloads from orgx-capture-shell.el
 
+(autoload 'orgx-capture-shell-form "orgx-capture-shell"
+"Capture a task via the form, seeded with title INITIAL.
+
+(fn &optional INITIAL)" t)
 (autoload 'orgx-capture-shell "orgx-capture-shell"
 "Start or switch to the `orgx-capture-shell' REPL." t)
 (autoload 'orgx-capture-shell-toggle "orgx-capture-shell"
@@ -210,6 +251,14 @@ target are handled per `orgx-denote-capture-dedupe'.  The headings land
 in an `org-capture' buffer under the target.
 
 (fn &optional FILES)" t)
+
+
+;;; Generated autoloads from orgx-refile-agent.el
+
+(autoload 'orgx-refile-agent-enable "orgx-refile-agent"
+"Offer agent-shell targets in `org-refile'.")
+(autoload 'orgx-refile-agent-disable "orgx-refile-agent"
+"Stop offering agent-shell targets in `org-refile'.")
 
 ;;; End of scraped data
 

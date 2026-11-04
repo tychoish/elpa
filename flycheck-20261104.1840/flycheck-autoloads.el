@@ -34,18 +34,19 @@ request features at URL `https://github.com/flycheck/flycheck'.
 Flycheck displays its status in the mode line.  In the default
 configuration, it looks like this:
 
-`FlyC'     This buffer has not been checked yet.
-`FlyC*'    Flycheck is running.  Expect results soon!
-`FlyC:0'   Last check resulted in no errors and no warnings.
-`FlyC:3|5' This buffer contains three errors and five warnings.
-           Use `\\[flycheck-list-errors]' to see the list.
-`FlyC-'    Flycheck doesn't have a checker for this buffer.
+`FlyC'       This buffer has not been checked yet.
+`FlyC*'      Flycheck is running.  Expect results soon!
+`FlyC:0'     Last check reported nothing at all.
+`FlyC:3|5|1' This buffer contains three errors, five warnings and
+             one info message.  Use `\\[flycheck-list-errors]' to see
+             the list.
+`FlyC-'      Flycheck doesn't have a checker for this buffer.
 
 You may also see the following icons:
-`FlyC!'    The checker crashed.
-`FlyC.'    The last syntax check was manually interrupted.
-`FlyC?'    The checker did something unexpected, like exiting with 1
-           but returning no errors.
+`FlyC!'      The checker crashed.
+`FlyC.'      The last syntax check was manually interrupted.
+`FlyC?'      The checker did something unexpected, like exiting with 1
+             but returning no errors.
 
 The following keybindings are available in `flycheck-mode':
 
@@ -133,8 +134,8 @@ The following PROPERTIES constitute an error level:
      A display specification indicating what to display in the
      margin when `flycheck-indication-mode' is `left-margin' or
      `right-margin'.  See Info node `(elisp)Displaying in the
-     Margins'.  If omitted, Flycheck generates an image spec from
-     the fringe bitmap.
+     Margins'.  If omitted, Flycheck shows
+     `flycheck-default-margin-str' in the fringe face.
 
 `:error-list-face FACE'
      A face symbol denoting the face to use for messages of this
