@@ -1,0 +1,4 @@
+;; -*- no-byte-compile: t -*-
+(define-package "agent-shell-workflow" "20261105.134125" "Reusable prompt and agent workflows for agent-shell"
+  '((emacs "29.1") (agent-shell "0.1") (transient "0.4") (annotated-completing-read "0.1") (magit "3.3"))
+  :url "https://github.com/tychoish/agent-shell-workflow" :keywords "tools" "agent-shell")
