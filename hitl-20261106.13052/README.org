@@ -1,0 +1,384 @@
+#+TITLE: hitl — Human-in-the-Loop Interaction Engine for Emacs
+#+AUTHOR: tycho garen
+#+LANGUAGE: en
+
+* Overview
+
+~hitl~ is a standalone, display-agnostic Human-in-the-Loop (HITL) interaction
+and question management engine for Emacs. It decouples asking human users
+structured, interactive questions from any particular agent framework, queue,
+or protocol.
+
+* Features
+
+- *Structured Question Types*: Freeform text, single-choice, multiple-choice,
+  and confirmation prompts.
+- *Multiple UI Surfaces*: Interactive minibuffer prompts, completing-read widgets,
+  and a tabulated queue buffer (~hitl-view-questions~ / ~*hitl-questions*~).
+- *Non-blocking Asynchronous Lifecycle*: Question creation, answering, cancellation,
+  and automatic timeout expiration with callback hooks.
+- *State Navigation*: Universal cursors (~hitl-cursor~) for sequential and scoped
+  review of questions across topics and sources.
+- *Modeline Indicator*: Dynamic indicator (~hitl-indicator-mode~) showing pending
+  question counts.
+- *Agnostic Integration*: Cleanly bridges to agent systems, task runners, and shell
+  environments.
+
+* Installation
+
+** ELPAish
+#+BEGIN_SRC elisp
+(use-package hitl
+  :ensure t)
+#+END_SRC
+
+* Usage
+
+#+BEGIN_SRC elisp
+(require 'hitl)
+
+;; Ask a single-choice question
+(hitl-ask "Proceed with deployment?"
+          :kind :single-choice
+          :options '("yes" "no" "dry-run")
+          :callback (lambda (answer)
+                      (message "User chose: %s" answer)))
+
+;; Open the questions dashboard
+(hitl-view-questions)
+#+END_SRC
+
+* Bulk Action Plans (hitl-plan)
+
+[[file:hitl-plan.el][~hitl-plan~]] is a domain-agnostic engine for resumable bulk action plans. A
+plan is a set of targets crossed with an ordered list of operations, and each
+(target, operation) pair is a step with its own status: =pending=, =done=,
+=failed=, =skipped=, or a domain-chosen terminal status such as =missing=. That
+per-step status is what lets a plan be reviewed, partially executed,
+interrupted with =C-g=, persisted to disk, and resumed later. The plan itself
+has one of five statuses: =draft=, =running=, =paused=, =complete=, or
+=discarded=.
+
+~hitl~ contains no package-specific flows. The only domain it ships is the
+built-in =file-target= domain, which handles =(:file :line :pos :snippet)=
+targets so the engine works on its own. Other packages supply everything else,
+such as Org headings and queues, by registering their own domains and
+operations.
+
+Three modules make up the feature: ~hitl-plan~ holds the engine and
+persistence, ~hitl-plan-ui~ holds the review buffer and ~hitl-plan-resume~,
+and ~hitl-plan-mcp~ holds the MCP tools.
+
+** Registering a Domain with ~hitl-plan-register-domain~
+
+[[file:hitl-plan.el::hitl-plan-register-domain][~hitl-plan-register-domain~]] takes a domain name symbol and these keyword
+slots, all of them optional:
+
+| Slot                  | Purpose                                                                  |
+|-----------------------+--------------------------------------------------------------------------|
+| =:label=              | Human-readable name (defaults to the symbol name)                        |
+| =:resolve-target=     | Turn a stored target into a live value (usually a marker)                |
+| =:capture-target=     | Capture a target at point                                                |
+| =:format-target=      | Return =(FILE . LABEL)= display columns for a target                     |
+| =:visit-target=       | Visit a target (used by =RET= in the review buffer)                      |
+| =:build-batch=        | Build a batch (buffer) from a scope                                      |
+| =:rebuild-batch=      | Rebuild the batch for a plan and operation before execution              |
+| =:lock-batch=         | =(lambda (BUFFER PLAN-ID))=, freeze the batch buffer while a plan is queued |
+| =:unlock-batch=       | =(lambda (BUFFER))=, release the lock                                    |
+| =:driver=             | Native batch iterator, see below                                         |
+| =:inject-note=        | Inject a plan note into the domain's own logging                         |
+| =:unresolved-status=  | Status for steps whose target cannot resolve (default =failed=)          |
+| =:unresolved-message= | String or =(lambda (PLAN STEP))= (default "target no longer resolves")   |
+| =:accept-buffer=      | Predicate on a buffer, used by integrations such as agent-shell-queue    |
+| =:directory=          | String or function returning the domain's default plan store             |
+| =:migrate-plist=      | =(lambda (PLIST))= returning upgraded legacy saved data                  |
+| =:after-steps-added=  | =(lambda (PLAN NEW-STEPS))=, run by create (all steps) and add-op (new)  |
+
+~:directory~ supplies the store for [[file:hitl-plan.el::hitl-plan-create][~hitl-plan-create~]] when the caller gives no
+directory, and for [[file:hitl-plan.el::hitl-plan-list][~hitl-plan-list~]] and [[file:hitl-plan.el::hitl-plan-get][~hitl-plan-get~]] when the caller gives a
+domain. A plan's own ~directory~ slot is authoritative for saving, reloading,
+and refreshing.
+
+~:migrate-plist~ runs when loading data whose =:domain= names the domain, and
+also when data has no =:domain= and a legacy domain is supplied. The legacy
+domain comes from the =LEGACY-DOMAIN= argument of [[file:hitl-plan.el::hitl-plan-load][~hitl-plan-load~]] and
+[[file:hitl-plan.el::hitl-plan-from-plist][~hitl-plan-from-plist~]]. In ~hitl-plan-load~ without that argument, it is the
+registered domain whose store equals the file's directory, and =file-target=
+when no domain matches.
+
+~:after-steps-added~ runs before the save, so it may adjust steps, for example
+by marking them skipped. It isn't called when there are no new steps.
+
+** Registering Operations with ~hitl-plan-register-op~
+
+[[file:hitl-plan.el::hitl-plan-register-op][~hitl-plan-register-op~]] takes a domain (a symbol, or =t= for a fallback used
+by any domain) and an operation name, plus these keywords:
+
+- =:key=: a character, unique within the domain (used in prompts and the
+  review buffer's add-op command).
+- =:label=: display name.
+- =:queueable=: non-nil marks the operation safe to run without prompting;
+  only queueable operations are accepted over MCP or by agent-shell-queue.
+- =:read-args=: interactive reader returning an argument list.
+- =:validate=: called with the args, returns a problem string or nil.
+- =:apply=: called with the args to perform the operation. When the resolved
+  target is a marker, the function runs with that buffer current and point at
+  the marker. The engine dynamically binds ~hitl-plan-current-plan~,
+  ~hitl-plan-current-step~, ~hitl-plan-current-op~ and
+  ~hitl-plan-current-target~.
+- =:describe=: turns the args into a description string.
+- =:from-json=: turns a JSON alist into an argument list (for MCP).
+- =:schema=: argument documentation, reported by =plan_ops=.
+- =:order-last=: run after all other operations in the plan.
+- =:extra=: arbitrary plist of domain metadata, read back with
+  ~hitl-plan-op-spec-extra~.
+
+** Example Domain, Operation, and Plan for my-things
+
+The following code registers a domain and a =rename= operation, then creates
+and reviews a plan.
+
+#+BEGIN_SRC elisp
+(require 'hitl-plan)
+
+(hitl-plan-register-domain 'my-things
+  :label "My things"
+  :resolve-target (lambda (target) (my-things-find (plist-get target :id)))
+  :format-target (lambda (target)
+                   (cons (plist-get target :file) (plist-get target :title)))
+  :directory (lambda () my-things-plan-directory)
+  :unresolved-status 'missing)
+
+(hitl-plan-register-op 'my-things 'rename
+  :key ?r
+  :label "rename"
+  :queueable t
+  :read-args (lambda () (list (read-string "New name: ")))
+  :validate (lambda (name) (when (string-empty-p name) "name cannot be empty"))
+  :apply (lambda (name) (my-things-rename-at-point name))
+  :describe (lambda (name) (format "rename to %s" name))
+  :from-json (lambda (args) (list (alist-get 'name args)))
+  :schema '((:name "name" :type "string" :description "New name")))
+
+(let ((plan (hitl-plan-create :domain 'my-things
+                              :targets targets
+                              :ops '((rename "new-name")))))
+  (hitl-plan-review plan))
+#+END_SRC
+
+** Execution with the Default Iterator or a Domain Driver
+
+[[file:hitl-plan.el::hitl-plan-execute][~hitl-plan-execute~]] runs operations in order, with =:order-last= operations
+last. Without a domain =:driver=, the built-in iterator runs each pending step
+quit-safely and saves the plan after every step. A =C-g= between steps, or
+during one, leaves completed steps =done=, the rest =pending=, and the plan
+=paused=. To continue, call ~hitl-plan-execute~ again or resume from the review
+buffer. Targets that no longer resolve get the domain's ~:unresolved-status~.
+
+[[file:hitl-plan.el::hitl-plan-after-apply-functions][~hitl-plan-after-apply-functions~]] runs after a normal execution, whether the
+plan ends complete or paused. When a domain driver or batch rebuild signals an
+error, the hook is skipped: the plan is paused, saved, and the error
+re-signalled.
+
+A step interrupted mid-apply stays =pending= and is applied again on resume,
+so operations should be idempotent. A plan whose steps all failed still ends
+=complete=, so inspect the step statuses for the outcome.
+
+A domain =:driver= suits domains that must iterate natively, for example
+through another package's bulk-action loop. The engine calls the driver once
+per operation as =(lambda (PLAN OP PENDING-STEPS RESOLVED-ALIST))=, after the
+domain's ~:rebuild-batch~ has run and with [[file:hitl-plan.el::hitl-plan-batch-buffer][~hitl-plan-batch-buffer~]] bound to the
+batch buffer. The driver must call [[file:hitl-plan.el::hitl-plan-run-step][~hitl-plan-run-step~]] for each target it
+processes, which records the status and saves the plan. A =C-g= inside the
+driver still pauses the plan cleanly.
+
+Two hooks run for every domain, and [[file:hitl-plan.el::hitl-plan-in-domain-p][~hitl-plan-in-domain-p~]] filters them by
+domain: [[file:hitl-plan.el::hitl-plan-step-functions][~hitl-plan-step-functions~]] runs per step, and
+~hitl-plan-after-apply-functions~ runs after execution with the newly done
+steps.
+
+** Persistence in One .eld File per Plan
+
+Plan ids are assumed unique across stores. The in-memory cache is keyed by id
+alone, and ~hitl-plan-create~ with an explicit =:id= signals a =user-error= if
+that id is already cached or saved in the target directory. When several
+domains share one =:directory=, legacy files without a =:domain= belong to the
+first registered of them.
+
+Each plan is one =.eld= file, named by plan id (=plan-YYYYMMDD-HHMMSS-XXXX=),
+and the engine writes it atomically (temp file plus rename) in the plan's
+directory. That directory is the ~directory~ argument to ~hitl-plan-create~,
+else the domain's ~:directory~, else [[file:hitl-plan.el::hitl-plan-directory][~hitl-plan-directory~]] (default =hitl-plans/=
+under your Emacs directory). The format version is
+[[file:hitl-plan.el::hitl-plan-format-version][~hitl-plan-format-version~]].
+
+Three variables customize persistence and notes:
+
+- ~hitl-plan-directory~: the global default store.
+- [[file:hitl-plan.el::hitl-plan-log-notes][~hitl-plan-log-notes~]]: =ignore= (default), =one= (a shared note), or =each=
+  (prompt per step, which MCP and queues don't allow).
+- [[file:hitl-plan.el::hitl-plan-save-buffers][~hitl-plan-save-buffers~]] (default =t=): save modified buffers after steps.
+  The engine finds buffers through each step target's =:file= (plist targets).
+  For steps whose target has no =:file=, it reports a nil file to
+  ~hitl-plan-after-apply-functions~ and saves nothing.
+
+** Review Buffer Keys in hitl-plan-mode
+
+[[file:hitl-plan-ui.el::hitl-plan-review][~hitl-plan-review~]] opens the plan in =*hitl-plan: ID*=
+([[file:hitl-plan-ui.el::hitl-plan-mode][~hitl-plan-mode~]]), which shows the plan metadata, the operation pipeline, and
+each step's status and target.
+
+| Key                   | Action                                                   |
+|-----------------------+----------------------------------------------------------|
+| =C-c C-c=, =c=, =x=   | Execute all pending steps                                |
+| =m=, =u=              | Toggle the step at point between =pending= and =skipped= |
+| =a=                   | Add an operation to the plan                             |
+| =n=                   | Edit the step note (or the plan note on header lines)    |
+| =L=                   | Cycle log-notes mode (=ignore=, =one=, =each=)           |
+| =RET=                 | Visit the target in another window                       |
+| =g=                   | Refresh                                                  |
+| =d=, =k=              | Discard the plan (after confirmation)                    |
+| =q=                   | Bury the buffer (the plan stays saved)                   |
+
+** Resuming Plans with hitl-plan-resume
+
+~M-x hitl-plan-resume~ prompts for a draft, paused, or running plan and
+reopens the plan in its review buffer. [[file:hitl-plan-ui.el::hitl-plan-resume][~hitl-plan-resume~]] accepts optional
+=PLAN-ID=, =DIRECTORY=, and =DOMAIN= arguments to skip the prompt or restrict
+the search.
+
+[[file:hitl-plan-ui.el::hitl-plan-ui-read-from][~hitl-plan-ui-read-from~]] prompts for one of a given list of plans, annotated
+with status, progress, age and description. [[file:hitl-plan-ui.el::hitl-plan-ui-refresh-plan][~hitl-plan-ui-refresh-plan~]]
+re-renders a plan's review buffer if one is live, for callers that change a
+plan outside the buffer.
+
+When [[file:hitl-ui.el::hitl-indicator-include-plans][~hitl-indicator-include-plans~]] is non-nil (default nil),
+~hitl-indicator-mode~ also counts draft and paused plans alongside pending
+questions.
+
+* Model Context Protocol (MCP) Integration
+
+~hitl-mcp~ exposes the question queue to external AI agents (Claude Code, Antigravity, custom agents) over MCP via [[https://github.com/tychoish/mcpkit.el][mcpkit]]:
+
+#+BEGIN_SRC elisp
+(require 'hitl-mcp)
+(mcpkit-start-service 'hitl :port 8766)
+#+END_SRC
+
+** MCP Tools
+- ~ask_user~: Post a question and receive a unique question ID.
+- ~poll_question~: Poll question resolution and user answer.
+- ~get_next_question~: Iterative cursor-based question polling.
+- ~list_pending_questions~: Enumerate pending questions awaiting human response.
+- ~cancel_question~: Abort a pending question.
+- ~answer_question~: Submit an answer to a pending question.
+
+** Plan Tools on the hitl Service
+
+[[file:hitl-plan-mcp.el][~hitl-plan-mcp~]] exposes plans on the same =hitl= service:
+
+#+BEGIN_SRC elisp
+(require 'hitl-plan-mcp)
+#+END_SRC
+
+- ~plan_domains~: List registered plan domains.
+- ~plan_ops~: List a domain's operations with keys, queueable flags, and
+  argument schemas.
+- ~plan_create~: Create and save a plan (targets crossed with operations) and
+  open its review buffer (=show: false= to skip). Nothing is modified until
+  executed.
+- ~plan_list~: List saved plans, filtered by =status=, =domain=, and
+  =directory=.
+- ~plan_status~: Return status, counts, and step details for a =plan_id=.
+- ~plan_discard~: Discard a plan and close its review buffer.
+- ~plan_execute~: Execute a saved plan; accepts =exclude= (step ids to skip,
+  recorded with the message "excluded over MCP"). A live review buffer is
+  re-rendered afterwards.
+
+Each tool wraps a plain function that returns the same plist:
+[[file:hitl-plan-mcp.el::hitl-plan-mcp-create][~hitl-plan-mcp-create~]], ~-list~, ~-status~, ~-discard~, ~-execute~, ~-ops~, and
+~-domains~, all taking the tool's arguments as keywords. Other packages can
+call these functions without going through mcpkit. =:null= arguments count as
+absent. When =plan_create= causes a domain's =:build-batch= to create a
+buffer, the tool kills that buffer once the targets are extracted.
+
+Over MCP, only =:queueable= operations are accepted, the =each= log-notes mode
+is rejected, and handlers never prompt. Failures return an =:error= plist.
+~plan_execute~ runs the plan only when [[file:hitl-plan.el::hitl-plan-agent-may-apply][~hitl-plan-agent-may-apply~]] is non-nil
+(default nil). Otherwise the tool opens the review buffer and returns
+=awaiting_user_confirmation=, and the user makes the decision.
+
+* Security Model for Plans Created over MCP
+
+hitl treats an external agent on the MCP surface as untrusted, because a
+prompt injection may have compromised the agent, and it treats every
+agent-created plan as unapproved until the user says otherwise. Your own
+interactive use is not restricted.
+
+** Approval Gates for Origin-MCP Plans
+
+- Every plan created through ~plan_create~ is stamped =:origin mcp= in its
+  metadata, which the engine persists in the =.eld= file. The stamp never
+  comes from tool arguments, and =plan_create= rejects =origin=, =status=,
+  =metadata= and =id= arguments outright.
+- ~hitl-plan-agent-may-apply~ (default nil) is the only switch that lets an
+  agent run its own plans. While the variable is nil, ~plan_execute~ displays
+  the plan without selecting its window or buffer and returns
+  =awaiting_user_confirmation=. Set the variable only if you accept that
+  agents may modify your files without asking.
+- In the review buffer, executing a plan of origin mcp (=C-c C-c=, =c=, =x=)
+  first asks =yes-or-no-p=, naming the plan, its operations and its step
+  count. Plans you create yourself skip the question.
+- Queued execution (agent-shell-queue) of an mcp-origin plan requires either
+  ~hitl-plan-agent-may-apply~ or an approval recorded when /you/ queue the
+  plan through the interactive picker (metadata =:approved=, consumed by one
+  run). Queue dispatch also requires the plan to be draft or paused, and
+  re-enqueueing a finished plan is refused.
+- ~plan_discard~ discards only plans of origin mcp. ~plan_list~, ~plan_status~,
+  ~plan_discard~ and ~plan_execute~ reach only plans in the default plan
+  directory or a registered domain's store.
+
+** Restrictions on Origin-MCP Plans through hitl-plan-restricted
+
+While the engine creates or executes a plan of origin mcp, it binds
+[[file:hitl-plan.el::hitl-plan-restricted][~hitl-plan-restricted~]] (see [[file:hitl-plan.el::hitl-plan-restricted-p][~hitl-plan-restricted-p~]]), so domains and
+operations can refuse risky actions. A domain may supply =:sanitize-target=,
+which the MCP tools apply to caller-supplied targets so the review shows what
+execution acts on. For such plans, the built-in =file-target= domain opens
+files without file-local variables and never opens remote files. orgx adds an
+allowed-files check (see its =docs/bulk.org=).
+
+** Step Count, String Length, and Plan Id Limits
+
+- [[file:hitl-plan-mcp.el::hitl-plan-max-steps][~hitl-plan-max-steps~]] (default 1000): targets times operations.
+- [[file:hitl-plan-mcp.el::hitl-plan-max-string-length][~hitl-plan-max-string-length~]] (default 4096): the description, the note and
+  any string inside targets, scope and operation arguments.
+- The tools type check arguments before saving anything (targets and
+  operations are arrays of objects, descriptions and notes are strings), so a
+  rejected call creates no plan. Plan ids are limited to letters, digits, =_=,
+  =.= and =-=.
+
+** Rendering Untrusted Text as One Escaped Line
+
+Review buffers and pickers show descriptions, notes, labels, messages and
+operation arguments as one safe, truncated line. Newlines and control
+characters are escaped, bidirectional-override and other invisible characters
+appear as =\uXXXX=, and operation arguments are printed with =%S=. The file
+column shows the abbreviated full path, cut from the left, instead of the file
+name. [[file:hitl-plan-ui.el::hitl-plan-ui-max-field-width][~hitl-plan-ui-max-field-width~]] and
+[[file:hitl-plan-ui.el::hitl-plan-ui-file-width][~hitl-plan-ui-file-width~]] control the widths.
+
+** Agents with Eval or Shell Access Are Out of Scope
+
+These gates assume the agent has no way to evaluate Lisp or run shell commands.
+An agent that holds an eval-capable tool, such as the mcpkit =emacs= service's
+~emacs_eval~ or Bash, already has full access to the session, so nothing here
+constrains that agent. That access is the same trust boundary as shell access
+and is out of scope. The gates and the restrictions on origin-mcp plans exist
+so that the plan tools don't become an unintended route to code execution for
+agents without such a tool. Operations marked =:queueable= are your trusted
+code, and they must validate their own arguments.
+
+* License
+
+GPL-3.0-or-later
