@@ -1,0 +1,50 @@
+#+title: Instance State and Desktop Persistence
+
+* Instance state
+
+=sprite-state= provides independent, opt-in state mappings, file locks, and
+desktop persistence.  None is enabled by default.  Select only the variables
+needed and call =sprite-state-configure= before their packages initialize:
+
+#+begin_src emacs-lisp
+(require 'sprite-state)
+(setq sprite-state-mappings
+      '((project-list-file . "projects.el")
+        (transient-history-file . "transient-history.el"))
+      sprite-state-locks-enabled t)
+(sprite-state-configure)
+#+end_src
+
+Each value uses =sprite-state-path=, preserving the host and instance prefix.
+Mappings can name variables from built-in or optional packages; applying them
+neither loads those packages nor adds dependencies on them.  Lock setup creates
+private directories.  Named instances use their instance-scoped lock directory;
+solo instances use a process-specific directory in the runtime or temporary
+area.  Setup errors propagate to the caller.
+
+* Desktop lifecycle
+
+Desktop support is selected separately and started at the desired late startup
+point, after any operations that must precede restoration:
+
+#+begin_src emacs-lisp
+(setq sprite-state-desktop-enabled t)
+(sprite-state-global-mode 1)
+#+end_src
+
+For named instances the mode restores the existing instance desktop eagerly,
+then schedules an idle check every 120 seconds by default.  Set
+=sprite-state-desktop-idle-interval= before enabling the mode to change the
+interval; re-enable the mode to apply later changes.  Each check saves with 40%
+probability or when more than 150 seconds have elapsed since the last save.
+Desktop files use the existing instance-prefixed name in the shared state
+directory.  The mode reads only that directory even though =desktop-path=
+retains the usual search locations.  Solo instances neither restore nor schedule
+a save.  The mode is independent of daemon-registry =sprite-mode=.
+
+Repeated enable calls do not duplicate the timer or restore.  Disabling cancels
+the timer; a fresh enable does not restore an already restored desktop again.
+A desktop that was missing or failed to load can be retried on a fresh enable.  Disabling cannot undo restored buffers
+or safely revert state variables.  Set options before enabling, and disable and
+re-enable the mode to apply desktop selection changes.  Read and filesystem
+failures are reported to the caller.
