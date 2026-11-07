@@ -3,7 +3,8 @@
 ;; Author: sam kleinman <garen@tychoish.com>
 ;; Assisted-by: Claude:Sonnet-4.6
 ;; Maintainer: sam kleinman <garen@tychoish.com>
-;; Version: 0.1
+;; Package-Version: 20261107.1746
+;; Package-Revision: 1bbd5228723e
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: convenience, matching
 ;; URL: https://github.com/tychoish/annotated-completing-read

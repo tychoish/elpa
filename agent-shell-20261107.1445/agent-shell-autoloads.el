@@ -327,6 +327,7 @@ The worktree is created under <main-worktree>/.agent-shell/worktrees/,
 using a randomly generated name (e.g., \"adoring-hawking\").
 
 The user is prompted to confirm or edit the worktree path before creation." t)
+
 
 ;;; End of scraped data
 
