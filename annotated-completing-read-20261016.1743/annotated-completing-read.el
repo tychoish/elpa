@@ -3,8 +3,7 @@
 ;; Author: sam kleinman <garen@tychoish.com>
 ;; Assisted-by: Claude:Sonnet-4.6
 ;; Maintainer: sam kleinman <garen@tychoish.com>
-;; Package-Version: 20261016.1743
-;; Package-Revision: c0cd30d201d7
+;; Version: 0.1
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: convenience, matching
 ;; URL: https://github.com/tychoish/annotated-completing-read
@@ -648,6 +647,70 @@ It returns an empty string if no buffers are open."
            (format "%d dirs, %d files" n-dirs n-files)))
        "")
    (annotated-completing-read--directory-buffer-suffix dir)))
+
+(defun annotated-completing-read--font-candidates (&optional default)
+  "Build candidate alist of available font family names for completion.
+DEFAULT is the font family to mark as current."
+  (let* ((current (or default (ignore-errors (face-attribute 'default :family))))
+         (case-fold-search t)
+         (raw-families (delete-dups
+                        (append (when (fboundp 'font-family-list) (font-family-list))
+                                (when (fboundp 'x-list-fonts) (x-list-fonts "*")))))
+         (families (or raw-families '("Source Code Pro" "Monospace" "Courier" "DejaVu Sans Mono"))))
+    (mapcar (lambda (family)
+              (cons family
+                    (cond
+                     ((and current (string-equal family current)) "current")
+                     ((string-match-p "\\(mono\\|code\\|type\\|console\\)" family) "monospace")
+                     (t nil))))
+            families)))
+
+(defun annotated-completing-read--normalize-font-candidates (candidates current)
+  "Normalize CANDIDATES into an alist suitable for font completion.
+CURRENT is the default or current font family name."
+  (if (null candidates)
+      (annotated-completing-read--font-candidates current)
+    (mapcar (lambda (item)
+              (cond
+               ((consp item) item)
+               ((stringp item)
+                (cons item
+                      (cond
+                       ((and current (string-equal item current)) "current")
+                       ((let ((case-fold-search t))
+                          (string-match-p "\\(mono\\|code\\|type\\|console\\)" item))
+                        "monospace")
+                       (t nil))))
+               (t (cons (format "%s" item) nil))))
+            candidates)))
+
+;;;###autoload
+(cl-defun annotated-completing-read-font-name
+    (&optional &key (prompt "Font: ") require-match (default (ignore-errors (face-attribute 'default :family))) candidates)
+  "Select a font family name using annotated completion.
+PROMPT is the minibuffer prompt, defaulting to \"Font: \".
+REQUIRE-MATCH determines whether a match is required.
+DEFAULT is the default font candidate.
+CANDIDATES is an optional list of font family names or an alist of
+candidates to annotations."
+  (let* ((current (or default (ignore-errors (face-attribute 'default :family))))
+         (table (annotated-completing-read--normalize-font-candidates candidates current)))
+    (annotated-completing-read
+     table
+     :prompt prompt
+     :default current
+     :category 'font
+     :require-match require-match
+     :sort-fn (lambda (cand-list)
+                (seq-sort-by
+                 (lambda (cand)
+                   (let ((annot (cdr (assoc cand table))))
+                     (cond
+                      ((equal annot "current") 0)
+                      ((equal annot "monospace") 1)
+                      (t 2))))
+                 #'<
+                 cand-list)))))
 
 ;;;###autoload
 (defun annotated-completing-read-setup-history ()

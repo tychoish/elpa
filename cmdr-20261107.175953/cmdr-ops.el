@@ -73,16 +73,18 @@ Most useful for keeping chat buffers under control."
 ;;; Opacity
 
 (defun cmdr--frame-opacity-modify (&optional dec)
-  "Change the selected frame's opacity by 2.5%, or reduce it when DEC is non-nil.
-The result stays within 0.2 and 1.0; otherwise nothing changes."
+  "Change the selected frame's opacity by 5%, or reduce it when DEC is non-nil.
+The result stays within 20 and 100; otherwise nothing changes."
   (let* ((raw (frame-parameter nil 'alpha))
          (active (if (consp raw) (car raw) raw))
          (current (cond
-                   ((null active) 1.0)
-                   ((floatp active) active)
-                   (t (/ active 100.0))))
-         (next (if dec (- current 0.025) (+ current 0.025))))
-    (when (and (>= next 0.2) (<= next 1.0))
+                   ((null active) 100)
+                   ((and (floatp active) (<= active 1.0)) (round (* active 100)))
+                   ((numberp active) (round active))
+                   (t 100)))
+         (step 5)
+         (next (if dec (- current step) (+ current step))))
+    (when (and (>= next 20) (<= next 100))
       (modify-frame-parameters nil (list (cons 'alpha next))))))
 
 ;;;###autoload
@@ -99,9 +101,9 @@ The result stays within 0.2 and 1.0; otherwise nothing changes."
 
 ;;;###autoload
 (defun frame-opacity-reset ()
-  "Reset the selected frame's opacity to 0.95."
+  "Reset the selected frame's opacity to 95."
   (interactive)
-  (modify-frame-parameters nil '((alpha . 0.95))))
+  (modify-frame-parameters nil '((alpha . 95))))
 
 (defvar-keymap frame-opacity-repeat-map
   :doc "Repeat map for the frame opacity commands."
@@ -465,6 +467,100 @@ called interactively, also remove duplicate items."
           (if (or remove-dups clean-kill-ring-prevent-duplicates)
               (delete-dups cleaned)
             cleaned))))
+
+;;; Font, theme and display operations
+
+(declare-function annotated-completing-read-font-name "annotated-completing-read")
+
+;;;###autoload
+(defun disable-all-themes ()
+  "Disable all currently active custom themes."
+  (interactive)
+  (mapc #'disable-theme custom-enabled-themes))
+
+;;;###autoload
+(defun cmdr-set-frame-font-interactive (orig-fn font &optional keep-size frames inhibit-customize)
+  "Prompt for font interactively using `annotated-completing-read-font-name'.
+Advice wrapper for `set-frame-font'."
+  (interactive
+   (let* ((current (frame-parameter nil 'font))
+          (font (if (fboundp 'annotated-completing-read-font-name)
+                    (annotated-completing-read-font-name :prompt "Font name: ")
+                  (completing-read (format-prompt "Font name" current)
+                                   (when (fboundp 'font-family-list) (font-family-list))
+                                   nil nil nil nil current))))
+     (list font current-prefix-arg nil)))
+  (funcall orig-fn font keep-size frames inhibit-customize))
+
+;;;###autoload
+(defun set-up-frame-font (font-face-name size)
+  "Set font to FONT-FACE-NAME and SIZE using `set-frame-font'."
+  (interactive
+   (list (if (fboundp 'annotated-completing-read-font-name)
+             (annotated-completing-read-font-name)
+           (read-string "Font name: "))
+         (read-number "Size: " 13)))
+  (let ((font (format "%s-%s" font-face-name size))
+        (cell (assoc 'font default-frame-alist)))
+    (if cell
+        (setcdr cell font)
+      (add-to-list 'default-frame-alist (cons 'font font)))
+    (when (display-graphic-p)
+      (set-frame-font font nil t))
+    (alist-get 'font default-frame-alist)))
+
+;;;###autoload
+(defun ensure-frame-font (font-face-name size)
+  "Ensure default frame font is set, applying FONT-FACE-NAME and SIZE if unset."
+  (unless (alist-get 'font default-frame-alist)
+    (let ((font (format "%s-%s" font-face-name size)))
+      (add-to-list 'default-frame-alist (cons 'font font))
+      (when (display-graphic-p)
+        (set-frame-font font nil t)))))
+
+;;;###autoload
+(defun ensure-frame-opacity (&optional opacity frame)
+  "Ensure frame opacity is OPACITY on FRAME.
+Default OPACITY is 95, FRAME defaults to the current.  If OPACITY is
+nil, 1 (as from minor mode activation), or t, use the existing `alpha'
+from `default-frame-alist' (if > 20) or default to 95.  Also ensures
+`default-frame-alist' includes `alpha'."
+  (let* ((def-alpha (alist-get 'alpha default-frame-alist))
+         (usable-def (and (numberp def-alpha) (> def-alpha 20) def-alpha))
+         (target (cond
+                  ((or (null opacity) (eq opacity t) (equal opacity 1))
+                   (or usable-def 95))
+                  ((and (numberp opacity) (<= opacity 1.0) (> opacity 0.0))
+                   (round (* opacity 100)))
+                  ((numberp opacity)
+                   (round opacity))
+                  (t (or usable-def 95))))
+         (alpha (max 20 (min 100 target))))
+    (if (assq 'alpha default-frame-alist)
+        (setcdr (assq 'alpha default-frame-alist) alpha)
+      (push (cons 'alpha alpha) default-frame-alist))
+    (when (display-graphic-p frame)
+      (set-frame-parameter frame 'alpha alpha))))
+
+;;;###autoload
+(defun frame-unset-background-for-tty (frame)
+  "Unset default face background and foreground on TTY frame FRAME."
+  (unless (display-graphic-p frame)
+    (set-face-background 'default "unspecified-bg" frame)
+    (set-face-foreground 'default "unspecified-fg" frame)))
+
+;;;###autoload
+(defun current-frame-unset-background-for-tty ()
+  "Reset the background on the current frame, but only if it is a TTY frame."
+  (interactive)
+  (frame-unset-background-for-tty (selected-frame)))
+
+;;;###autoload
+(defun contextual-menubar (&optional frame)
+  "Display menubar in FRAME if graphical, hide if TTY.
+FRAME defaults to the selected frame."
+  (interactive)
+  (set-frame-parameter frame 'menu-bar-lines (if (display-graphic-p frame) 1 0)))
 
 (provide 'cmdr-ops)
 ;;; cmdr-ops.el ends here

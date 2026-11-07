@@ -99,9 +99,19 @@ HISTORY specifies the history list.
 This function returns an empty string if no candidate is chosen.
 
 (fn &optional &key PROMPT SEED INITIAL-INPUT HISTORY)")
+(autoload 'annotated-completing-read-font-name "annotated-completing-read"
+"Select a font family name using annotated completion.
+PROMPT is the minibuffer prompt, defaulting to \"Font: \".
+REQUIRE-MATCH determines whether a match is required.
+DEFAULT is the default font candidate.
+CANDIDATES is an optional list of font family names or an alist of
+candidates to annotations.
+
+(fn &optional &key (PROMPT \"Font: \") REQUIRE-MATCH (DEFAULT (ignore-errors (face-attribute \\='default :family))) CANDIDATES)")
 (autoload 'annotated-completing-read-setup-history "annotated-completing-read"
 "Enable savehist and desktop history integration for `annotated-completing-read'.")
 (register-definition-prefixes "annotated-completing-read" '("annotated-completing-read-"))
+
 
 ;;; End of scraped data
 

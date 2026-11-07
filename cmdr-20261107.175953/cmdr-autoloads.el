@@ -55,17 +55,53 @@ Candidates are annotated with their description and grouped by category.
 Unavailable commands are listed, marked as such, and refuse to run." t)
 
 
+;;; Generated autoloads from cmdr-frame.el
+
+(autoload 'cmdr-frame-record-home-frame "cmdr-frame"
+"Record the selected frame as this buffer's home frame (first visit only).")
+(defvar cmdr-frame-mode nil
+"Non-nil if Cmdr-Frame mode is enabled.
+See the `cmdr-frame-mode' command
+for a description of this minor mode.
+Setting this variable directly does not take effect;
+either customize it (see the info node `Easy Customization')
+or call the function `cmdr-frame-mode'.")
+(custom-autoload 'cmdr-frame-mode "cmdr-frame" nil)
+(autoload 'cmdr-frame-mode "cmdr-frame"
+"Global minor mode managing frame transparency, buffer navigation, and display.
+
+This is a global minor mode.  If called interactively, toggle the
+`Cmdr-Frame mode' mode.  If the prefix argument is positive, enable the
+mode, and if it is zero or negative, disable the mode.
+
+If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
+mode if ARG is nil, omitted, or is a positive number.  Disable the mode
+if ARG is a negative number.
+
+To check whether the minor mode is enabled in the current buffer,
+evaluate `(default-value \\='cmdr-frame-mode)'.
+
+The mode's hook is called both when the mode is enabled and when it is
+disabled.
+
+(fn &optional ARG)" t)
+
+
 ;;; Generated autoloads from cmdr-mode.el
 
 (defvar cmdr-mode nil
 "Non-nil if Cmdr mode is enabled.
 See the `cmdr-mode' command
-for a description of this minor mode.")
+for a description of this minor mode.
+Setting this variable directly does not take effect;
+either customize it (see the info node `Easy Customization')
+or call the function `cmdr-mode'.")
 (custom-autoload 'cmdr-mode "cmdr-mode" nil)
 (autoload 'cmdr-mode "cmdr-mode"
 "Attach `cmdr-mode-map' as a global minor-mode map.
 
-Does nothing else: no display, completion, hooks, advice or frame policy.
+When enabled, also configure `which-key-mode-hook' to use
+side-window-bottom display.
 
 This is a global minor mode.  If called interactively, toggle the `Cmdr
 mode' mode.  If the prefix argument is positive, enable the mode, and if
@@ -84,6 +120,7 @@ disabled.
 \\{cmdr-mode-map}
 
 (fn &optional ARG)" t)
+(defalias 'cmdr-global-minor-mode #'cmdr-mode)
 
 
 ;;; Generated autoloads from cmdr-ops.el
@@ -104,7 +141,7 @@ Most useful for keeping chat buffers under control." t)
 (autoload 'frame-opacity-decrease "cmdr-ops"
 "Make the selected frame more transparent." t)
 (autoload 'frame-opacity-reset "cmdr-ops"
-"Reset the selected frame's opacity to 0.95." t)
+"Reset the selected frame's opacity to 95." t)
 (autoload 'move-text-down "cmdr-ops"
 "Move region (`transient-mark-mode' active) or current line ARG lines down.
 In `org-mode', defers to `org-metadown' instead, which moves the
@@ -214,6 +251,40 @@ If REMOVE-DUPS or `clean-kill-ring-prevent-duplicates' is non-nil, or if
 called interactively, also remove duplicate items.
 
 (fn &optional REMOVE-DUPS)" t)
+(autoload 'disable-all-themes "cmdr-ops"
+"Disable all currently active custom themes." t)
+(autoload 'cmdr-set-frame-font-interactive "cmdr-ops"
+"Prompt for font interactively using `annotated-completing-read-font-name'.
+Advice wrapper for `set-frame-font'.
+
+(fn ORIG-FN FONT &optional KEEP-SIZE FRAMES INHIBIT-CUSTOMIZE)" t)
+(autoload 'set-up-frame-font "cmdr-ops"
+"Set font to FONT-FACE-NAME and SIZE using `set-frame-font'.
+
+(fn FONT-FACE-NAME SIZE)" t)
+(autoload 'ensure-frame-font "cmdr-ops"
+"Ensure default frame font is set, applying FONT-FACE-NAME and SIZE if unset.
+
+(fn FONT-FACE-NAME SIZE)")
+(autoload 'ensure-frame-opacity "cmdr-ops"
+"Ensure frame opacity is OPACITY on FRAME.
+Default OPACITY is 95, FRAME defaults to the current.  If OPACITY is
+nil, 1 (as from minor mode activation), or t, use the existing `alpha'
+from `default-frame-alist' (if > 20) or default to 95.  Also ensures
+`default-frame-alist' includes `alpha'.
+
+(fn &optional OPACITY FRAME)")
+(autoload 'frame-unset-background-for-tty "cmdr-ops"
+"Unset default face background and foreground on TTY frame FRAME.
+
+(fn FRAME)")
+(autoload 'current-frame-unset-background-for-tty "cmdr-ops"
+"Reset the background on the current frame, but only if it is a TTY frame." t)
+(autoload 'contextual-menubar "cmdr-ops"
+"Display menubar in FRAME if graphical, hide if TTY.
+FRAME defaults to the selected frame.
+
+(fn &optional FRAME)" t)
 
 
 ;;; Generated autoloads from cmdr-spec.el
