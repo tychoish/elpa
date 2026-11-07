@@ -55,19 +55,6 @@ Candidates are annotated with their description and grouped by category.
 Unavailable commands are listed, marked as such, and refuse to run." t)
 
 
-;;; Generated autoloads from cmdr-defaults.el
-
-(autoload 'cmdr-defaults-install "cmdr-defaults"
-"Install general command bindings into `cmdr-mode-map'.
-Calling this repeatedly preserves the same bindings.")
-
-
-;;; Generated autoloads from cmdr-ecosystem.el
-
-(autoload 'cmdr-ecosystem-install "cmdr-ecosystem"
-"Install generic ecosystem bindings in `cmdr-mode-map'.")
-
-
 ;;; Generated autoloads from cmdr-mode.el
 
 (defvar cmdr-mode nil
@@ -227,6 +214,18 @@ If REMOVE-DUPS or `clean-kill-ring-prevent-duplicates' is non-nil, or if
 called interactively, also remove duplicate items.
 
 (fn &optional REMOVE-DUPS)" t)
+
+
+;;; Generated autoloads from cmdr-spec.el
+
+(autoload 'cmdr-spec-install "cmdr-spec"
+"Install the spec called NAME into `cmdr-mode-map', ignoring its probe.
+Installing again is idempotent.
+
+(fn NAME)" t)
+(autoload 'cmdr-spec-discover "cmdr-spec"
+"Install every applicable spec and record the rest in `cmdr-spec-skipped'.
+Safe to call again, for instance after installing a package." t)
 
 ;;; End of scraped data
 

@@ -15,15 +15,17 @@ One repository with independent libraries and opt-in plugins. Load only what you
 loading a library never installs hooks, advice or modes (the one
 exception, =cmdr-mode=, is a plain minor mode you turn on yourself).
 
-| Library        | Provides                                                      | Requires                                |
-|----------------+---------------------------------------------------------------+-----------------------------------------|
-| =cmdr=         | Command registry, =cmdr-menu=, =cmdr-dispatch=                | =transient=, =annotated-completing-read= |
-| =cmdr-keys=    | Root map =cmdr-mode-map=, prefix and key-binding helpers      | built-ins only                          |
-| =cmdr-macros=  | Toggle, command-generator, hook and deferred-keymap macros    | built-ins only                          |
-| =cmdr-ops=     | Autoloaded interactive operations (windows, buffers, text)    | =annotated-completing-read= (at call time) |
-| =cmdr-mode=    | Global minor mode attaching =cmdr-mode-map=                   | =cmdr-keys=                             |
-| =cmdr-defaults= | Optional general editing and navigation bindings            | =cmdr-keys=                             |
-| =cmdr-ecosystem= | Optional common package bindings                           | =cmdr-keys=, =cmdr-macros=              |
+| Library             | Provides                                                   | Requires                                   |
+|---------------------+------------------------------------------------------------+--------------------------------------------|
+| =cmdr=              | Command registry, =cmdr-menu=, =cmdr-dispatch=             | =transient=, =annotated-completing-read=   |
+| =cmdr-keys=         | Root map =cmdr-mode-map=, prefix and key-binding helpers   | built-ins only                             |
+| =cmdr-macros=       | Toggle, command-generator, hook and deferred-keymap macros | built-ins only                             |
+| =cmdr-ops=          | Autoloaded interactive operations (windows, buffers, text) | =annotated-completing-read= (at call time) |
+| =cmdr-mode=         | Global minor mode attaching =cmdr-mode-map=                | =cmdr-keys=                                |
+| =cmdr-spec=         | Declarative specs and discovery                            | =cmdr-keys=, =cmdr-macros=                 |
+| =cmdr-defaults=     | Opt-in general editing and navigation spec                 | =cmdr-spec=                                |
+| =cmdr-integrations= | Mail, AI, network, notes and personal tooling specs        | =cmdr-spec=, =cmdr-macros=                 |
+| =cmdr-ecosystem=    | Per-package binding specs, probed for availability         | =cmdr-spec=, =cmdr-macros=                 |
 
 None of them depends on =xtd-macro= (xtdlib), hud-mode or any personal
 configuration.
@@ -64,21 +66,46 @@ git clone https://github.com/tychoish/cmdr.el.git ~/.emacs.d/site-lisp/cmdr.el
 
 Dependencies: =transient= and =annotated-completing-read=.
 
-* Optional default bindings
+* Specs and discovery
 
-The defaults plugin supplies general editing, display, help, buffer and
-navigation bindings.  Loading it installs nothing; opt in explicitly:
+A spec is data describing one feature: key prefixes, bindings, deferred
+keymaps and registry commands, with an optional =:probe= naming the
+command(s) (a symbol, checked with =fboundp=) or library (a string, checked
+with =locate-library=) whose presence makes it applicable.  =:autoloads= names
+libraries, such as ="mu4e-autoloads"=, that installing loads when found, for
+packages installed outside =package.el=.
 
 #+begin_src emacs-lisp
-(require 'cmdr-defaults)
-(cmdr-defaults-install)
-(cmdr-mode 1)
+(cmdr-register-spec
+  :name mail
+  :probe mu4e
+  :prefixes (("C-c m" . "mail"))
+  :bindings (("C-c m m" . mu4e))
+  :commands ((cmdr-spec-command :category mu4e
+                                :command mu4e
+                                :description "mail"
+                                :transient-key "mm")))
 #+end_src
 
-Installation is idempotent and configures the cmdr map without enabling it.
-For common package bindings, also load =cmdr-ecosystem= and call
-=cmdr-ecosystem-install=.  The two plugins can be installed independently
-or together.
+=cmdr-spec-discover= installs every spec whose probe holds
+(autoloads count), so packages are never required just to be bound.  Run
+it from =after-init-hook=; it is safe to run again.  Skipped specs and the
+reason are in =cmdr-spec-skipped= (see =cmdr-spec-report=).  Registry
+commands are only handed to =cmdr-register-command= once =cmdr= itself is
+loaded.
+
+- =cmdr-disabled-specs= :: names discovery must not install.
+- =cmdr-opt-in-specs= :: names of =:opt-in= specs to install.  The
+  =defaults= spec (general editing, display, help, buffer and navigation
+  bindings) is opt-in.
+- =cmdr-spec-validate= :: report conflicting prefix labels, keys bound to
+  different commands, and keys used as both command and prefix across specs.
+  A spec whose install fails is recorded in =cmdr-spec-skipped= and warned
+  about without stopping discovery.
+- =cmdr-spec-install= :: install one spec by name, ignoring its probe.
+
+=cmdr-defaults=, =cmdr-ecosystem= and =cmdr-integrations= only define specs; loading them
+installs nothing.
 
 * Registry
 :PROPERTIES:

@@ -42,6 +42,7 @@
 (require 'subr-x)
 (require 'transient)
 (require 'annotated-completing-read)
+(require 'cmdr-spec)
 
 ;;;; Registry
 
@@ -382,6 +383,8 @@ Unavailable commands are listed, marked as such, and refuse to run."
         (if-let* ((candidate (assoc label candidates)))
             (cmdr--invoke (cddr candidate) origin prefix)
           (user-error "No visible cmdr command named %S" label))))))
+
+(cmdr-spec-flush-commands)
 
 (provide 'cmdr)
 ;;; cmdr.el ends here
