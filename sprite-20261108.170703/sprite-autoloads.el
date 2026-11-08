@@ -33,16 +33,130 @@ Reporting is enabled when `sprite-slow-op-reporting' or `init-file-debug'
 is non-nil, and logged if duration exceeds `sprite-slow-op-threshold'.
 
 (fn NAME &rest BODY)" nil t)
-(autoload 'sprite-run-startup-operations "sprite"
+
+
+;;; Generated autoloads from sprite-batch.el
+
+(autoload 'sprite-run-batch "sprite-batch"
 "Run OPERATIONS in order, yielding between each in interactive sessions.
-OPERATIONS defaults to `sprite-startup-operations'.
-Supported ARGS keyword arguments:
-  :delay SECONDS (defaults to 0.1)
+OPERATIONS (or OPS) may be a list of functions, a vector, a generator
+iterator, a gen stream, a single function, or a symbol whose value is
+a list of functions (such as a hook).
+
+Supported keyword arguments:
+  :operations or :ops
+    List of operations, vector, generator iterator, single function,
+    or hook symbol.
+  :run-after or :initial-delay SECONDS
+    Initial delay before the first operation (defaults to :delay).
+  :delay SECONDS
+    Amount of idle time between operations (defaults to 0.1).
+  :args or :arglist LIST or ATOM
+    Arguments passed to any non-nilary operation.
   :on-done FUNCTION
+    Callback invoked when all operations finish.
   :frame FRAME
+    Optional frame context for `with-selected-frame'.
+  :buffer BUFFER
+    Optional buffer context: `temp' executes in `with-temp-buffer',
+    a buffer object or string name executes in `with-current-buffer'.
+  :log-prefix STRING
+    Timer log prefix (defaults to \"[run]\").
+  :name STRING
+    Human-readable batch identifier for status display and cancel menus.
+
+In noninteractive (batch) sessions, runs all operations synchronously.
 Return a cancellation function.
 
+(fn &key OPERATIONS OPS (DELAY 0.1) RUN-AFTER INITIAL-DELAY ARGS ARGLIST ON-DONE FRAME BUFFER (LOG-PREFIX \"[run]\") NAME)")
+(defalias 'sprite-batch-run #'sprite-run-batch)
+(defalias 'sprite-run #'sprite-run-batch)
+(autoload 'sprite-batch-startup "sprite-batch"
+"Run startup OPERATIONS yielding between each in interactive sessions.
+OPERATIONS defaults to `sprite-startup-operations'.
+Supported ARGS keyword arguments include :delay, :run-after, :on-done, :frame,
+:buffer, and :name.
+Specialized case of `sprite-run-batch' with default args `(1)' and log
+prefix \"[startup]\".
+
 (fn &optional OPERATIONS &rest ARGS)")
+(defalias 'sprite-run-startup-operations #'sprite-batch-startup)
+(autoload 'sprite-batch-cancel "sprite-batch"
+"Cancel in-flight batch execution identified by TARGET.
+TARGET may be:
+- `:all' to cancel all active batches
+- A `sprite-batch-handle' instance
+- An integer batch ID
+- A cancellation function returned by `sprite-run-batch'
+- nil: interactively, prompt via `sprite-batch-cancel-menu'; from Lisp,
+  same as `:all'.
+Return the list of handles that were actually cancelled.
+
+(fn &optional TARGET)" t)
+(autoload 'sprite-batch-cancel-menu "sprite-batch"
+"Interactively select an active batch to cancel, cancel all, or do nothing.
+With INCLUDE-QUIT, also offer (as the default) \"Quit current operation\",
+the stock `keyboard-quit', which leaves batches running.  Pressing `C-g'
+inside the menu aborts it as a normal quit.
+
+(fn &optional INCLUDE-QUIT)" t)
+(autoload 'sprite-batch-cancel-or-quit "sprite-batch"
+"Offer `sprite-batch-cancel-menu' when batches are running, else quit.
+Behaves exactly like `keyboard-quit' when no batches are active, inside the
+minibuffer, with an active region, or with FORCE-QUIT (\\[universal-argument]).
+
+(fn &optional FORCE-QUIT)" t)
+(defvar sprite-batch-mode-map (let ((map (make-sparse-keymap))) (define-key map [remap keyboard-quit] #'sprite-batch-cancel-or-quit) (define-key map (kbd "C-x C-g") #'sprite-batch-cancel) map)
+"Keymap for `sprite-batch-mode'.
+`C-g' offers the batch menu while batches run (`C-u C-g' always quits);
+`C-x C-g' opens the cancel menu directly, from anywhere.")
+(autoload 'sprite-batch-mode "sprite-batch"
+"Opt-in batch cancellation keys in the current buffer.
+
+While batches are running, `C-g' offers a menu to cancel them; otherwise
+`C-g' is the normal `keyboard-quit'.  `C-x C-g' always opens the cancel
+menu.  Without this mode, `C-g' is never altered; use `sprite-batch-cancel'.
+See `global-sprite-batch-mode' to enable it everywhere.
+
+This is a minor mode.  If called interactively, toggle the `Sprite-Batch
+mode' mode.  If the prefix argument is positive, enable the mode, and if
+it is zero or negative, disable the mode.
+
+If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
+mode if ARG is nil, omitted, or is a positive number.  Disable the mode
+if ARG is a negative number.
+
+To check whether the minor mode is enabled in the current buffer,
+evaluate the variable `sprite-batch-mode'.
+
+The mode's hook is called both when the mode is enabled and when it is
+disabled.
+
+(fn &optional ARG)" t)
+(put 'global-sprite-batch-mode 'globalized-minor-mode t)
+(defvar global-sprite-batch-mode nil
+"Non-nil if Global Sprite-Batch mode is enabled.
+See the `global-sprite-batch-mode' command
+for a description of this minor mode.
+Setting this variable directly does not take effect;
+either customize it (see the info node `Easy Customization')
+or call the function `global-sprite-batch-mode'.")
+(custom-autoload 'global-sprite-batch-mode "sprite-batch" nil)
+(autoload 'global-sprite-batch-mode "sprite-batch"
+"Toggle Sprite-Batch mode in many buffers.
+Specifically, Sprite-Batch mode is enabled in all buffers where
+`sprite-batch-mode' would do it.
+
+With prefix ARG, enable Global Sprite-Batch mode if ARG is positive;
+otherwise, disable it.
+
+If called from Lisp, toggle the mode if ARG is `toggle'.
+Enable the mode if ARG is nil, omitted, or is a positive number.
+Disable the mode if ARG is a negative number.
+
+See `sprite-batch-mode' for more information on Sprite-Batch mode.
+
+(fn &optional ARG)" t)
 
 
 ;;; Generated autoloads from sprite-daemon.el

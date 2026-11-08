@@ -44,7 +44,6 @@
 (require 'sprite-direct)
 (require 'sprite-system)
 
-(declare-function annotated-completing-read "annotated-completing-read")
 (declare-function sprite-list "sprite-list")
 
 ;; server.el variables; server.el is loaded by any running daemon but may be
@@ -453,16 +452,6 @@ Times out after TIMEOUT seconds."
         (user-error "Sprite %s did not become ready within %ds"
                     full-name wait-timeout))
       s)))
-
-(defun sprite--annotated-or-plain-read (prompt candidates)
-  "Read a candidate string from CANDIDATES, an alist of (NAME . ANNOTATION).
-Uses `annotated-completing-read', showing each ANNOTATION, when that
-package is loaded; otherwise falls back to plain `completing-read' over
-the candidate names, since `annotated-completing-read' is an optional
-dependency.  Specify the text of the PROMPT."
-  (if (fboundp 'annotated-completing-read)
-      (annotated-completing-read candidates :prompt prompt :require-match t)
-    (completing-read prompt (seq-map #'car candidates) nil t)))
 
 (defun sprite--completing-read (prompt)
   "Read a sprite name from the registry using annotated completion.

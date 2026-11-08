@@ -34,6 +34,10 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'subr-x)
+(require 'generator)
+
+(declare-function gen-p "gen" (sequence))
+(declare-function gen--next "gen" (sequence))
 
 ;; server.el variables; server.el is loaded by any running daemon but may be
 ;; absent in batch/test contexts.
@@ -230,59 +234,79 @@ is non-nil, and logged if duration exceeds `sprite-slow-op-threshold'."
            (message "[op]: <sprite> %s: %.06fs" ,name duration)))
        res)))
 
-(defun sprite--execute-startup-operation (fn &optional frame)
-  "Run startup operation FN in FRAME, reporting errors.
-When `sprite-slow-op-reporting' or `init-file-debug' is non-nil,
-log operation duration if it exceeds `sprite-slow-op-threshold'."
-  (condition-case err
-      (when (or (null frame) (frame-live-p frame))
-        (with-selected-frame (or frame (selected-frame))
-          (when (and (symbolp fn) (fboundp fn) (autoloadp (symbol-function fn)))
-            (autoload-do-load (symbol-function fn) fn))
-          (with-sprite-slow-op-timer (format "[startup] %s" fn)
-            (if (equal (cdr (func-arity fn)) 0)
-                (funcall fn)
-              (funcall fn 1)))))
-    (error (message "[sprite] %s failed: %s" fn (error-message-string err)))))
+(defun sprite--execute-operation (fn &optional args frame log-prefix buffer)
+  "Run operation FN with ARGS in FRAME and BUFFER context, reporting errors."
+  (sprite-batch--execute-operation fn args frame buffer log-prefix))
 
-;;;###autoload
-(defun sprite-run-startup-operations (&optional operations &rest args)
-  "Run OPERATIONS in order, yielding between each in interactive sessions.
-OPERATIONS defaults to `sprite-startup-operations'.
-Supported ARGS keyword arguments:
-  :delay SECONDS (defaults to 0.1)
-  :on-done FUNCTION
-  :frame FRAME
-Return a cancellation function."
-  (let* ((ops (cond ((and (null operations) (null args))
-                     sprite-startup-operations)
-                    ((keywordp operations)
-                     (setq args (cons operations args))
-                     sprite-startup-operations)
-                    (t (or operations sprite-startup-operations))))
-         (delay (or (plist-get args :delay) 0.1))
-         (on-done (plist-get args :on-done))
-         (frame (plist-get args :frame)))
-    (if (or noninteractive (null ops))
-        (progn
-          (dolist (op ops)
-            (sprite--execute-startup-operation op frame))
-          (when on-done (funcall on-done))
-          #'ignore)
-      (let* ((queue (copy-sequence ops))
-             (timer nil)
-             (step nil))
-        (setq step (lambda ()
-                     (when queue
-                       (sprite--execute-startup-operation (pop queue) frame)
-                       (if queue
-                           (setq timer (run-with-idle-timer delay nil step))
-                         (when on-done (funcall on-done))))))
-        (setq timer (run-with-idle-timer delay nil step))
-        (lambda ()
-          (setq queue nil)
-          (when (timerp timer)
-            (cancel-timer timer)))))))
+(defun sprite--execute-startup-operation (fn &optional frame)
+  "Run startup operation FN in FRAME, reporting errors."
+  (sprite-batch--execute-operation fn '(1) frame nil "[startup]"))
+
+(declare-function annotated-completing-read "annotated-completing-read")
+
+(defun sprite--annotated-or-plain-read (prompt candidates &optional default)
+  "Read a candidate string from CANDIDATES, an alist of (NAME . ANNOTATION).
+Uses `annotated-completing-read', showing each ANNOTATION, when that
+package is loaded; otherwise falls back to plain `completing-read' over
+the candidate names, since `annotated-completing-read' is an optional
+dependency.  Specify the text of the PROMPT; DEFAULT is the candidate
+chosen on an empty answer."
+  (if (fboundp 'annotated-completing-read)
+      (apply #'annotated-completing-read candidates :prompt prompt :require-match t
+             (and default (list :default default)))
+    (completing-read prompt (seq-map #'car candidates) nil t nil nil default)))
+
+(defun sprite--make-iterator (sequence)
+  "Normalize SEQUENCE into (TOTAL-COUNT . NEXT-FN).
+NEXT-FN is a function of zero arguments returning (IDX . ITEM) or nil.
+SEQUENCE may be nil, a vector, a gen.el stream, a generator iterator,
+or a list."
+  (let ((idx 0))
+    (cond
+     ((null sequence)
+      (cons 0 (lambda () nil)))
+     ((vectorp sequence)
+      (let ((total (length sequence)))
+        (cons total
+              (lambda ()
+                (when (< idx total)
+                  (let ((curr idx))
+                    (setq idx (1+ idx))
+                    (cons curr (aref sequence curr))))))))
+     ;; gen struct duck-typing (gen-p or has gen--next)
+     ((and (fboundp 'gen-p) (funcall 'gen-p sequence))
+      (cons nil
+            (lambda ()
+              (let ((v (funcall 'gen--next sequence)))
+                (when v
+                  (let ((curr idx))
+                    (setq idx (1+ idx))
+                    (cons curr (car v))))))))
+     ;; Check `functionp' before `listp': in Emacs 29 closures are lists, so
+     ;; the list branch must exclude functions to avoid treating generator
+     ;; iterators as lists.
+     ((and (listp sequence) (not (functionp sequence)))
+      (let ((total (length sequence))
+            (remaining sequence))
+        (cons total
+              (lambda ()
+                (when remaining
+                  (let ((curr idx)
+                        (item (pop remaining)))
+                    (setq idx (1+ idx))
+                    (cons curr item)))))))
+     ;; generator.el iterators (functions/closures) and anything else
+     ;; that `iter-next' accepts.
+     (t
+      (cons nil
+            (lambda ()
+              (condition-case nil
+                  (let ((item (iter-next sequence))
+                        (curr idx))
+                    (setq idx (1+ idx))
+                    (cons curr item))
+                (iter-end-of-sequence nil))))))))
 
 (provide 'sprite)
+(require 'sprite-batch)
 ;;; sprite.el ends here

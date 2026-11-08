@@ -171,14 +171,25 @@ Threshold in seconds for logging startup operation durations.
 
 Execute /BODY/, logging duration for /NAME/ when reporting is enabled. Reporting is enabled when ~sprite-slow-op-reporting~ or ~init-file-debug~ is non-nil, and logged if duration exceeds ~sprite-slow-op-threshold~.
 
-*** [[file:../sprite.el::249][sprite-run-startup-operations]]
+** sprite-batch
+
+*** [[file:../sprite-batch.el::51][sprite-run-batch]]
 :PROPERTIES:
-:CUSTOM_ID: sprite-run-startup-operations
+:CUSTOM_ID: sprite-run-batch
+:END:
+
+: (fn &key OPERATIONS OPS (DELAY 0.1) RUN-AFTER INITIAL-DELAY ARGS ARGLIST ON-DONE FRAME BUFFER (LOG-PREFIX "[run]"))
+
+Run /OPERATIONS/ (or /OPS/) in order, yielding between each in interactive sessions. /OPERATIONS/ may be a list of functions, a single function, or a symbol whose value is a list of functions (such as a hook). Supported keyword arguments: :operations or :ops, :run-after or :initial-delay SECONDS (defaults to :delay), :delay SECONDS (defaults to 0.1), :args or :arglist LIST or ATOM (arguments passed to non-nilary operations), :on-done FUNCTION, :frame FRAME, :buffer BUFFER (`temp' executes in `with-temp-buffer', a buffer object or string name executes in `with-current-buffer'), :log-prefix STRING (defaults to "[run]"). In noninteractive (batch) sessions, runs all operations synchronously. Return a cancellation function.
+
+*** [[file:../sprite-batch.el::117][sprite-batch-startup]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-batch-startup
 :END:
 
 : (fn &optional OPERATIONS &rest ARGS)
 
-Run /OPERATIONS/ in order, yielding between each in interactive sessions. /OPERATIONS/ defaults to ~sprite-startup-operations~. Supported /ARGS/ keyword arguments: :delay SECONDS (defaults to 0.1) :on-done FUNCTION :frame FRAME Return a cancellation function.
+Run startup /OPERATIONS/ in order, yielding between each in interactive sessions. /OPERATIONS/ defaults to ~sprite-startup-operations~. Supported /ARGS/ keyword arguments include :delay SECONDS (defaults to 0.1), :run-after or :initial-delay SECONDS, :on-done FUNCTION, :frame FRAME, :buffer BUFFER. Specialized case of ~sprite-run-batch~ with default args ~'(1)~ and log prefix ~"[startup]"~.
 
 ** sprite-direct
 

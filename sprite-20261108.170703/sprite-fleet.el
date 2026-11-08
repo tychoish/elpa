@@ -119,62 +119,7 @@ TOTAL may be nil if input sequence was a lazy iterator of unknown size."
     `(let ((item ',item) (_ ',item)) ,fn-or-form))
    (t `(funcall ,fn-or-form ',item))))
 
-(defun sprite-fleet--make-iterator (sequence)
-  "Normalize SEQUENCE into (TOTAL-COUNT . NEXT-FN).
-NEXT-FN is a function of zero arguments returning (IDX . ITEM) or nil."
-  (let ((idx 0))
-    (cond
-     ((null sequence)
-      (cons 0 (lambda () nil)))
-     ((vectorp sequence)
-      (let ((total (length sequence)))
-        (cons total
-              (lambda ()
-                (when (< idx total)
-                  (let ((curr idx))
-                    (setq idx (1+ idx))
-                    (cons curr (aref sequence curr))))))))
-     ;; gen struct duck-typing (gen-p or has gen--next)
-     ((and (fboundp 'gen-p) (funcall 'gen-p sequence))
-      (cons nil
-            (lambda ()
-              (let ((v (funcall 'gen--next sequence)))
-                (when v
-                  (let ((curr idx))
-                    (setq idx (1+ idx))
-                    (cons curr (car v))))))))
-     ;; generator.el iterators, functions, or closures
-     ;; Note: in Emacs 29, closures satisfy `functionp' and `listp';
-     ;; checking `functionp' before `listp' prevents misidentifying
-     ;; generator iterators as lists.
-     ((functionp sequence)
-      (cons nil
-            (lambda ()
-              (condition-case nil
-                  (let ((item (iter-next sequence))
-                        (curr idx))
-                    (setq idx (1+ idx))
-                    (cons curr item))
-                (iter-end-of-sequence nil)))))
-     ((listp sequence)
-      (let ((total (length sequence))
-            (remaining sequence))
-        (cons total
-              (lambda ()
-                (when remaining
-                  (let ((curr idx)
-                        (item (pop remaining)))
-                    (setq idx (1+ idx))
-                    (cons curr item)))))))
-     (t
-      (cons nil
-            (lambda ()
-              (condition-case nil
-                  (let ((item (iter-next sequence))
-                        (curr idx))
-                    (setq idx (1+ idx))
-                    (cons curr item))
-                (iter-end-of-sequence nil))))))))
+(defalias 'sprite-fleet--make-iterator #'sprite--make-iterator)
 
 (defun sprite-fleet--format-error (err target)
   "Format error ERR from TARGET according to fleet error policy."
