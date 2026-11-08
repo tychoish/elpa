@@ -43,41 +43,52 @@ on infinite generators.  Draining operations (`seq-length', `seq-reverse',
 `seq-sort', `seq-into', etc.) will consume forever unless bounded.
 
 (fn ITER-OR-GEN &optional INFINITE)")
+(autoload 'gen-active-runners "gen"
+"Return a copy of currently active `gen-run-async' runner functions.")
+(autoload 'gen-cancel-all-async "gen"
+"Cancel all active `gen-run-async' runners.
+Returns the list of canceled runner functions.")
 (autoload 'gen-run-async "gen"
 "Consume SEQUENCE asynchronously using FN with bounded CONCURRENCY.
 
-FN is called with two arguments: (ITEM DONE-CALLBACK).  When FN finishes
-processing ITEM, it must invoke DONE-CALLBACK with zero or more
-arguments to signal completion and release its slot.
+FN is called with either (ITEM DONE-CALLBACK) or (ITEM).  When FN is a unary
+function accepting one argument, it executes synchronously and automatically
+signals completion without requiring DONE-CALLBACK invocation.  When FN accepts
+two arguments, it must invoke DONE-CALLBACK with zero or more arguments to
+signal completion and release its slot.
 
 SEQUENCE is normalized to a `gen' instance if not already one.
 
-CONCURRENCY limits the number of concurrent asynchronous operations in
-flight; defaults to 1.
-
-DELAY is the number of seconds to wait before dispatching the next item;
-defaults to 0.0 (yielding cooperatively to the Emacs event loop).
-
-ON-DONE, if non-nil, is a function called with no arguments once all
-items have been processed and all active operations have finished.
-
-ON-ERROR, if non-nil, is called with an error descriptor when FN signals
-an error synchronously.  If ON-ERROR is nil, a warning is logged.
+Supported keyword arguments:
+  :concurrency LIMIT
+    Limits concurrent asynchronous operations in flight (defaults to 1).
+  :delay SECONDS
+    Amount of time between item dispatches (defaults to 0.0).
+  :run-after or :initial-delay SECONDS
+    Initial delay before first dispatch (defaults to :delay).
+  :idle BOOLEAN
+    When non-nil, schedules tasks using `run-with-idle-timer' instead of
+    `run-with-timer' for cooperative non-blocking idle execution.
+  :name or :label STRING
+    Identifier for the runner queryable via handle.
+  :buffer BUFFER
+    Optional buffer context: `temp' executes in `with-temp-buffer',
+    a buffer object or string executes in `with-current-buffer'.
+  :frame FRAME
+    Optional frame context for `with-selected-frame'.
+  :on-done FUNCTION
+    Callback invoked with no arguments once all items finish.
+  :on-error FUNCTION
+    Callback invoked with error descriptor if FN signals synchronously.
 
 Returns a runner handle function `(lambda (&optional action) ...)`.
+Calling it with no arguments or `:cancel' aborts pending dispatches.
+Passing `:pause' halts dequeueing new items while in-flight workers finish.
+Passing `:resume' resumes dequeueing.
+Passing `:paused-p', `:canceled-p', `:finished-p', `:active-count',
+`:processed', `:total', `:name', or `:status' queries runner state.
 
-Calling it with no arguments or `:cancel` aborts pending scheduled
-dispatches and prevents further items from being consumed.
-
-Passing `:pause` halts dequeueing new items while letting in-flight
-workers finish.
-
-Passing `:resume` resumes dequeueing.
-
-Passing `:paused-p`, `:canceled-p`, `:finished-p`, or `:active-count`
-queries runner state.
-
-(fn FN SEQUENCE &key (CONCURRENCY 1) (DELAY 0.0) ON-DONE ON-ERROR)")
+(fn FN SEQUENCE &key (CONCURRENCY 1) (DELAY 0.0) RUN-AFTER INITIAL-DELAY IDLE (NAME nil) LABEL BUFFER FRAME ON-DONE ON-ERROR)")
 (autoload 'gen-pool-map "gen"
 "Map FN asynchronously over SEQUENCE, accumulating results for ON-DONE.
 FN is called with two arguments: (ITEM DONE-CALLBACK).  FN signals completion
@@ -99,8 +110,7 @@ error synchronously.  If ON-ERROR is nil, a warning is logged.
 
 Returns a cancellation function of zero arguments that aborts execution.
 
-(fn FN SEQUENCE &key (CONCURRENCY 1) (DELAY 0.0) (ORDER \\='preserve) ON-DONE ON-ERROR)")
-(register-definition-prefixes "gen" '("gen--"))
+(fn FN SEQUENCE &key (CONCURRENCY 1) (DELAY 0.0) RUN-AFTER INITIAL-DELAY IDLE (ORDER \\='preserve) ON-DONE ON-ERROR)")
 
 ;;; End of scraped data
 

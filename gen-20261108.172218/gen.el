@@ -339,41 +339,94 @@ Short-circuits: stops pulling from SEQUENCE as soon as a match is found."
 
 ;;; Asynchronous stream consumption
 
+(defvar gen--active-runners nil
+  "List of currently active `gen-run-async' runner functions.")
+
 ;;;###autoload
-(cl-defun gen-run-async (fn sequence &key (concurrency 1) (delay 0.0) on-done on-error)
+(defun gen-active-runners ()
+  "Return a copy of currently active `gen-run-async' runner functions."
+  (copy-sequence gen--active-runners))
+
+;;;###autoload
+(defun gen-cancel-all-async ()
+  "Cancel all active `gen-run-async' runners.
+Returns the list of canceled runner functions."
+  (let ((runners (copy-sequence gen--active-runners)))
+    (dolist (r runners)
+      (funcall r :cancel))
+    runners))
+
+(defmacro gen--with-context (frame buffer &rest body)
+  "Execute BODY with optional FRAME and BUFFER context.
+If BUFFER is `temp', BODY executes inside `with-temp-buffer'.
+If BUFFER is a buffer or string name, BODY executes in that buffer.
+If FRAME is non-nil and live, BODY executes with FRAME selected."
+  (declare (indent 2))
+  (let ((buf-sym (gensym "buf"))
+        (frm-sym (gensym "frm")))
+    `(let ((,frm-sym ,frame)
+           (,buf-sym ,buffer))
+       (when (or (null ,frm-sym) (frame-live-p ,frm-sym))
+         (with-selected-frame (or ,frm-sym (selected-frame))
+           (cond ((eq ,buf-sym 'temp)
+                  (with-temp-buffer ,@body))
+                 ((bufferp ,buf-sym)
+                  (when (buffer-live-p ,buf-sym)
+                    (with-current-buffer ,buf-sym ,@body)))
+                 ((stringp ,buf-sym)
+                  (with-current-buffer (get-buffer-create ,buf-sym) ,@body))
+                 (t ,@body)))))))
+
+;;;###autoload
+(cl-defun gen-run-async (fn sequence &key (concurrency 1) (delay 0.0)
+                                    run-after initial-delay
+                                    idle (name nil) label
+                                    buffer frame
+                                    on-done on-error)
   "Consume SEQUENCE asynchronously using FN with bounded CONCURRENCY.
 
-FN is called with two arguments: (ITEM DONE-CALLBACK).  When FN finishes
-processing ITEM, it must invoke DONE-CALLBACK with zero or more
-arguments to signal completion and release its slot.
+FN is called with either (ITEM DONE-CALLBACK) or (ITEM).  When FN is a unary
+function accepting one argument, it executes synchronously and automatically
+signals completion without requiring DONE-CALLBACK invocation.  When FN accepts
+two arguments, it must invoke DONE-CALLBACK with zero or more arguments to
+signal completion and release its slot.
 
 SEQUENCE is normalized to a `gen' instance if not already one.
 
-CONCURRENCY limits the number of concurrent asynchronous operations in
-flight; defaults to 1.
-
-DELAY is the number of seconds to wait before dispatching the next item;
-defaults to 0.0 (yielding cooperatively to the Emacs event loop).
-
-ON-DONE, if non-nil, is a function called with no arguments once all
-items have been processed and all active operations have finished.
-
-ON-ERROR, if non-nil, is called with an error descriptor when FN signals
-an error synchronously.  If ON-ERROR is nil, a warning is logged.
+Supported keyword arguments:
+  :concurrency LIMIT
+    Limits concurrent asynchronous operations in flight (defaults to 1).
+  :delay SECONDS
+    Amount of time between item dispatches (defaults to 0.0).
+  :run-after or :initial-delay SECONDS
+    Initial delay before first dispatch (defaults to :delay).
+  :idle BOOLEAN
+    When non-nil, schedules tasks using `run-with-idle-timer' instead of
+    `run-with-timer' for cooperative non-blocking idle execution.
+  :name or :label STRING
+    Identifier for the runner queryable via handle.
+  :buffer BUFFER
+    Optional buffer context: `temp' executes in `with-temp-buffer',
+    a buffer object or string executes in `with-current-buffer'.
+  :frame FRAME
+    Optional frame context for `with-selected-frame'.
+  :on-done FUNCTION
+    Callback invoked with no arguments once all items finish.
+  :on-error FUNCTION
+    Callback invoked with error descriptor if FN signals synchronously.
 
 Returns a runner handle function `(lambda (&optional action) ...)`.
-
-Calling it with no arguments or `:cancel` aborts pending scheduled
-dispatches and prevents further items from being consumed.
-
-Passing `:pause` halts dequeueing new items while letting in-flight
-workers finish.
-
-Passing `:resume` resumes dequeueing.
-
-Passing `:paused-p`, `:canceled-p`, `:finished-p`, or `:active-count`
-queries runner state."
-  (let* ((g (gen--normalize sequence))
+Calling it with no arguments or `:cancel' aborts pending dispatches.
+Passing `:pause' halts dequeueing new items while in-flight workers finish.
+Passing `:resume' resumes dequeueing.
+Passing `:paused-p', `:canceled-p', `:finished-p', `:active-count',
+`:processed', `:total', `:name', or `:status' queries runner state."
+  (let* ((runner-name (or name label))
+         (total (cond ((null sequence) 0)
+                      ((sequencep sequence) (length sequence))
+                      (t nil)))
+         (processed 0)
+         (g (gen--normalize sequence))
          (active 0)
          (exhausted nil)
          (canceled nil)
@@ -381,7 +434,12 @@ queries runner state."
          (finished nil)
          (timer nil)
          (concurrency (max 1 (or concurrency 1)))
-         (delay (max 0.0 (or delay 0.0))))
+         (delay (max 0.0 (or delay 0.0)))
+         (wait-start (max 0.0 (or run-after initial-delay delay)))
+         (use-idle (or idle nil))
+         (runner-fn nil)
+         (arity (and fn (func-arity fn)))
+         (unary-p (and arity (equal (cdr arity) 1))))
     (cl-labels
         ((finish ()
            (unless (or finished canceled)
@@ -389,13 +447,18 @@ queries runner state."
              (when timer
                (cancel-timer timer)
                (setq timer nil))
+             (setq gen--active-runners (delq runner-fn gen--active-runners))
              (when on-done
                (funcall on-done))))
-         (schedule-drain ()
+         (schedule-drain (&optional custom-delay)
            (when (and (not timer) (not canceled) (not paused) (not finished))
-             (setq timer (run-with-timer delay nil #'drain))))
+             (let ((wait-time (or custom-delay delay)))
+               (setq timer (if use-idle
+                               (run-with-idle-timer wait-time nil #'drain)
+                             (run-with-timer wait-time nil #'drain))))))
          (release-slot ()
            (setq active (1- active))
+           (cl-incf processed)
            (cond
             ((and exhausted (= active 0))
              (finish))
@@ -418,11 +481,17 @@ queries runner state."
                      (schedule-drain))
                    (let ((done-called nil))
                      (condition-case err
-                         (funcall fn (car v)
-                                  (lambda (&rest _args)
-                                    (unless (or done-called canceled)
-                                      (setq done-called t)
-                                      (release-slot))))
+                         (gen--with-context frame buffer
+                           (if unary-p
+                               (prog1 (funcall fn (car v))
+                                 (unless (or done-called canceled)
+                                   (setq done-called t)
+                                   (release-slot)))
+                             (funcall fn (car v)
+                                      (lambda (&rest _args)
+                                        (unless (or done-called canceled)
+                                          (setq done-called t)
+                                          (release-slot))))))
                        (error
                         (unless done-called
                           (setq done-called t)
@@ -435,39 +504,54 @@ queries runner state."
                            :warning)))))))))
               ((and exhausted (= active 0))
                (finish))))))
-      (if (zerop delay)
-          (while (and (< active concurrency) (not exhausted) (not canceled) (not paused) (not finished))
-            (drain))
-        (schedule-drain))
-      (lambda (&optional action)
-        (pcase (or action :cancel)
-          (:cancel
-           (unless (or canceled finished)
-             (setq canceled t)
-             (when timer
-               (cancel-timer timer)
-               (setq timer nil))
-             t))
-          (:pause
-           (unless (or canceled paused finished)
-             (setq paused t)
-             (when timer
-               (cancel-timer timer)
-               (setq timer nil))
-             t))
-          (:resume
-           (when (and paused (not canceled) (not finished))
-             (setq paused nil)
-             (schedule-drain)
-             t))
-          (:paused-p paused)
-          (:canceled-p canceled)
-          (:finished-p finished)
-          (:active-count active)
-          (_ (error "Unknown handle action: %S" action)))))))
+      (setq runner-fn
+            (lambda (&optional action)
+              (pcase (or action :cancel)
+                (:cancel
+                 (unless (or canceled finished)
+                   (setq canceled t)
+                   (when timer
+                     (cancel-timer timer)
+                     (setq timer nil))
+                   (setq gen--active-runners (delq runner-fn gen--active-runners))
+                   t))
+                (:pause
+                 (unless (or canceled paused finished)
+                   (setq paused t)
+                   (when timer
+                     (cancel-timer timer)
+                     (setq timer nil))
+                   t))
+                (:resume
+                 (when (and paused (not canceled) (not finished))
+                   (setq paused nil)
+                   (schedule-drain)
+                   t))
+                (:paused-p paused)
+                (:canceled-p canceled)
+                (:finished-p finished)
+                (:active-count active)
+                (:processed processed)
+                (:total total)
+                (:name runner-name)
+                (:status (cond (canceled 'canceled)
+                               (finished 'finished)
+                               (paused 'paused)
+                               (t 'running)))
+                (_ (error "Unknown handle action: %S" action)))))
+      (push runner-fn gen--active-runners)
+      (if (or run-after initial-delay)
+          (schedule-drain wait-start)
+        (if (and (zerop delay) (not use-idle))
+            (while (and (< active concurrency) (not exhausted) (not canceled) (not paused) (not finished))
+              (drain))
+          (schedule-drain)))
+      runner-fn)))
 
 ;;;###autoload
-(cl-defun gen-pool-map (fn sequence &key (concurrency 1) (delay 0.0) (order 'preserve) on-done on-error)
+(cl-defun gen-pool-map (fn sequence &key (concurrency 1) (delay 0.0)
+                                         run-after initial-delay idle
+                                         (order 'preserve) on-done on-error)
   "Map FN asynchronously over SEQUENCE, accumulating results for ON-DONE.
 FN is called with two arguments: (ITEM DONE-CALLBACK).  FN signals completion
 by calling DONE-CALLBACK with the result value for that item:
@@ -536,6 +620,9 @@ Returns a cancellation function of zero arguments that aborts execution."
      stream
      :concurrency concurrency
      :delay delay
+     :run-after run-after
+     :initial-delay initial-delay
+     :idle idle
      :on-error on-error
      :on-done (lambda ()
                 (funcall on-done (funcall finalize))))))
