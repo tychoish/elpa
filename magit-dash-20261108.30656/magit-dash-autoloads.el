@@ -111,32 +111,6 @@ If the chosen repository is hidden, unhides it.  Otherwise, hides it." t)
 KILL and WINDOW are passed through to `quit-window'.
 
 (fn &optional KILL WINDOW)" t)
-(defvar magit-dash-global-mode nil
-"Non-nil if Magit-Dash-Global mode is enabled.
-See the `magit-dash-global-mode' command
-for a description of this minor mode.
-Setting this variable directly does not take effect;
-either customize it (see the info node `Easy Customization')
-or call the function `magit-dash-global-mode'.")
-(custom-autoload 'magit-dash-global-mode "magit-dash" nil)
-(autoload 'magit-dash-global-mode "magit-dash"
-"Global minor mode for `magit-dash' integrations.
-
-This is a global minor mode.  If called interactively, toggle the
-`Magit-Dash-Global mode' mode.  If the prefix argument is positive,
-enable the mode, and if it is zero or negative, disable the mode.
-
-If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
-mode if ARG is nil, omitted, or is a positive number.  Disable the mode
-if ARG is a negative number.
-
-To check whether the minor mode is enabled in the current buffer,
-evaluate `(default-value \\='magit-dash-global-mode)'.
-
-The mode's hook is called both when the mode is enabled and when it is
-disabled.
-
-(fn &optional ARG)" t)
 
 
 ;;; Generated autoloads from magit-dash-gh.el
@@ -329,6 +303,39 @@ _REPO-DIR is retained for compatibility; the dashboard view determines scope.
 (autoload 'magit-dash-gh-pr-status-batch "magit-dash-gh-pr-status"
 "Regenerate the status file from `emacs --batch'; exit non-zero on failure.
 An optional command-line argument names the repository directory.")
+
+
+;;; Generated autoloads from magit-dash-global.el
+
+(defvar magit-dash-global-mode nil
+"Non-nil if Magit-Dash-Global mode is enabled.
+See the `magit-dash-global-mode' command
+for a description of this minor mode.
+Setting this variable directly does not take effect;
+either customize it (see the info node `Easy Customization')
+or call the function `magit-dash-global-mode'.")
+(custom-autoload 'magit-dash-global-mode "magit-dash-global" nil)
+(autoload 'magit-dash-global-mode "magit-dash-global"
+"Global minor mode for `magit-dash' integrations.
+
+Sets up keybindings, savehist variables, and hooks while leaving the main
+`magit-dash' package and its dependencies to load on demand.
+
+This is a global minor mode.  If called interactively, toggle the
+`Magit-Dash-Global mode' mode.  If the prefix argument is positive,
+enable the mode, and if it is zero or negative, disable the mode.
+
+If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
+mode if ARG is nil, omitted, or is a positive number.  Disable the mode
+if ARG is a negative number.
+
+To check whether the minor mode is enabled in the current buffer,
+evaluate `(default-value \\='magit-dash-global-mode)'.
+
+The mode's hook is called both when the mode is enabled and when it is
+disabled.
+
+(fn &optional ARG)" t)
 
 
 ;;; Generated autoloads from magit-dash-mcp.el

@@ -40,6 +40,7 @@
 
 (require 'annotated-completing-read)
 (require 'sprite)
+(require 'magit-dash-global)
 
 (require 'magit-dash-gh-ci)
 (require 'magit-dash-gh-pr)
@@ -2265,21 +2266,7 @@ set `default-directory' to the parent directory where the repository should be."
 (defvar which-key-replacement-alist)
 (declare-function which-key--start-timer "which-key")
 
-(defun magit-dash--which-key-register-replacements ()
-  "Register command abbreviations in `which-key-replacement-alist'.
-Applied for `magit-dash-mode'.  Does nothing if
-`magit-dash-which-key-abbreviate-commands' is nil or
-`which-key-replacement-alist' is not defined."
-  (when (and magit-dash-which-key-abbreviate-commands
-             (boundp 'which-key-replacement-alist))
-    (let* ((prefix-repl (if (memq magit-dash-which-key-abbreviate-commands '(strip t))
-                            "\\1"
-                          "md-\\1"))
-           (rules (list (cons (cons nil "\\`magit-dash-\\(.*\\)")
-                              (cons nil prefix-repl)))))
-      (setq which-key-replacement-alist
-            (cons (cons 'magit-dash-mode rules)
-                  (assq-delete-all 'magit-dash-mode which-key-replacement-alist))))))
+;; `magit-dash--which-key-register-replacements' is defined in `magit-dash-global.el'.
 
 (defun magit-dash--which-key-sync-timer (&optional _window)
   "Adjust `which-key' idle timer based on current window mode.
@@ -2782,23 +2769,7 @@ When QUIET is non-nil, suppresses echo area messages."
 (defvar magit-dash--inhibit-post-refresh-hook nil
   "Non-nil when `magit-dash--on-magit-post-refresh' is executing.")
 
-(defun magit-dash--on-magit-post-refresh ()
-  "Refresh dashboard row for the current repository after a Magit operation."
-  (unless magit-dash--inhibit-post-refresh-hook
-    (let ((magit-dash--inhibit-post-refresh-hook t))
-      (when-let* ((buf (get-buffer magit-dash-buffer-name))
-                  ((buffer-live-p buf))
-                  (top (or (and (fboundp 'magit-toplevel) (magit-toplevel))
-                           default-directory))
-                  (top-dir (file-name-as-directory (expand-file-name top)))
-                  (repo (seq-find (lambda (r)
-                                    (let ((r-dir (file-name-as-directory
-                                                  (expand-file-name (magit-dash-repo-path r)))))
-                                      (or (string-equal r-dir top-dir)
-                                          (ignore-errors (file-equal-p r-dir top-dir)))))
-                                  (magit-dash--all-repos))))
-        (with-current-buffer buf
-          (magit-dash-refresh-repo repo nil t))))))
+;; `magit-dash--on-magit-post-refresh' is defined in `magit-dash-global.el'.
 
 
 ;;;###autoload
@@ -4262,30 +4233,7 @@ KILL and WINDOW are passed through to `quit-window'."
         (funcall orig-fn kill window)
       (delete-window (or window (selected-window))))))
 
-;;;###autoload
-(define-minor-mode magit-dash-global-mode
-  "Global minor mode for `magit-dash' integrations."
-  :global t
-  :group 'magit-dash
-  (if magit-dash-global-mode
-      (progn
-        (add-hook 'magit-post-refresh-hook #'magit-dash--on-magit-post-refresh)
-        (add-hook 'which-key-mode-hook #'magit-dash--which-key-register-replacements)
-        (when (boundp 'savehist-additional-variables)
-          (add-to-list 'savehist-additional-variables 'magit-dash-columns)
-          (when (boundp 'magit-dash-gh-pr-columns)
-            (add-to-list 'savehist-additional-variables 'magit-dash-gh-pr-columns)))
-        (when (fboundp 'magit-dash-worktree-post-add-hook-function)
-          (add-hook 'magit-post-worktree-add-hook #'magit-dash-worktree-post-add-hook-function)))
-    (remove-hook 'magit-post-refresh-hook #'magit-dash--on-magit-post-refresh)
-    (remove-hook 'which-key-mode-hook #'magit-dash--which-key-register-replacements)
-    (when (fboundp 'magit-dash-worktree-post-add-hook-function)
-      (remove-hook 'magit-post-worktree-add-hook #'magit-dash-worktree-post-add-hook-function))))
-(with-eval-after-load 'magit-dash-gh-pr
-  (when (and (bound-and-true-p magit-dash-global-mode)
-             (boundp 'savehist-additional-variables)
-             (boundp 'magit-dash-gh-pr-columns))
-    (add-to-list 'savehist-additional-variables 'magit-dash-gh-pr-columns)))
+;; `magit-dash-global-mode' is defined in `magit-dash-global.el'.
 
 (provide 'magit-dash)
 
