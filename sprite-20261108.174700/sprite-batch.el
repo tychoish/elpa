@@ -126,7 +126,7 @@ Return a cancellation function."
                        (list source))
                       ((and (functionp source)
                             (not (equal (func-arity source) '(2 . 2)))
-                            (not (and (fboundp 'gen-p) (funcall 'gen-p source))))
+                            (not (and (featurep 'gen) (fboundp 'gen-p) (funcall 'gen-p source))))
                        (list source))
                       (t source)))
          (iter (sprite--make-iterator items))

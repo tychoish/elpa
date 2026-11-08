@@ -223,6 +223,15 @@
                                 :transient-key "ll")))
 
 (cmdr-register-spec
+  :name elpaish
+  :probe elpaish-install-upgrade-packages
+  :commands ((cmdr-spec-command :row 2
+                                :category elpaish
+                                :command elpaish-install-upgrade-packages
+                                :description "upgrade configured packages"
+                                :exclude-from-transient t)))
+
+(cmdr-register-spec
   :name whitespace
   :probe toggle-local-whitespace-cleanup
   :prefixes (("C-c t w" . "whitespace"))

@@ -11,6 +11,7 @@
 
 ;;; Generated autoloads from gen.el
 
+ (defvar cl-struct-gen-tags nil)
 (defvar cl-struct-gen-tags)
 (with-suppressed-warnings ((lexical infinite exhausted peeked iter cl-tag-slot)) (eval-and-compile (define-inline gen-p (x) (declare (side-effect-free error-free) (pure t) (noinline nil)) (inline-letevals (x) (inline-quote (and (memq (type-of (\, x)) cl-struct-gen-tags) t)))) (define-symbol-prop 'gen 'cl-deftype-satisfies 'gen-p)) (define-inline gen-iter (x) "Access slot \"iter\" of `gen' struct X.
 The raw generator.el closure iterator.

@@ -26,6 +26,8 @@
 
 ;;; Core struct & wrapper
 
+;;;###autoload (defvar cl-struct-gen-tags nil)
+
 ;;;###autoload
 (cl-defstruct (gen
                (:constructor gen--make)

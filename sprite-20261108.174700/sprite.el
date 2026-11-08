@@ -274,7 +274,7 @@ or a list."
                     (setq idx (1+ idx))
                     (cons curr (aref sequence curr))))))))
      ;; gen struct duck-typing (gen-p or has gen--next)
-     ((and (fboundp 'gen-p) (funcall 'gen-p sequence))
+     ((and (featurep 'gen) (fboundp 'gen-p) (funcall 'gen-p sequence))
       (cons nil
             (lambda ()
               (let ((v (funcall 'gen--next sequence)))

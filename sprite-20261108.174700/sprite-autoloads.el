@@ -132,6 +132,8 @@ evaluate the variable `sprite-batch-mode'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
+\\{sprite-batch-mode-map}
+
 (fn &optional ARG)" t)
 (put 'global-sprite-batch-mode 'globalized-minor-mode t)
 (defvar global-sprite-batch-mode nil
