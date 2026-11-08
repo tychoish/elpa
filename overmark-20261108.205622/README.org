@@ -1,0 +1,174 @@
+#+title: overmark
+#+author: sam kleinman
+#+email: sam@tychoish.com
+
+Buffer-rendering overlay and markup helpers for Emacs: font-lock keyword
+generators that make invisible text (tabs, over-long lines) visible, and
+highlighters for inline =TK(...)= and =TODO(...)= annotations.
+
+* Table of Contents :TOC:
+:PROPERTIES:
+:CUSTOM_ID: toc
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#installation-elpaish][ELPAish (Recommended)]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+- [[#usage][Usage]]
+  - [[#global-mode][Global Mode]]
+  - [[#line-length-overflow][Line Length Overflow]]
+  - [[#annotations][Annotations]]
+- [[#api-reference][API Reference]]
+- [[#license][License]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=overmark= provides non-intrusive buffer-rendering overlays and font-lock markup:
+- Highlighting for =TK("...")= and =TODO(...)= annotations in text modes with custom face styling that harmonizes with Modus themes.
+- Dynamic line width overflow highlighting beyond a configurable column limit (=overmark-max-width=).
+- Visual tab character and trailing whitespace indicators.
+- Global and buffer-local minor modes with zero load-time side effects.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: installation-elpaish
+:END:
+
+Add the ELPAish repository and install via =use-package=:
+
+#+begin_src emacs-lisp
+(use-package overmark
+  :ensure t)
+#+end_src
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository and add it to your Emacs =load-path=:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/overmark")
+(require 'overmark)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Basic configuration in your Emacs init:
+
+#+begin_src emacs-lisp
+(use-package overmark
+  :ensure t
+  :commands (overmark-global-mode overmark-mode overmark-width-mode)
+  :init
+  (overmark-global-mode 1))
+#+end_src
+
+* Usage
+:PROPERTIES:
+:CUSTOM_ID: usage
+:END:
+
+** Global Mode
+:PROPERTIES:
+:CUSTOM_ID: global-mode
+:END:
+
+Enable =overmark-global-mode= to activate trailing whitespace highlighting across code and text buffers, annotation font-lock in text modes, and line width overflow guides:
+
+#+begin_src emacs-lisp
+(overmark-global-mode 1)
+#+end_src
+
+** Line Length Overflow
+:PROPERTIES:
+:CUSTOM_ID: line-length-overflow
+:END:
+
+- Toggle width guides in the current buffer with =M-x overmark-toggle-width=.
+- Toggle width guides globally with a prefix argument: =C-u M-x overmark-toggle-width=.
+- Set the width limit in the current buffer with =M-x overmark-set-width=.
+
+** Annotations
+:PROPERTIES:
+:CUSTOM_ID: annotations
+:END:
+
+In text buffers, strings like =TK("need review")= or =TODO(clarify wording)= are automatically highlighted with distinct delimiter and content faces (=overmark-delimiter-face= and =overmark-content-face=).
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol | Type | Description |
+|---|---|---|
+| [[#overmark-global-mode][overmark-global-mode]] | Minor mode | Toggle global annotation, width, and whitespace highlighting |
+| [[#overmark-mode][overmark-mode]] | Minor mode | Toggle annotation font-lock in the current buffer |
+| [[#overmark-width-mode][overmark-width-mode]] | Minor mode | Toggle line width overflow highlighting in current buffer |
+| [[#overmark-toggle-width][overmark-toggle-width]] | Command | Toggle width guides in current buffer or globally |
+| [[#overmark-set-width][overmark-set-width]] | Command | Set line width limit for current buffer |
+| [[#overmark-max-width][overmark-max-width]] | Variable | Buffer-local maximum line length (default 100) |
+| [[#overmark-line-width-enabled][overmark-line-width-enabled]] | Variable | Default flag for line width guides |
+
+** overmark-global-mode
+:PROPERTIES:
+:CUSTOM_ID: overmark-global-mode
+:END:
+Global minor mode that attaches font-lock and whitespace management to =text-mode-hook=, =prog-mode-hook=, and theme change hooks.
+
+** overmark-mode
+:PROPERTIES:
+:CUSTOM_ID: overmark-mode
+:END:
+Buffer-local minor mode highlighting =TK(...)= and =TODO(...)= annotations.
+
+** overmark-width-mode
+:PROPERTIES:
+:CUSTOM_ID: overmark-width-mode
+:END:
+Buffer-local minor mode highlighting lines exceeding =overmark-max-width=.
+
+** overmark-toggle-width
+:PROPERTIES:
+:CUSTOM_ID: overmark-toggle-width
+:END:
+Interactive command toggling line width guides in buffer or globally.
+
+** overmark-set-width
+:PROPERTIES:
+:CUSTOM_ID: overmark-set-width
+:END:
+Interactive command prompting for or setting the buffer's maximum line width.
+
+** overmark-max-width
+:PROPERTIES:
+:CUSTOM_ID: overmark-max-width
+:END:
+Buffer-local integer specifying maximum allowed width before font-lock-warning-face is applied.
+
+** overmark-line-width-enabled
+:PROPERTIES:
+:CUSTOM_ID: overmark-line-width-enabled
+:END:
+Boolean flag indicating whether width guides should be enabled by default.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See LICENSE file for details.

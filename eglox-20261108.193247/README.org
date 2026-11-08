@@ -1,0 +1,184 @@
+#+title: eglox
+#+author: sam kleinman
+#+email: sam@tychoish.com
+
+Eglot extensions, throttled buffer activation, server lifecycle management,
+and stability enhancements for Emacs LSP.
+
+* Table of Contents :TOC:
+:PROPERTIES:
+:CUSTOM_ID: toc
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#installation-elpaish][ELPAish (Recommended)]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+- [[#features][Features]]
+  - [[#throttled-activation][Throttled Activation]]
+  - [[#server-lifecycle--cleanup][Server Lifecycle & Cleanup]]
+  - [[#keymaps--commands][Keymaps & Commands]]
+- [[#api-reference][API Reference]]
+- [[#license][License]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=eglox= provides stability enhancements and workflows around Emacs' built-in =eglot= LSP client:
+- Throttled buffer activation to prevent connection storms when opening multi-file projects.
+- Server lifecycle management: duplicate server pruning, dead connection cleanup, and reconnection resilience.
+- Structured keymaps under =C-c l= for Eglot commands, IDE navigation, and project-wide actions.
+- Automatic Projectile cache warming integration on project switch.
+- Guarded completion-at-point handlers to prevent repetitive JSON-RPC errors.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: installation-elpaish
+:END:
+
+Install via ELPAish with =use-package=:
+
+#+begin_src emacs-lisp
+(use-package eglox
+  :ensure t)
+#+end_src
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository and add it to your Emacs =load-path=:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/eglox")
+(require 'eglox)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Enable =eglox-global-mode= in your init:
+
+#+begin_src emacs-lisp
+(use-package eglox
+  :ensure t
+  :commands (eglox-global-mode eglox-mode)
+  :init
+  (eglox-global-mode 1))
+#+end_src
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+** Throttled Activation
+:PROPERTIES:
+:CUSTOM_ID: throttled-activation
+:END:
+
+When multiple programming buffers are loaded at once (e.g. during session restore or mass grep-edits), =eglox= rate-limits server initialization and prioritizes visible windows first. Inspect or flush the activation queue with:
+
+#+begin_src emacs-lisp
+(eglox-activate-queue-report)
+(eglox-activate-flush-queue)
+#+end_src
+
+** Server Lifecycle & Cleanup
+:PROPERTIES:
+:CUSTOM_ID: server-lifecycle--cleanup
+:END:
+
+- Automatically detects and prunes duplicate LSP servers on reconnect.
+- Shuts down orphaned and dead servers periodically during idle periods.
+- Re-establishes server connections on save if an LSP server died in the background.
+
+** Keymaps & Commands
+:PROPERTIES:
+:CUSTOM_ID: keymaps--commands
+:END:
+
+- =C-c l= prefix exposes standard Eglot actions (=r= rename, =a= code actions, =f= format, =o= organize imports).
+- =C-c l x= binds the IDE navigation keymap (xref definitions, references, and imenu).
+- =M-x eglox-describe-symbol-dwim= contextual symbol lookup across Slime, Eglot, and Elisp.
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol | Type | Description |
+|---|---|---|
+| [[#eglox-global-mode][eglox-global-mode]] | Minor mode | Global LSP connection throttle and lifecycle manager |
+| [[#eglox-mode][eglox-mode]] | Minor mode | Buffer-local minor mode for Eglot-managed buffers |
+| [[#eglox-ensure][eglox-ensure]] | Command | Rate-limited buffer activation hook entry point |
+| [[#eglox-describe-symbol-dwim][eglox-describe-symbol-dwim]] | Command | DWIM symbol documentation lookup |
+| [[#eglox-cleanup-stale-connections][eglox-cleanup-stale-connections]] | Command | Prune dead or orphaned Eglot servers |
+| [[#eglox-activate-flush-queue][eglox-activate-flush-queue]] | Command | Flush pending throttled buffer activations |
+| [[#eglox-command-map][eglox-command-map]] | Keymap | Prefix command map for Eglot commands |
+| [[#eglox-ide-map][eglox-ide-map]] | Keymap | Submap for IDE navigation commands |
+
+** eglox-global-mode
+:PROPERTIES:
+:CUSTOM_ID: eglox-global-mode
+:END:
+Global minor mode that manages server deduplication, connection throttling, and periodic stale server pruning.
+
+** eglox-mode
+:PROPERTIES:
+:CUSTOM_ID: eglox-mode
+:END:
+Buffer-local minor mode enabled when an Eglot server manages the current buffer.
+
+** eglox-ensure
+:PROPERTIES:
+:CUSTOM_ID: eglox-ensure
+:END:
+Entry point installed on major mode hooks to queue or initialize Eglot.
+
+** eglox-describe-symbol-dwim
+:PROPERTIES:
+:CUSTOM_ID: eglox-describe-symbol-dwim
+:END:
+Contextual symbol description dispatcher across Lisp (Slime), Eglot, and built-in help.
+
+** eglox-cleanup-stale-connections
+:PROPERTIES:
+:CUSTOM_ID: eglox-cleanup-stale-connections
+:END:
+Prunes dead and duplicate Eglot server processes.
+
+** eglox-activate-flush-queue
+:PROPERTIES:
+:CUSTOM_ID: eglox-activate-flush-queue
+:END:
+Drains and activates all pending buffers waiting in the activation queue.
+
+** eglox-command-map
+:PROPERTIES:
+:CUSTOM_ID: eglox-command-map
+:END:
+Keymap bound to =C-c l= for LSP commands.
+
+** eglox-ide-map
+:PROPERTIES:
+:CUSTOM_ID: eglox-ide-map
+:END:
+Keymap bound to =C-c l x= for definitions, references, and symbol navigation.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See LICENSE file for details.

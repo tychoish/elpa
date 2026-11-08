@@ -1,0 +1,30 @@
+#+title: telegax: Telega Desktop, Sleep, and Daemon Lifecycle Integration
+#+author: Tycho Garen
+
+* Overview
+
+=telegax= provides configurable idle actions, systemd-logind sleep integration,
+buffer management, and notification filtering for the =telega= Telegram client
+in Emacs.
+
+* Features
+
+- Configurable idle actions via =sprite-system= (disconnect, switch to root, bury/kill chat buffers).
+- Clean systemd-logind sleep and wake lifecycle integration.
+- Deferred startup loading with =telegax-global-mode= prefix key interception.
+- Notification filtering and OS-specific alert integration.
+- Dedicated buffer management keymap and commands.
+
+* Installation
+
+Install via [[https://github.com/tychoish/elpaish][ELPAish]]:
+
+#+begin_src elisp
+(use-package telegax
+  :ensure t
+  :hook (after-init . telegax-global-mode))
+#+end_src
+
+* License
+
+GPL-3.0-or-later

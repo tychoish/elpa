@@ -1,0 +1,35 @@
+#+title: daemons-dash: Unified System Daemon Dashboard for Emacs
+#+author: Tycho Garen
+
+* Overview
+
+=daemons-dash= is a unified system service and daemon management dashboard for
+Emacs. It aggregates multiple service providers into a single tabulated-list
+view (=*daemons-dash*=):
+
+- =systemd= (system and user units)
+- =sprite= (subordinate Emacs instances)
+- =docker= (containers)
+- =ollama= (local LLM models)
+
+* Features
+
+- Single-key lifecycle operations (start, stop, restart, enable, disable).
+- Context-aware log viewing for systemd units, Docker containers, and Sprite daemons.
+- Fast interactive filtering by provider and status via Transient menus.
+- Declarative Elisp daemon registration and state verification (=daemons-dash-config=).
+- Bidirectional YAML export/import for declarative daemon management.
+
+* Installation
+
+Install via [[https://github.com/tychoish/elpaish][ELPAish]]:
+
+#+begin_src elisp
+(use-package daemons-dash
+  :ensure t
+  :bind ("C-c t s" . daemons-dash))
+#+end_src
+
+* License
+
+GPL-3.0-or-later

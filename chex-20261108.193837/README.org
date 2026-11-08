@@ -1,0 +1,168 @@
+#+title: chex
+#+author: sam kleinman
+#+email: sam@tychoish.com
+
+Checking, spelling, and diagnostics integration for Emacs.
+
+* Table of Contents :TOC:
+:PROPERTIES:
+:CUSTOM_ID: toc
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#installation-elpaish][ELPAish (Recommended)]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+- [[#features][Features]]
+  - [[#global-mode][Global Mode]]
+  - [[#aspell-caching][Aspell Caching]]
+  - [[#flycheck-eldoc-integration][Flycheck Eldoc Integration]]
+  - [[#vale-prose-linting][Vale Prose Linting]]
+- [[#api-reference][API Reference]]
+- [[#license][License]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=chex= bundles syntax checking, spelling, diagnostics, and prose linting:
+- Unified spelling via Flyspell, Aspell caching, and Consult-flyspell navigation.
+- Flycheck integration with Eldoc for inline diagnostics display.
+- Dynamic chaining for Aspell and Vale checkers in documentation and prose buffers.
+- Eglot and compiler checker management with zero load-time side effects.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: installation-elpaish
+:END:
+
+Install via ELPAish with =use-package=:
+
+#+begin_src emacs-lisp
+(use-package chex
+  :ensure t)
+#+end_src
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository and add it to your Emacs =load-path=:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/chex")
+(require 'chex)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Enable =chex-global-mode= in your init:
+
+#+begin_src emacs-lisp
+(use-package chex
+  :ensure t
+  :commands (chex-global-mode)
+  :init
+  (chex-global-mode 1))
+#+end_src
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+** Global Mode
+:PROPERTIES:
+:CUSTOM_ID: global-mode
+:END:
+
+=chex-global-mode= installs unified keybindings (=C-c [=, =C-c ]=, =M-$= for spelling corrections), manages flycheck checkers, and schedules idle spelling for programming and text buffers.
+
+** Aspell Caching
+:PROPERTIES:
+:CUSTOM_ID: aspell-caching
+:END:
+
+Caches expensive Aspell parameter detection to prevent startup and invocation delays. Clear the cache with =M-x chex-ispell-clear-cache=.
+
+** Flycheck Eldoc Integration
+:PROPERTIES:
+:CUSTOM_ID: flycheck-eldoc-integration
+:END:
+
+Renders Flycheck errors and warnings at point directly through Eldoc's multi-source echo area.
+
+** Vale Prose Linting
+:PROPERTIES:
+:CUSTOM_ID: vale-prose-linting
+:END:
+
+- Enable Vale chained after Aspell: =M-x chex-flycheck-vale-enable=
+- Disable Vale: =M-x chex-flycheck-vale-disable=
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol | Type | Description |
+|---|---|---|
+| [[#chex-global-mode][chex-global-mode]] | Minor mode | Global checking and spelling minor mode |
+| [[#chex-ispell-clear-cache][chex-ispell-clear-cache]] | Command | Clear cached Aspell detection parameters |
+| [[#chex-flycheck-vale-enable][chex-flycheck-vale-enable]] | Command | Enable Vale prose linter chained to Aspell |
+| [[#chex-flycheck-vale-disable][chex-flycheck-vale-disable]] | Command | Disable Vale prose linter chaining |
+| [[#chex-extra-spell-hooks][chex-extra-spell-hooks]] | Variable | Additional hooks where spelling is scheduled |
+| [[#chex-global-mode-map][chex-global-mode-map]] | Keymap | Global keymap for spelling and check commands |
+
+** chex-global-mode
+:PROPERTIES:
+:CUSTOM_ID: chex-global-mode
+:END:
+Global minor mode configuring Flyspell, Flycheck, and Eldoc integrations.
+
+** chex-ispell-clear-cache
+:PROPERTIES:
+:CUSTOM_ID: chex-ispell-clear-cache
+:END:
+Interactive command clearing cached dictionary parameters.
+
+** chex-flycheck-vale-enable
+:PROPERTIES:
+:CUSTOM_ID: chex-flycheck-vale-enable
+:END:
+Enables Vale checking and chains it behind active Aspell checkers.
+
+** chex-flycheck-vale-disable
+:PROPERTIES:
+:CUSTOM_ID: chex-flycheck-vale-disable
+:END:
+Disables Vale checking and restores standard Flycheck checkers.
+
+** chex-extra-spell-hooks
+:PROPERTIES:
+:CUSTOM_ID: chex-extra-spell-hooks
+:END:
+List of hook symbols where Chex enables spelling (default includes =telega-chat-mode-hook=).
+
+** chex-global-mode-map
+:PROPERTIES:
+:CUSTOM_ID: chex-global-mode-map
+:END:
+Keymap active when =chex-global-mode= is enabled.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See LICENSE file for details.

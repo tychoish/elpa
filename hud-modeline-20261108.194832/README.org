@@ -1,0 +1,43 @@
+#+title: hud-modeline: Modular and Lightweight Modeline Engine for Emacs
+#+author: Tycho Garen
+
+* Overview
+
+=hud-modeline= is a lightweight, modular mode-line engine for Emacs. It replaces
+heavyweight modelines with a clean, responsive layout built around functional
+segments.
+
+* Features
+
+- Clean left and right segment blocks with automatic padding and alignment.
+- First-class segment management API (=hud-modeline-add-segment=, =hud-modeline-override-segment=, =hud-modeline-toggle-segment=).
+- Interactive segment toggle using =annotated-completing-read=.
+- Optional nerd-icons support for buffer icons, modified state, and diagnostic indicators.
+- Seamless delight integration for custom major-mode lighters.
+- Customizable box styling presets (=none=, =raised=, =bordered=, =padded=).
+
+* Installation
+
+Install via [[https://github.com/tychoish/elpaish][ELPAish]]:
+
+#+begin_src elisp
+(use-package hud-modeline
+  :ensure t
+  :hook (after-init . hud-modeline-mode))
+#+end_src
+
+* Configuration
+
+#+begin_src elisp
+(use-package hud-modeline
+  :ensure t
+  :init
+  (setq hud-modeline-icons t
+        hud-modeline-show-buffer-size t)
+  :config
+  (hud-modeline-mode 1))
+#+end_src
+
+* License
+
+GPL-3.0-or-later

@@ -1,0 +1,153 @@
+#+title: clix
+#+author: sam kleinman
+#+email: sam@tychoish.com
+
+Declarative command-line options and subcommand registry for Emacs.
+
+* Table of Contents :TOC:
+:PROPERTIES:
+:CUSTOM_ID: toc
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#installation-elpaish][ELPAish (Recommended)]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+- [[#usage][Usage]]
+  - [[#defining-flags][Defining Flags]]
+  - [[#defining-subcommands][Defining Subcommands]]
+  - [[#help][Help]]
+- [[#api-reference][API Reference]]
+- [[#license][License]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=clix= provides declarative macro facilities to register command-line switches, flags, and subcommands dispatched via Emacs' =command-line-functions=:
+- Single unified macro: =register-clix-flag= (aliased as =clix-register-flag=).
+- Automatic support for both =--flag value= and =--flag=value= syntax.
+- Optional automatic argument consumption and global variable assignment.
+- Hooks integration to execute actions on specific hooks (e.g. =after-init-hook=).
+- Zero runtime dependencies outside standard Emacs core.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: installation-elpaish
+:END:
+
+Install via ELPAish with =use-package=:
+
+#+begin_src emacs-lisp
+(use-package clix
+  :ensure t)
+#+end_src
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository and add it to your Emacs =load-path=:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/clix")
+(require 'clix)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Require =clix= after package initialization in your init sequence:
+
+#+begin_src emacs-lisp
+(require 'clix)
+#+end_src
+
+* Usage
+:PROPERTIES:
+:CUSTOM_ID: usage
+:END:
+
+** Defining Flags
+:PROPERTIES:
+:CUSTOM_ID: defining-flags
+:END:
+
+Register an option that consumes an argument into a variable:
+
+#+begin_src emacs-lisp
+(register-clix-flag profile
+  :flag "--profile"
+  :doc "Set active user profile."
+  :consume t)
+;; Access via clix-arg-profile
+#+end_src
+
+** Defining Subcommands
+:PROPERTIES:
+:CUSTOM_ID: defining-subcommands
+:END:
+
+Register subcommands (flags without leading dashes) with exit on completion:
+
+#+begin_src emacs-lisp
+(register-clix-flag test
+  :flag "test"
+  :doc "Run ERT test suite and exit."
+  :consume nil
+  :hook after-init-hook
+  :action (ert-run-tests-batch-and-exit)
+  :final t)
+#+end_src
+
+** Help
+:PROPERTIES:
+:CUSTOM_ID: help
+:END:
+
+Running =emacs --clix-help= or =emacs help= prints all registered options and docstrings and exits cleanly.
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol | Type | Description |
+|---|---|---|
+| [[#register-clix-flag][register-clix-flag]] | Macro | Declarative macro registering CLI options and subcommands |
+| [[#clix-register-flag][clix-register-flag]] | Macro | Alias for =register-clix-flag= |
+| [[#clix-help][clix-help]] | Command | Print summary of all registered clix flags |
+
+** register-clix-flag
+:PROPERTIES:
+:CUSTOM_ID: register-clix-flag
+:END:
+Main registration macro accepting =:flag=, =:doc=, =:var=, =:consume=, =:handler=, =:action=, =:hook=, and =:final=.
+
+** clix-register-flag
+:PROPERTIES:
+:CUSTOM_ID: clix-register-flag
+:END:
+Package-prefixed alias for =register-clix-flag=.
+
+** clix-help
+:PROPERTIES:
+:CUSTOM_ID: clix-help
+:END:
+Interactive function printing formatted documentation of all registered options.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See LICENSE file for details.

@@ -1,0 +1,181 @@
+#+title: grepx
+#+author: sam kleinman
+#+email: sam@tychoish.com
+
+Unified grep, ripgrep, and search interface for Emacs.
+
+* Table of Contents :TOC:
+:PROPERTIES:
+:CUSTOM_ID: toc
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#installation-elpaish][ELPAish (Recommended)]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+- [[#features][Features]]
+  - [[#persistent-search-buffers][Persistent Search Buffers]]
+  - [[#live-search-and-directory-hopping][Live Search and Directory Hopping]]
+  - [[#keymaps][Keymaps]]
+  - [[#backend-registry][Backend Registry]]
+- [[#api-reference][API Reference]]
+- [[#license][License]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=grepx= consolidates multi-file grep, ripgrep, and search tooling into a cohesive, keyboard-driven interface:
+- Persistent search buffers with a compact 1-line header and direct match editing (=w=).
+- Window-safe =next-error= navigation ensuring search results remain visible while inspecting matches.
+- Live iterative search with Consult integration and quick directory navigation.
+- Pluggable backend registry prioritizing deadgrep, ripgrep compilation, standard grep, and occur.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: installation-elpaish
+:END:
+
+Install via ELPAish with =use-package=:
+
+#+begin_src emacs-lisp
+(use-package grepx
+  :ensure t)
+#+end_src
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository and add it to your Emacs =load-path=:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/grepx")
+(require 'grepx)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Enable =grepx-mode= in your configuration:
+
+#+begin_src emacs-lisp
+(use-package grepx
+  :ensure t
+  :commands (grepx-mode grepx-menu)
+  :init
+  (grepx-mode 1))
+#+end_src
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+** Persistent Search Buffers
+:PROPERTIES:
+:CUSTOM_ID: persistent-search-buffers
+:END:
+
+- Toggle compact single-line header with =?=.
+- Jump between matches with =n= / =p= while preserving dedicated source windows.
+- Enter direct match editing with =w= (=deadgrep-edit-mode=).
+
+** Live Search and Directory Hopping
+:PROPERTIES:
+:CUSTOM_ID: live-search-and-directory-hopping
+:END:
+
+- During Consult live search, press =C-l= to navigate up the directory hierarchy.
+- Press =M-d= to snapshot the live search results into a persistent buffer.
+
+** Keymaps
+:PROPERTIES:
+:CUSTOM_ID: keymaps
+:END:
+
+=grepx= provides dedicated keymaps:
+- =grepx-map= (=C-c g=)
+- =grepx-rg-map= (=C-c g r=)
+- =grepx-project-map= (=C-c g p=)
+- =grepx-search-map= (=C-c g s=)
+
+** Backend Registry
+:PROPERTIES:
+:CUSTOM_ID: backend-registry
+:END:
+
+Register and prioritize search providers via `grepx-register-backend` with automated fallback when tools are unavailable.
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol | Type | Description |
+|---|---|---|
+| [[#grepx-mode][grepx-mode]] | Minor mode | Global minor mode managing search integrations |
+| [[#grepx-menu][grepx-menu]] | Command | Annotated completing-read search menu |
+| [[#grepx-project][grepx-project]] | Command | Persistent search across project root |
+| [[#grepx-directory][grepx-directory]] | Command | Persistent search in selected directory |
+| [[#grepx-live][grepx-live]] | Command | Live ripgrep search |
+| [[#grepx-toggle-header][grepx-toggle-header]] | Command | Toggle compact header in search results buffer |
+| [[#grepx-map][grepx-map]] | Keymap | Prefix map for search commands |
+
+** grepx-mode
+:PROPERTIES:
+:CUSTOM_ID: grepx-mode
+:END:
+Global minor mode attaching advice and keybindings for search.
+
+** grepx-menu
+:PROPERTIES:
+:CUSTOM_ID: grepx-menu
+:END:
+Interactive dispatch menu displaying available search actions with annotations.
+
+** grepx-project
+:PROPERTIES:
+:CUSTOM_ID: grepx-project
+:END:
+Run persistent search scoped to current project root.
+
+** grepx-directory
+:PROPERTIES:
+:CUSTOM_ID: grepx-directory
+:END:
+Prompt for directory and run persistent search.
+
+** grepx-live
+:PROPERTIES:
+:CUSTOM_ID: grepx-live
+:END:
+Initiate live interactive ripgrep session.
+
+** grepx-toggle-header
+:PROPERTIES:
+:CUSTOM_ID: grepx-toggle-header
+:END:
+Toggle compact header display in deadgrep results buffers.
+
+** grepx-map
+:PROPERTIES:
+:CUSTOM_ID: grepx-map
+:END:
+Top-level keymap for grepx search commands.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See LICENSE file for details.
