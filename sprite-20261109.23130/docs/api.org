@@ -1,0 +1,828 @@
+#+TITLE: Sprite API Reference
+#+OPTIONS: toc:3 num:nil
+
+API documentation for the entire =sprite= package, generated from docstrings.
+
+* API Reference
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+  (require 'org-docsgen)
+  (let ((base (expand-file-name ".." default-directory)))
+    (org-docsgen-run
+     :el-files
+     (delq nil
+           (mapcar (lambda (f) (expand-file-name f base))
+                   '("sprite.el"
+                     "sprite-direct.el"
+                     "sprite-fleet.el"
+                     "sprite-future.el"
+                     "sprite-heartbeat.el"
+                     "sprite-list.el"
+                     "sprite-system.el")))
+     :scope 'exported
+     :include-kinds '(variables customs)
+     :namespace "sprite"
+     :section-style 'triple-semi
+     :link-style 'org
+     :group-by '("sprite"
+                 "sprite-direct"
+                 "sprite-fleet"
+                 "sprite-future"
+                 "sprite-heartbeat"
+                 "sprite-list"
+                 "sprite-system")))
+#+END_SRC
+
+#+RESULTS:
+** sprite
+
+*** [[file:../sprite.el::40][server-use-tcp]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: server-use-tcp
+:END:
+
+If non-nil, use TCP sockets instead of local sockets.
+
+*** [[file:../sprite.el::41][server-socket-dir]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: server-socket-dir
+:END:
+
+The directory in which to place the server socket. If local sockets are not supported, this is nil.
+
+*** [[file:../sprite.el::51][sprite-instance-id]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-instance-id
+:END:
+
+Name of the running Emacs instance. Set by ‘sprite-set-up-instance-name’ at startup.
+
+*** [[file:../sprite.el::58][sprite-cli-instance-id]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-cli-instance-id
+:END:
+
+CLI-specified instance name; set from --id command-line arguments.
+
+*** [[file:../sprite.el::61][sprite-resolve-instance-id]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-resolve-instance-id
+:END:
+
+Return the current Emacs instance ID. Resolution order: daemon name, ~sprite-cli-instance-id~, ~sprite-instance-id~, then "solo".
+
+*** [[file:../sprite.el::77][sprite-instance-name]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-instance-name
+:END:
+
+Return the current Emacs instance name, initialising it if needed. Caches the result in ~sprite-instance-id~.  This is the preferred public accessor; call ~sprite-resolve-instance-id~ only when the raw resolution chain must be re-evaluated.
+
+*** TODO [[file:../sprite.el::86][sprite-system-name]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-name
+:END:
+
+*no docstring*
+
+*** [[file:../sprite.el::89][sprite-conf-host-and-instance]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-conf-host-and-instance
+:END:
+
+Return (HOSTNAME INSTANCE-ID) for state-path construction.
+
+*** [[file:../sprite.el::96][sprite-state-file-prefix]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-state-file-prefix
+:END:
+
+: (fn NAME)
+
+Return the instance-scoped filename prefix for /NAME/. Produces HOSTNAME-INSTANCE-/NAME/[-USERNAME] where USERNAME is included only when running as root or under a symlinked ~user-emacs-directory~.
+
+*** [[file:../sprite.el::112][sprite-state-path]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-state-path
+:END:
+
+: (fn NAME)
+
+Return full state-directory path for /NAME/, scoped to host and instance.
+
+*** [[file:../sprite.el::176][sprite-state-directory]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-state-directory
+:END:
+
+: (fn &key FULL-NAME)
+
+Return state directory for sprite /FULL-NAME/, or sprite root if nil.
+
+*** [[file:../sprite.el::183][sprite-conf-state-path]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-conf-state-path
+:END:
+
+: (fn NAME &key FULL-NAME)
+
+Return path for /NAME/ within /FULL-NAME/’s state directory. If /FULL-NAME/ is nil, returns path under the sprite root.
+
+*** [[file:../sprite.el::190][sprite-startup-operations]] :option:
+:PROPERTIES:
+:CUSTOM_ID: sprite-startup-operations
+:END:
+
+List of operations run in sequence during startup.
+
+*** [[file:../sprite.el::196][sprite-first-frame-operations]] :option:
+:PROPERTIES:
+:CUSTOM_ID: sprite-first-frame-operations
+:END:
+
+List of operations run after the first frame is created.
+
+*** [[file:../sprite.el::202][sprite-slow-op-reporting]] :option:
+:PROPERTIES:
+:CUSTOM_ID: sprite-slow-op-reporting
+:END:
+
+When non-nil, log timing statistics for startup operations.
+
+*** [[file:../sprite.el::208][sprite-slow-op-threshold]] :option:
+:PROPERTIES:
+:CUSTOM_ID: sprite-slow-op-threshold
+:END:
+
+Threshold in seconds for logging startup operation durations.
+
+*** [[file:../sprite.el::214][with-sprite-slow-op-timer]]
+:PROPERTIES:
+:CUSTOM_ID: with-sprite-slow-op-timer
+:END:
+
+: (fn NAME &rest BODY)
+
+Execute /BODY/, logging duration for /NAME/ when reporting is enabled. Reporting is enabled when ~sprite-slow-op-reporting~ or ~init-file-debug~ is non-nil, and logged if duration exceeds ~sprite-slow-op-threshold~.
+
+** sprite-batch
+
+*** [[file:../sprite-batch.el::51][sprite-run-batch]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-run-batch
+:END:
+
+: (fn &key OPERATIONS OPS (DELAY 0.1) RUN-AFTER INITIAL-DELAY ARGS ARGLIST ON-DONE FRAME BUFFER (LOG-PREFIX "[run]"))
+
+Run /OPERATIONS/ (or /OPS/) in order, yielding between each in interactive sessions. /OPERATIONS/ may be a list of functions, a single function, or a symbol whose value is a list of functions (such as a hook). Supported keyword arguments: :operations or :ops, :run-after or :initial-delay SECONDS (defaults to :delay), :delay SECONDS (defaults to 0.1), :args or :arglist LIST or ATOM (arguments passed to non-nilary operations), :on-done FUNCTION, :frame FRAME, :buffer BUFFER (`temp' executes in `with-temp-buffer', a buffer object or string name executes in `with-current-buffer'), :log-prefix STRING (defaults to "[run]"). In noninteractive (batch) sessions, runs all operations synchronously. Return a cancellation function.
+
+*** [[file:../sprite-batch.el::117][sprite-batch-startup]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-batch-startup
+:END:
+
+: (fn &optional OPERATIONS &rest ARGS)
+
+Run startup /OPERATIONS/ in order, yielding between each in interactive sessions. /OPERATIONS/ defaults to ~sprite-startup-operations~. Supported /ARGS/ keyword arguments include :delay SECONDS (defaults to 0.1), :run-after or :initial-delay SECONDS, :on-done FUNCTION, :frame FRAME, :buffer BUFFER. Specialized case of ~sprite-run-batch~ with default args ~'(1)~ and log prefix ~"[startup]"~.
+
+** sprite-direct
+
+**** [[file:../sprite-direct.el::73][server-socket-dir]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: server-socket-dir
+:END:
+
+The directory in which to place the server socket. If local sockets are not supported, this is nil.
+
+**** [[file:../sprite-direct.el::74][server-auth-dir]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: server-auth-dir
+:END:
+
+Directory for server authentication files. We only use this if ~server-use-tcp~ is non-nil. Otherwise we use ~server-socket-dir~.
+
+NOTE: On FAT32 filesystems, directories are not secure; files can be read and modified by any user or process. It is strongly suggested to set ~server-auth-dir~ to a directory residing in a NTFS partition instead.
+
+**** [[file:../sprite-direct.el::78][sprite-direct-blocking-timeout]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-blocking-timeout
+:END:
+
+Seconds to wait in blocking receives, or nil to block indefinitely. Dynamically override per call-site with ~let~ to impose a local limit.
+
+**** [[file:../sprite-direct.el::82][sprite-direct-yield-interval]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-yield-interval
+:END:
+
+Seconds passed to ~accept-process-output~ between generator yields. Smaller values increase responsiveness at the cost of CPU spin.
+
+**** [[file:../sprite-direct.el::86][sprite-direct-async-check-interval]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-async-check-interval
+:END:
+
+Seconds between event polls in ~sprite-direct-promise-wait~.
+
+*** Network Process
+
+**** [[file:../sprite-direct.el::247][sprite-direct-open]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-open
+:END:
+
+: (fn TARGET)
+
+Return a ‘sprite-direct-conn’ for /TARGET/. /TARGET/ is a Unix socket name (e.g. "work.0.render") or HOST:PORT:KEY. For TCP targets an auth key is required and ~user-error~ is signalled when none is found.  For Unix sockets the auth key is optional: Emacs 29+ authenticates local connections via peer UID, so no cookie file is written.
+
+**** [[file:../sprite-direct.el::259][with-sprite-direct]]
+:PROPERTIES:
+:CUSTOM_ID: with-sprite-direct
+:END:
+
+: (fn (VAR TARGET) &rest BODY)
+
+Bind VAR to a connection context for TARGET and evaluate /BODY/. Each operation in /BODY/ opens a transient socket as needed. TARGET is evaluated once; the conn is created by ~sprite-direct-open~.
+
+**** [[file:../sprite-direct.el::323][sprite-direct-eval-blocking]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-eval-blocking
+:END:
+
+: (fn CONN FORM &key TIMEOUT)
+
+Evaluate /FORM/ in the sprite via /CONN/; return the Lisp value. Opens a transient socket, sends the form, and blocks using the generator receive loop.  /TIMEOUT/ overrides ~sprite-direct-blocking-timeout~. Returns nil on connection failure or server error.
+
+**** [[file:../sprite-direct.el::345][sprite-direct-call-and-read]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-call-and-read
+:END:
+
+: (fn TARGET FORM &key TIMEOUT)
+
+Evaluate /FORM/ in the Emacs server at /TARGET/; return the read Lisp value. Drop-in replacement for ~sprite--call-and-read~ in sprite.el. /TARGET/ is a Unix socket name or HOST:PORT:KEY TCP string. /TIMEOUT/ is passed to ~sprite-direct-eval-blocking~. Returns nil on connection failure, missing auth key, or server error.
+
+**** [[file:../sprite-direct.el::399][sprite-direct-eval-non-blocking]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-eval-non-blocking
+:END:
+
+: (fn CONN FORM &key RESULT-BUFFER)
+
+Evaluate /FORM/ in /CONN/ asynchronously; return a ‘sprite-direct-promise’. The promise resolves when the server closes the connection (via sentinel). /RESULT-BUFFER/ is an optional buffer name; when the promise resolves, the result is appended to it as a ~prin1~ line.  Returns the promise immediately. If the connection cannot be opened, the promise is in :rejected state.
+
+**** [[file:../sprite-direct.el::423][sprite-direct-promise-pending-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-promise-pending-p
+:END:
+
+: (fn PROMISE)
+
+Return t when /PROMISE/ has not yet resolved or been rejected.
+
+**** [[file:../sprite-direct.el::427][sprite-direct-promise-resolved-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-promise-resolved-p
+:END:
+
+: (fn PROMISE)
+
+Return t when /PROMISE/ resolved successfully.
+
+**** [[file:../sprite-direct.el::431][sprite-direct-promise-rejected-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-promise-rejected-p
+:END:
+
+: (fn PROMISE)
+
+Return t when /PROMISE/ failed. Either the connection could not be opened, or it closed without ever producing a ‘-print’/‘-error’ response line.
+
+**** [[file:../sprite-direct.el::437][sprite-direct-promise-wait]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-promise-wait
+:END:
+
+: (fn PROMISE &key TIMEOUT)
+
+Block until /PROMISE/ resolves; return its value or nil on timeout/rejection. Drives process output while waiting.  /TIMEOUT/ overrides ~sprite-direct-blocking-timeout~; nil means wait indefinitely.
+
+**** [[file:../sprite-direct.el::449][sprite-direct-promise-then]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-promise-then
+:END:
+
+: (fn PROMISE CALLBACK)
+
+Arrange for /CALLBACK/ to run once /PROMISE/ leaves its ~:pending~ state. Unlike ~sprite-direct-promise-wait~, this does not block: it polls /PROMISE/ on a repeating timer (~sprite-direct-async-check-interval~) and cancels itself the first time ~sprite-direct-promise-pending-p~ is nil, at which point it calls /CALLBACK/ with two arguments, STATE (~:resolved~ or ~:rejected~) and VALUE (~sprite-direct-promise-value~, nil when rejected). The promise’s own sentinel still does the actual work of receiving the result; this only supplies the missing "notify me when done" callback on top of the pending/resolved/rejected state it already exposes.  Returns the timer, so the caller can ~cancel-timer~ it to abandon the callback.
+
+**** [[file:../sprite-direct.el::472][sprite-direct-list-buffers]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-list-buffers
+:END:
+
+: (fn CONN)
+
+Return a list of buffer names in the sprite via /CONN/.
+
+**** [[file:../sprite-direct.el::476][sprite-direct-insert-into-buffer]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-insert-into-buffer
+:END:
+
+: (fn CONN BUF-NAME TEXT &key POSITION)
+
+Insert /TEXT/ into /BUF-NAME/ in the sprite via /CONN/. When /POSITION/ is non-nil, go there first; otherwise insert at ~point-max~.
+
+**** [[file:../sprite-direct.el::486][sprite-direct-with-current-buffer]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-with-current-buffer
+:END:
+
+: (fn (CONN BUF-NAME) &rest BODY)
+
+Evaluate /BODY/ forms in the sprite via CONN with BUF-NAME current. /BODY/ is literal Emacs Lisp sent verbatim to the sprite; local variables are not in scope.  The result of the last /BODY/ form is returned.
+
+**** [[file:../sprite-direct.el::499][sprite-direct-read-buffer]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-read-buffer
+:END:
+
+: (fn CONN BUF-NAME &key START END)
+
+Return the contents of /BUF-NAME/ in the sprite via /CONN/. /START/ and /END/ are buffer positions (defaults: ~point-min~ and ~point-max~). Returns a string, or nil on failure.
+
+**** [[file:../sprite-direct.el::510][sprite-direct-value-of-symbol]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-value-of-symbol
+:END:
+
+: (fn CONN SYMBOL)
+
+Return the value of /SYMBOL/ in the sprite via /CONN/. Evaluates ‘(symbol-value 'SYMBOL)’ in the sprite; returns nil on failure.
+
+*** Tcp Server File Utility
+
+**** [[file:../sprite-direct.el::517][sprite-direct-read-tcp-server-file]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-direct-read-tcp-server-file
+:END:
+
+: (fn PATH)
+
+Read the TCP server file at /PATH/; return its HOST:PORT:KEY string. Returns nil when /PATH/ is absent or unreadable.
+
+** sprite-fleet
+
+*** Predicates
+
+**** [[file:../sprite-fleet.el::82][sprite-fleet-running-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-running-p
+:END:
+
+Return non-nil if HANDLE is actively running.
+
+**** [[file:../sprite-fleet.el::86][sprite-fleet-paused-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-paused-p
+:END:
+
+Return non-nil if HANDLE is paused.
+
+**** [[file:../sprite-fleet.el::90][sprite-fleet-canceled-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-canceled-p
+:END:
+
+Return non-nil if HANDLE was canceled.
+
+**** [[file:../sprite-fleet.el::94][sprite-fleet-completed-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-completed-p
+:END:
+
+Return non-nil if HANDLE finished execution.
+
+**** [[file:../sprite-fleet.el::98][sprite-fleet-progress]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-progress
+:END:
+
+Return (COMPLETED . TOTAL) for HANDLE. TOTAL may be nil if input sequence was a lazy iterator of unknown size.
+
+**** [[file:../sprite-fleet.el::104][sprite-future-fleet-handle]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-fleet-handle
+:END:
+
+Return the ‘sprite-fleet-handle’ associated with FUTURE, if any.
+
+*** Helper Utilities
+
+**** [[file:../sprite-fleet.el::322][sprite-fleet-cancel]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-cancel
+:END:
+
+Cancel in-flight fleet execution for TARGET (handle or future). Aborts scheduled timers, severs client sockets / kills processes for all active worker futures, and settles the overall future as rejected with (cons :canceled (or REASON :user-cancel)).
+
+**** [[file:../sprite-fleet.el::347][sprite-fleet-pause]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-pause
+:END:
+
+Pause dispatching new items for HANDLE. In-flight worker futures continue to run and collect results, but freed targets will not be dispatched to until resumed.
+
+**** [[file:../sprite-fleet.el::358][sprite-fleet-resume]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-resume
+:END:
+
+Resume dispatching items for paused HANDLE.
+
+**** [[file:../sprite-fleet.el::365][sprite-fleet-wait]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-wait
+:END:
+
+Block until TARGET (handle or future) settles; return results or nil. TIMEOUT overrides ~sprite-direct-blocking-timeout~.
+
+**** [[file:../sprite-fleet.el::376][sprite-fleet-pool]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-pool
+:END:
+
+: (fn FN-OR-FORM ITEMS &key FLEET-SIZE SPRITES (DELAY 0.0) (ORDER 'preserve) (ERROR-POLICY :collect-nil) ON-ITEM ON-DONE)
+
+Create and start a ‘sprite-fleet-handle’ executing /FN-OR-FORM/ over /ITEMS/. /FLEET-SIZE/ is the maximum number of concurrent sprites. /SPRITES/ is a list of sprite structs or target name strings. DELAY is the yielding delay in seconds between dispatches (default 0.0). ORDER specifies result ordering: ‘preserve’ (default), ‘fifo’, ‘lifo’, or ‘unordered’. ERROR-POLICY specifies failure behavior: ~:collect-nil~ (default), ~:collect-error~, or ~:abort~. /ON-ITEM/ is an optional callback (lambda (item result idx)). /ON-DONE/ is an optional callback (lambda (results)).
+
+Returns a ‘sprite-fleet-handle’.
+
+**** [[file:../sprite-fleet.el::444][sprite-fleet-map]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-map
+:END:
+
+: (fn FN-OR-FORM ITEMS &key FLEET-SIZE SPRITES (DELAY 0.0) (ORDER 'preserve) (ERROR-POLICY :collect-nil) ON-ITEM ON-DONE WAIT TIMEOUT (ASYNC t))
+
+Evaluate /FN-OR-FORM/ over /ITEMS/ across a fleet of sprites. By default returns a ‘sprite-future’ that resolves to the ordered results. The future’s controller is accessible via ~sprite-future-fleet-handle~.
+
+If /WAIT/ is non-nil (or ASYNC is nil), blocks until complete and returns the results.
+
+**** [[file:../sprite-fleet.el::469][sprite-fleet-each]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-each
+:END:
+
+: (fn FN-OR-FORM ITEMS &key FLEET-SIZE SPRITES (DELAY 0.0) (ERROR-POLICY :collect-nil) ON-ITEM ON-DONE)
+
+Stream evaluation of /FN-OR-FORM/ over /ITEMS/ across a fleet of sprites. Returns the controller ‘sprite-fleet-handle’ immediately for flow control (~sprite-fleet-pause~, ~sprite-fleet-resume~, ~sprite-fleet-cancel~). Results are streamed to /ON-ITEM/ as each worker completes.
+
+**** [[file:../sprite-fleet.el::488][sprite-fleet-mapcar]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-mapcar
+:END:
+
+: (fn FN-OR-FORM ITEMS &key FLEET-SIZE SPRITES TIMEOUT ASYNC (DELAY 0.0) (ORDER 'preserve) (ERROR-POLICY :collect-nil) ON-ITEM ON-DONE)
+
+Evaluate /FN-OR-FORM/ for each item in /ITEMS/ using a fleet of sprites. Mirrors ~mapcar~ across the daemon fleet.
+
+Preserves backward compatibility: defaults to synchronous execution blocking until all results settle unless /ASYNC/ is non-nil. Delegates to ~sprite-fleet-pool~ and the yielding stepper engine.
+
+**** [[file:../sprite-fleet.el::514][sprite-fleet-mapcar-sprites]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-mapcar-sprites
+:END:
+
+: (fn FORM SPRITES &key TIMEOUT)
+
+Evaluate /FORM/ in each of /SPRITES/ concurrently; return results in order. Mirrors ~mapcar~: one result per input, order preserved.  A sprite that times out or rejects contributes nil at its position.  /SPRITES/ is a list of ‘sprite’ structs, e.g. from ~sprite-resolve-list~.
+
+**** [[file:../sprite-fleet.el::523][sprite-fleet-mapc]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-mapc
+:END:
+
+Evaluate FORM in each of SPRITES concurrently; discard results. Mirrors ~mapc~: dispatches to every sprite and returns SPRITES immediately without waiting for any of them to settle.  SPRITES is a list of ‘sprite’ structs, e.g. from ~sprite-resolve-list~.
+
+**** [[file:../sprite-fleet.el::531][sprite-fleet-let]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-fleet-let
+:END:
+
+: (fn BINDINGS &rest BODY)
+
+Like ~let~, but each binding’s value comes from a concurrent sprite eval. Each element of /BINDINGS/ is (VAR SPRITE FORM): SPRITE is an expression evaluated to a sprite full-name string, FORM is unquoted and evaluated remotely (quoted automatically, as with ~with-sprite~).  All FORMs are dispatched in parallel; /BODY/ runs once every binding has settled, with VAR bound to its resolved value.
+
+** sprite-future
+
+*** [[file:../sprite-future.el::62][sprite-future-pending-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-pending-p
+:END:
+
+: (fn FUTURE)
+
+Return t when /FUTURE/ has not yet resolved or been rejected.
+
+*** [[file:../sprite-future.el::66][sprite-future-resolved-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-resolved-p
+:END:
+
+: (fn FUTURE)
+
+Return t when /FUTURE/ resolved successfully.
+
+*** [[file:../sprite-future.el::70][sprite-future-rejected-p]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-rejected-p
+:END:
+
+: (fn FUTURE)
+
+Return t when /FUTURE/ failed. For the ‘direct’ backend this delegates to ~sprite-direct-promise-rejected-p~ via the promise sentinel; for ‘emacsclient’ it reflects a non-zero exit code from the ‘emacsclient’ process.
+
+*** [[file:../sprite-future.el::116][sprite-future-then]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-then
+:END:
+
+: (fn FUTURE ON-RESOLVE &optional ON-REJECT)
+
+Chain /ON-RESOLVE/ (and optionally /ON-REJECT/) onto /FUTURE/. Returns a new ‘sprite-future’ that settles once /FUTURE/ does: /ON-RESOLVE/ runs (and its return value resolves the new future) if /FUTURE/ resolves; /ON-REJECT/ runs if /FUTURE/ rejects.  Whichever callback is omitted passes /FUTURE/’s own state/value through unchanged.  If /FUTURE/ has already settled, the callback runs immediately and the new future settles synchronously; otherwise it runs later, when /FUTURE/ settles.
+
+*** [[file:../sprite-future.el::148][sprite-future-wait]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-wait
+:END:
+
+: (fn FUTURE &key TIMEOUT)
+
+Block until /FUTURE/ settles; return its value or nil on timeout/rejection. Drives process output while waiting, mirroring ~sprite-direct-promise-wait~. /TIMEOUT/ overrides ~sprite-direct-blocking-timeout~; nil waits indefinitely.
+
+*** [[file:../sprite-future.el::161][sprite-future-cancel]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-cancel
+:END:
+
+: (fn FUTURE &optional REASON)
+
+Cancel /FUTURE/ if pending, severing its underlying process/socket. Transitions /FUTURE/ to :rejected with (cons :canceled (or reason :user-cancel)). Returns t if cancelled, nil if already settled.
+
+*** [[file:../sprite-future.el::227][sprite-future-eval]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-eval
+:END:
+
+: (fn TARGET FORM)
+
+Evaluate /FORM/ in sprite /TARGET/ asynchronously; return a ‘sprite-future’. Dispatches on ~sprite-communication-backend~, the same way ~sprite--call-and-read~ does for the synchronous API.
+
+*** TODO [[file:../sprite-future.el::257][with-sprite-async]]
+:PROPERTIES:
+:CUSTOM_ID: with-sprite-async
+:END:
+
+*no docstring*
+
+*** TODO [[file:../sprite-future.el::281][sprite-future-rejected]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-rejected
+:END:
+
+*no docstring*
+
+*** [[file:../sprite-future.el::288][sprite-future-async-defun]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-async-defun
+:END:
+
+: (fn NAME ARGLIST &rest BODY)
+
+Define /NAME/ as an async sprite workflow. Inside /BODY/, ~sprite-future-await~ suspends until a future settles, without blocking the parent Emacs event loop.  Calling /NAME/ returns immediately with a ‘sprite-future’ for the workflow’s overall result.
+
+*** [[file:../sprite-future.el::301][sprite-future-await]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-future-await
+:END:
+
+: (fn FUTURE)
+
+Inside a ~sprite-future-async-defun~ body, suspend until /FUTURE/ settles. Resumes with /FUTURE/’s resolved value when it resolves.  When /FUTURE/ rejects, signals ‘sprite-future-rejected’ with the rejection value at this point, so a ~condition-case~ wrapping ~sprite-future-await~ can catch it.
+
+** sprite-heartbeat
+
+*** [[file:../sprite-heartbeat.el::32][sprite-heartbeat-defhandler]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-heartbeat-defhandler
+:END:
+
+Define a function NAME callable by sprites. ARGS must begin with a symbol that receives the calling sprite’s full name; ‘last-contact’ is updated for that sprite before BODY runs.
+
+Example: (sprite-heartbeat-defhandler handle-status (caller status) (message "%s reported: %s" caller status))
+
+*** [[file:../sprite-heartbeat.el::49][sprite-heartbeat-parent-socket-name]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-heartbeat-parent-socket-name
+:END:
+
+Return the socket name of this sprite’s parent instance. Derived from the leading component of ~sprite-instance-name~. Falls back to the instance name itself when called on the root instance.
+
+*** [[file:../sprite-heartbeat.el::57][sprite-heartbeat-send]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-heartbeat-send
+:END:
+
+Evaluate FORM in the parent instance, tagging this sprite as the sender. The parent records a heartbeat for this sprite before evaluating FORM. Returns the result of FORM as read from the parent.
+
+** sprite-list
+
+*** [[file:../sprite-list.el::99][sprite-list-mode-map]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-mode-map
+:END:
+
+Keymap for ~sprite-list-mode~.
+
+*** [[file:../sprite-list.el::116][sprite-list-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-mode
+:END:
+
+Major mode for viewing and managing sprite daemons.
+
+Key             Binding
+
+TAB		forward-button SPC		scroll-up-command -		negative-argument 0 .. 9		digit-argument <		beginning-of-buffer >		end-of-buffer ?		sprite-list-menu S		tabulated-list-sort c		sprite-list-create d		sprite-list-decommission f		sprite-list-open-frame g		sprite-list-refresh h		describe-mode i		sprite-list-info m		sprite-list-menu n		next-line o		sprite-list-open-log p		sprite-list-check q		quit-window r		sprite-list-restart s		sprite-list-stop {		tabulated-list-narrow-current-column }		tabulated-list-widen-current-column DEL		scroll-down-command S-SPC		scroll-down-command M-<left>	tabulated-list-previous-column M-<right>	tabulated-list-next-column <backtab>	backward-button <follow-link>	mouse-face <mouse-2>	mouse-select-window
+
+C-M-i		backward-button
+
+In addition to any hooks its parent mode ~tabulated-list-mode~ might have run, this mode runs the hook ~sprite-list-mode-hook~, as the final or penultimate step during initialization.
+
+*** [[file:../sprite-list.el::132][sprite-list-refresh]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-refresh
+:END:
+
+Refresh the sprite overview buffer.
+
+*** [[file:../sprite-list.el::147][sprite-list-info-map]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-info-map
+:END:
+
+Keymap for sprite info help buffers. Add context-specific bindings here.
+
+*** [[file:../sprite-list.el::161][sprite-list-info]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-info
+:END:
+
+Show a help-window detail buffer for the sprite at point.
+
+*** [[file:../sprite-list.el::191][sprite-list]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list
+:END:
+
+Open the sprite overview buffer.
+
+*** [[file:../sprite-list.el::230][sprite-list-create]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-create
+:END:
+
+Create a new sprite from the overview buffer.
+
+*** [[file:../sprite-list.el::236][sprite-list-decommission]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-decommission
+:END:
+
+Decommission the sprite at point.
+
+*** [[file:../sprite-list.el::244][sprite-list-restart]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-restart
+:END:
+
+Restart the sprite at point.
+
+*** [[file:../sprite-list.el::250][sprite-list-stop]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-stop
+:END:
+
+Stop the sprite at point.
+
+*** [[file:../sprite-list.el::256][sprite-list-open-log]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-open-log
+:END:
+
+Open the communication log for the sprite at point.
+
+*** [[file:../sprite-list.el::261][sprite-list-check]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-check
+:END:
+
+Verify whether the sprite at point is reachable via emacsclient. Updates the sprite’s running status and refreshes the list.
+
+*** [[file:../sprite-list.el::272][sprite-list-open-frame]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-open-frame
+:END:
+
+Open a new Emacs frame connected to the sprite at point.
+
+*** [[file:../sprite-list.el::278][sprite-list-menu]] :command:
+:PROPERTIES:
+:CUSTOM_ID: sprite-list-menu
+:END:
+
+Actions for the sprite overview buffer.
+
+** sprite-system
+
+*** [[file:../sprite-system.el::26][sprite-system-idle-timeout]] :option:
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-idle-timeout
+:END:
+
+Seconds of Emacs idle before ~sprite-system-idle-hook~ fires.
+
+*** [[file:../sprite-system.el::31][sprite-system-idle-hook]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-idle-hook
+:END:
+
+Hook run when Emacs has been idle for ~sprite-system-idle-timeout~ seconds. Each function is called with no arguments.
+
+*** [[file:../sprite-system.el::38][sprite-system-start-idle-timer]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-start-idle-timer
+:END:
+
+Start a repeating idle timer that runs ~sprite-system-idle-hook~. Cancels any existing timer first.
+
+*** [[file:../sprite-system.el::46][sprite-system-stop-idle-timer]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-stop-idle-timer
+:END:
+
+Cancel the idle timer.
+
+*** [[file:../sprite-system.el::52][sprite-system-sync-idle-timer]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-sync-idle-timer
+:END:
+
+Start or stop the idle timer to match ~sprite-system-idle-hook~ membership. Starts the timer when the hook is non-nil; stops it when empty. Always logs: sprite-system: idle timer <running|stopped> (<N> registered ops)
+
+*** [[file:../sprite-system.el::67][sprite-system-add-on-idle]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-add-on-idle
+:END:
+
+: (fn FN)
+
+Add /FN/ to ~sprite-system-idle-hook~ and start the timer if needed. Logs the registration and delegates to ~sprite-system-sync-idle-timer~.
+
+*** [[file:../sprite-system.el::76][sprite-system-remove-on-idle]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-remove-on-idle
+:END:
+
+: (fn FN)
+
+Remove /FN/ from ~sprite-system-idle-hook~ and maybe stop timer. Logs deregistration and delegates to ~sprite-system-sync-idle-timer~.
+
+*** [[file:../sprite-system.el::88][sprite-system-before-sleep-hook]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-before-sleep-hook
+:END:
+
+Hook run before the system suspends or hibernates. Each function is called with no arguments.  Only fires on Linux systems with DBus support and systemd-logind.
+
+*** [[file:../sprite-system.el::93][sprite-system-after-sleep-hook]] :variable:
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-after-sleep-hook
+:END:
+
+Hook run when the system resumes from suspend or hibernate. Each function is called with no arguments.  Only fires on Linux systems with DBus support and systemd-logind.
+
+*** [[file:../sprite-system.el::117][sprite-system-start-logind-watch]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-start-logind-watch
+:END:
+
+Register DBus signals to run sleep/wake/lock/screensaver hooks. Cancels any existing registrations first to prevent duplicates.
+
+*** [[file:../sprite-system.el::165][sprite-system-stop-logind-watch]]
+:PROPERTIES:
+:CUSTOM_ID: sprite-system-stop-logind-watch
+:END:
+
+Unregister the logind PrepareForSleep DBus signal and other signals.
