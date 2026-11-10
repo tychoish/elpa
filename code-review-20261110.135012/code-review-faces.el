@@ -1,0 +1,235 @@
+;;; code-review-faces.el --- Define faces used in the package -*- lexical-binding: t; -*-
+;;
+;; Copyright (C) 2021 Wanderson Ferreira
+;;
+;; Author: Wanderson Ferreira <https://github.com/wandersoncferreira>
+;; Maintainer: Wanderson Ferreira <wand@hey.com>
+;; Version: 0.0.7
+;; Homepage: https://github.com/wandersoncferreira/code-review-faces
+;;
+;; This file is not part of GNU Emacs.
+
+;; This file is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; For a full copy of the GNU General Public License
+;; see <http://www.gnu.org/licenses/>.
+
+;;; Commentary:
+;;
+;;  Define faces used in the package
+;;
+;;; Code:
+
+(defface code-review-timestamp-face
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "DimGrey"
+     :slant italic)
+    (((class color) (background  dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "DimGrey"
+     :slant italic))
+  "Face for timestamps."
+  :group 'code-review)
+
+(defface code-review-diff-tag-face
+  `((((class color) (background light))
+     :inherit font-lock-builtin-face
+     :weight bold)
+    (((class color) (background  dark))
+     :inherit font-lock-builtin-face
+     :weight bold))
+  "Face for file classification tags like [DOC] or [WS-ONLY]."
+  :group 'code-review)
+
+(defface code-review-thread-face
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "SlateGrey"
+     :weight bold)
+    (((class color) (background  dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "SlateGrey"
+     :weight bold))
+  "Face for threads."
+  :group 'code-review)
+
+(defface code-review-state-face
+  '((t :inherit bold))
+  "Face used for default state keywords."
+  :group 'code-review)
+
+(defface code-review-checker-name-face
+  '((t :inherit bold :slant italic))
+  "Face used for commit check name."
+  :group 'code-review)
+
+(defface code-review-checker-detail-face
+  '((t :inherit magit-section-heading
+       :slant italic
+       :weight normal))
+  "Face for details word."
+  :group 'code-review)
+
+(defface code-review-author-face
+  '((t :inherit font-lock-keyword-face))
+  "Face used for author names."
+  :group 'code-review)
+
+(defface code-review-url-header-face
+  '((t :inherit font-lock-keyword-face
+       :slant italic
+       :underline t))
+  "Face used for PR url in the header."
+  :group 'code-review)
+
+(defface code-review-author-header-face
+  '((t :inherit font-lock-keyword-face
+       :slant italic
+       :underline t))
+  "Face used for author name in the header."
+  :group 'code-review)
+
+(defface code-review-error-state-face
+  '((t :inherit font-lock-warning-face :weight bold))
+  "Face used for error state (e.g. changes requested)."
+  :group 'code-review)
+
+(defface code-review-success-state-face
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "Green")
+    (((class color) (background  dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "Green"))
+  "Face used for success state (e.g. merged)."
+  :group 'code-review)
+
+(defface code-review-info-state-face
+  '((t :slant italic))
+  "Face used for info (unimportant) state (e.g. resolved)."
+  :group 'code-review)
+
+(defface code-review-pending-state-face
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "yellow4")
+    (((class color) (background  dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "DarkKhaki"))
+  "Face used for pending state."
+  :group 'code-review)
+
+(defface code-review-request-review-face
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "yellow4"
+     :slant italic
+     :underline t)
+    (((class color) (background  dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :foreground "DarkKhaki"
+     :slant italic
+     :underline t))
+  "Face used for pending state."
+  :group 'code-review)
+
+(defface code-review-recent-comment-heading
+  '((((supports (:box t))) :inherit magit-branch-remote :box t)
+    (t                     :inherit magit-branch-remote :inverse-video t))
+  "Face for recent comments."
+  :group 'code-review)
+
+(defface code-review-outdated-comment-heading
+  '((((supports (:box t))) :inherit magit-cherry-equivalent :box t)
+    (t                     :inherit magit-cherry-equivalent :inverse-video t))
+  "Face for outdated comments."
+  :group 'code-review)
+
+;; Background faces for comment bodies by author type
+(defface code-review-comment-self-bg
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :background "light cyan")
+    (((class color) (background dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :background nil))
+  "Background face for comments authored by the current user."
+  :group 'code-review)
+
+(defface code-review-comment-author-bg
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :background "#eaf6ff") ; light sky-blue like
+    (((class color) (background dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :background "#233040"))
+  "Background face for comments authored by the PR author."
+  :group 'code-review)
+
+(defface code-review-comment-other-bg
+  `((((class color) (background light))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :background "#fffbe5") ; light yellow
+    (((class color) (background dark))
+     ,@(and (>= emacs-major-version 27) '(:extend t))
+     :background "#2b2b20"))
+  "Background face for comments authored by other reviewers."
+  :group 'code-review)
+
+(defface code-review-dimmed
+  '((((class color) (background light))
+     :foreground "grey50"
+     :slant italic
+     :underline t)
+    (((class color) (background  dark))
+     :foreground "grey50"
+     :slant italic
+     :underline t))
+  "Face for text that shouldn't stand out."
+  :group 'magit-faces)
+
+;; Face used for hover interactions in Code Review buffers without
+;; adding a background that would obscure diff colors.
+(defface code-review-hover-face
+  '((((class color)) :underline t))
+  "Mouse hover face with no background."
+  :group 'code-review)
+
+;; Fringe marker for diff lines that carry a review thread (phase 9).
+;; Uses the same violet family as `code-review-constant-face' so
+;; "there is a conversation here" reads as one visual language.
+(defface code-review-fringe-comment-face
+  '((((class color) (background light))
+     :foreground "dark violet")
+    (((class color) (background dark))
+     :foreground "MediumPurple1"))
+  "Face for fringe markers flagging diff lines with review threads."
+  :group 'code-review)
+
+;; Phase 15: delicacy badge on hunk headings.  A warning-family
+;; foreground, no background, so it never obscures the diff colors
+;; (the hunk heading line itself carries no +/- faces).
+(defface code-review-delicate-hunk-face
+  '((((class color) (background light))
+     :inherit font-lock-warning-face)
+    (((class color) (background dark))
+     :inherit font-lock-warning-face))
+  "Face for the risk badge on delicate hunk headings (phase 15)."
+  :group 'code-review)
+
+(defface code-review-topic-label-face
+  '((t (:box (:line-width (-1 . -1) :style nil))))
+  "Face used for PR topic labels in the header."
+  :group 'code-review)
+
+(provide 'code-review-faces)
+;;; code-review-faces.el ends here

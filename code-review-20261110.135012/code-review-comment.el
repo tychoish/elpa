@@ -1,0 +1,778 @@
+;;; code-review-comment.el --- Manage comments -*- lexical-binding: t; -*-
+;;
+;; Copyright (C) 2021 Wanderson Ferreira
+;;
+;; Author: Wanderson Ferreira <https://github.com/wandersoncferreira>
+;; Maintainer: Wanderson Ferreira <wand@hey.com>
+;; Version: 0.0.7
+;; Homepage: https://github.com/wandersoncferreira/code-review
+;;
+;; This file is not part of GNU Emacs.
+;;
+;; This file is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; For a full copy of the GNU General Public License
+;; see <http://www.gnu.org/licenses/>.
+;;
+;;; Commentary:
+;;
+;;  This library implements support functions to manage code review comments.
+;;
+;;; Code:
+
+(require 'code-review-section)
+(require 'code-review-utils)
+(require 'code-review-people)
+(require 'markdown-mode)
+(defvar code-review-repo-worktree)             ; code-review-repo.el
+(declare-function code-review-registry--repo-dir "code-review-registry")
+
+(defcustom code-review-comment-buffer-name "*Code Review Comment*"
+  "Name of comment buffer."
+  :group 'code-review
+  :type 'string)
+
+(defcustom code-review-comment-buffer-msg ";;; Type C-c C-c to include your comment locally\n;;; After that check the transient menu (press r) to see possible actions"
+  "Helper text on top of comment buffer."
+  :group 'code-review
+  :type 'string)
+
+(defcustom code-review-comment-feedback-msg ";;; Leave a comment here."
+  "Default text to feedback slot."
+  :group 'code-review
+  :type 'string)
+
+(defcustom code-review-comment-single-comment-msg ";;; Equivalent to add a simple comment to the PR without a review."
+  "Default text to single comment section e.g. conversation."
+  :group 'code-review
+  :type 'string)
+
+(defcustom code-review-comment-suggestion-msg ";;; Type C-c C-c to include your comment locally\n;;; Type C-c C-k to abort"
+  "Default text to suggestion code in comment buffer."
+  :group 'code-review
+  :type 'string)
+
+(defcustom code-review-comment-edit-remote-msg ";;; Editing a submitted comment\n;;; C-c C-c to send the edit, C-c C-k to abort"
+  "Helper text on top of the comment buffer when editing a
+comment that was already submitted to the forge."
+  :group 'code-review
+  :type 'string)
+
+;;; internal vars
+
+(defvar code-review-comment-cursor-pos nil
+  "Variable to hold the cursor position where the comment will be added.
+For internal usage only.")
+
+(defvar code-review-comment-feedback? nil
+  "Differentiate between a regular comment from the main feedback comment.
+For internal usage only.")
+
+(defvar code-review-comment-title? nil
+  "Are you writing a title?.
+For internal usage only.")
+
+(defvar code-review-promote-comment-to-issue? nil
+  "Are you promoting a comment to a new issue?.
+For internal usage only.")
+
+(defvar code-review-comment-description? nil
+  "Are you writing a description?.
+For internal usage only.")
+
+(defvar code-review-comment-single-comment? nil
+  "Include a single new comment to the PR without a Review.
+For internal usage only.")
+
+(defvar code-review-comment-uncommitted nil
+  "Hold uncommitted comment.
+For internal usage only.")
+
+(defvar code-review-comment-commit-buffer? nil
+  "Toggle if we are at the commit review buffer.
+For internal usage only.")
+
+(defvar code-review-comment-send? nil
+  "Toggle if we should send the local comment immediately.
+For internal usage only.")
+
+(defvar code-review-comment-suggestion? nil
+  "Are you writing a code suggestion?.
+For internal usage only.")
+
+;; remove free variable warnings
+(defvar code-review-comment-buffer-name)
+(defvar code-review-commit-buffer-name)
+(defvar code-review-buffer-name)
+
+;;; general functons
+
+(defun code-review-comment-reset-global-vars ()
+  "Reset all stateful vars."
+  (setq code-review-comment-cursor-pos nil
+        code-review-comment-feedback? nil
+        code-review-comment-title? nil
+        code-review-promote-comment-to-issue? nil
+        code-review-comment-description? nil
+        code-review-comment-uncommitted nil
+        code-review-comment-commit-buffer? nil
+        code-review-comment-single-comment? nil
+        code-review-comment-send? nil
+        code-review-comment-suggestion? nil))
+
+(defun code-review--compute-line-and-side ()
+  "Compute the GitHub review comment LINE and SIDE at or near point.
+Returns a cons (SIDE . LINE), where SIDE is \"RIGHT\" (new) or \"LEFT\" (old).
+Skips review UI lines when counting and anchors to nearest patch line."
+  (when-let* ((hunk (magit-current-section))
+              (_ (magit-hunk-section-p hunk)))
+    (let* ((startc (code-review--hunk-content-start hunk))
+           (anchor (or (and (code-review--patch-line-p)
+                            (line-beginning-position))
+                       (code-review--nearest-patch-line-in-hunk hunk)
+                       startc))
+           (adv (code-review--count-patch-advances hunk startc anchor))
+           (old-start (car (oref hunk from-range)))
+           (new-start (car (oref hunk to-range))))
+      (save-excursion
+        (goto-char anchor)
+        (let ((ch (char-after (line-beginning-position))))
+          (if (eq ch ?-)
+              (cons "LEFT" (+ old-start (car adv)))
+            (cons "RIGHT" (+ new-start (cdr adv)))))))))
+
+;; Return location as plist supporting optional region
+(defun code-review--compute-line-side-and-range ()
+  "Compute GitHub location at point with optional region.
+Returns plist with :side :line and optionally :start-side :start-line."
+  (let* ((curr (code-review--compute-line-and-side))
+         (side (car curr))
+         (line (cdr curr)))
+    (if (and (use-region-p)
+             (not (= (region-beginning) (region-end))))
+        (save-excursion
+          (let* ((rb (region-beginning))
+                 (re (region-end))
+                 (beg (progn (goto-char rb) (code-review--compute-line-and-side)))
+                 (end (progn (goto-char re) (code-review--compute-line-and-side)))
+                 (start (if (<= rb re) beg end))
+                 (finish (if (<= rb re) end beg)))
+            (list :side (car finish)
+                  :line (cdr finish)
+                  :start-side (car start)
+                  :start-line (cdr start)))
+          )
+      (list :side side :line line))))
+
+;;; Comment C_UD
+
+(defun code-review-comment-add (&optional msg)
+  "Add comment.
+Optionally define a MSG."
+  (let ((buffer (get-buffer-create code-review-comment-buffer-name))
+        (review-buffer (code-review-review-buffer)))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (insert (if msg msg code-review-comment-buffer-msg))
+      (insert ?\n)
+      (switch-to-buffer-other-window buffer)
+      (code-review-comment-mode)
+      (setq code-review-comment-review-buffer review-buffer))))
+
+(defun code-review-comment-edit ()
+  "Edit comment."
+  (with-slots (value) (magit-current-section)
+    (let ((buffer (get-buffer-create code-review-comment-buffer-name))
+          (review-buffer (code-review-review-buffer)))
+      (with-current-buffer buffer
+        (erase-buffer)
+        (insert (oref value msg))
+        (insert ?\n)
+        (goto-char (point-min)))
+      (switch-to-buffer-other-window buffer)
+      (code-review-comment-mode)
+      (setq code-review-comment-review-buffer review-buffer))))
+
+;;; handlers ADD or EDIT
+
+(cl-defmethod code-review-comment-handler-add-or-edit ((obj code-review-code-comment-section))
+  "Reply to comment OBJ."
+  (let ((reply-comment (code-review-reply-comment-section
+                        :state (oref obj state)
+                        :author (oref obj author)
+                        :path (oref obj path)
+                        :position (oref obj position)
+                        :diffHunk (oref obj diffHunk)
+                        :id (oref obj id))))
+    (setq code-review-comment-uncommitted reply-comment)
+    (code-review-comment-add)))
+
+(cl-defmethod code-review-comment-handler-add-or-edit ((obj code-review-local-comment-section))
+  "Edit local comment in OBJ."
+  (oset obj edit? t)
+  (setq code-review-comment-uncommitted obj)
+  (code-review-comment-edit))
+
+(cl-defmethod code-review-comment-handler-add-or-edit ((obj code-review-title-section))
+  "Change title in OBJ."
+  (setq code-review-comment-uncommitted obj
+        code-review-comment-title? t)
+  (code-review-comment-add))
+
+(defclass code-review-comment-promote-to-issue ()
+  ((reference-link :initarg :reference-link)
+   (author :initarg :author)
+   (title :initarg :title)
+   (body :initarg :body)
+   (buffer-text :initform nil)))
+
+(cl-defmethod code-review-comment-handler-add-or-edit ((obj code-review-comment-promote-to-issue))
+  "Edit msg and title before promoting OBJ comment to new issue."
+  (setq code-review-comment-uncommitted obj
+        code-review-promote-comment-to-issue? t)
+  (code-review-comment-add
+   (format "<!-- Do not remove the Title and Body placeholders.  -->
+<!-- You can add multi-line segments in the body section. -->\n\nTitle: %s\n\nBody:\n> %s"
+           (oref obj title)
+           (oref obj body))))
+
+;;; Editing comments that were already submitted to the forge
+
+(defclass code-review-editable-remote-comment ()
+  ((kind :initarg :kind
+         :documentation "Which endpoint the edit goes to:
+\"issue-comment\", \"review-summary\" or \"review-comment\"
+\(see `code-review-update-comment').")
+   (id   :initarg :id
+         :documentation "Forge databaseId of the comment/review.")
+   (body :initarg :body
+         :documentation "Original raw (markdown) body, for reference.")
+   (msg  :initform nil
+         :documentation "Holds the NEW body once the comment
+buffer is committed (the commit machinery osets this slot).")))
+
+(defun code-review-comment--raw-body (obj)
+  "Return the raw (markdown) body stored on comment OBJ, or nil.
+Guards both the slot not existing (objects rendered before a
+reload by the long-lived daemon) and it being unbound."
+  (and (slot-exists-p obj 'body)
+       (slot-boundp obj 'body)
+       (oref obj body)))
+
+(defun code-review-comment--edit-target (value)
+  "Return the edit KIND for the comment data object VALUE, or nil.
+`local' for local (pending) comments, one of \"issue-comment\",
+\"review-summary\" or \"review-comment\" for submitted ones, nil
+when VALUE is not an editable comment.  Exact-class predicates
+decide (eieio `-p' predicates are NOT subclass-aware on every
+Emacs this package supports), and the `local?' SLOT is never
+consulted: `code-review-outdated-comment-section' sets it to t
+even for comments fetched from the forge."
+  (cond
+   ((code-review-comment-section-p value)
+    (pcase (and (slot-boundp value 'typename) (oref value typename))
+      ("IssueComment" "issue-comment")
+      ("PullRequestReview" "review-summary")
+      (_ nil)))
+   ;; local (pending) comments and replies keep their RET flow
+   ((or (code-review-local-comment-section-p value)
+        (code-review-reply-comment-section-p value))
+    'local)
+   ;; diff-anchored comments fetched from the forge
+   ((or (code-review-code-comment-section-p value)
+        (code-review-outdated-comment-section-p value))
+    "review-comment")
+   (t
+    nil)))
+
+(defun code-review-comment--start-remote-edit (value kind)
+  "Open the comment buffer to edit the submitted comment VALUE.
+KIND selects the provider endpoint (see
+`code-review-update-comment')."
+  (let* ((pr (code-review-db-get-pullreq))
+         (id (and (slot-exists-p value 'id)
+                  (slot-boundp value 'id)
+                  (oref value id)))
+         (body (code-review-comment--raw-body value))
+         (author (and (slot-boundp value 'author) (oref value author)))
+         (user (code-review-utils--git-get-user)))
+    (unless (code-review-github-repo-p pr)
+      (user-error "Editing submitted comments is not supported in %s yet"
+                  (cond
+                   ((code-review-gitlab-repo-p pr) "Gitlab")
+                   ((code-review-bitbucket-repo-p pr) "Bitbucket")
+                   (t "this provider"))))
+    (unless id
+      (user-error "Comment has no forge id; nothing to edit"))
+    (unless body
+      (user-error "Raw comment body unavailable: press G to fully reload the review, then try again"))
+    (when (and author user
+               (not (string-equal (downcase author) (downcase user)))
+               (not (y-or-n-p (format "This comment was authored by @%s.  Edit it anyway? "
+                                      author))))
+      (user-error "Edit aborted"))
+    (setq code-review-comment-cursor-pos (point)
+          code-review-comment-uncommitted
+          (code-review-editable-remote-comment
+           :kind kind :id id :body body))
+    (code-review-comment-add
+     (format "%s\n\n%s" code-review-comment-edit-remote-msg body))))
+
+;;;###autoload
+(defun code-review-edit-remote-comment-at-point ()
+  "Edit a comment that was already submitted to the forge.
+Works on diff comments (including outdated ones) and on
+Conversation comments; a \"PullRequestReview\" conversation
+entry edits the submitted review summary.  The edit is sent when
+you press \\<code-review-comment-mode-map>\\[code-review-comment-commit] in the comment buffer, and the
+review re-fetches its data afterward.  The forge rejects edits to
+other people's comments."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let* ((section (magit-current-section))
+         (value (and section
+                     (slot-boundp section 'value)
+                     (oref section value))))
+    (if-let ((kind (and value (code-review-comment--edit-target value))))
+        (if (eq kind 'local)
+            ;; pending local comments/replies keep their RET flow
+            (code-review-comment-add-or-edit)
+          (code-review-comment--start-remote-edit value kind))
+      (user-error "No editable comment at point"))))
+
+(cl-defmethod code-review-comment-handler-add-or-edit (obj)
+  "Add a comment in the OBJ."
+  ;;; only hunks allowed here
+  (with-slots (type) (magit-current-section)
+    (if (not (equal type 'hunk))
+        (message "You can't add text over unspecified region.")
+      (let* ((current-line (line-number-at-pos))
+             (line (save-excursion
+                     (buffer-substring-no-properties
+                      (line-beginning-position)
+                      (line-end-position))))
+             (line-type (cond
+                         ((string-prefix-p "-" line)
+                          "REMOVED")
+                         ((string-prefix-p "+" line)
+                          "ADDED")
+                         (t
+                          "UNCHANGED")))
+             (suggestion
+              (format "%s\n\n```suggestion\n%s\n```\n"
+                      code-review-comment-suggestion-msg
+                      (substring line 1)))
+             (amount-loc nil))
+        (save-excursion
+          (while (and (not (looking-at
+                            "Comment by\\|Reviewed by\\|Reply by\\|modified\\|new file\\|deleted"))
+                      (not (equal (point) (point-min))))
+            (forward-line -1))
+          (let ((section (magit-current-section)))
+            (if (not section)
+                (setq amount-loc 0)
+              (with-slots (type value) section
+                (if (equal type 'file)
+                    (setq amount-loc 0)
+                  (setq amount-loc (or (oref value amount-loc) 0)))))))
+
+        ;; Compute GitHub line/side and optional range (region)
+        (let* ((loc (code-review--compute-line-side-and-range))
+               (side (plist-get loc :side))
+               (line (plist-get loc :line))
+               (start-side (plist-get loc :start-side))
+               (start-line (plist-get loc :start-line))
+               (local-comment (code-review-local-comment-section
+                               :state "LOCAL COMMENT"
+                               :author (code-review-utils--git-get-user)
+                               :path (a-get obj 'path)
+                               :side side
+                               :line line
+                               :start-side start-side
+                               :start-line start-line
+                               :line-type line-type
+                               :send? code-review-comment-send?)))
+          (setq code-review-comment-uncommitted local-comment)
+          (if code-review-comment-suggestion?
+              (progn
+                (code-review-comment-add suggestion)
+                (with-current-buffer (get-buffer code-review-comment-buffer-name)
+                  (forward-line -2)))
+            (code-review-comment-add)))))))
+
+
+;;;###autoload
+(defun code-review-comment-add-or-edit (&optional suggestion-code?)
+  "Add or edit comment depending on context.
+Inform if a SUGGESTION-CODE? is being proposed.
+Local diff reviews write PENDING LOCAL comments (stored on the
+local row, rendered inline, dispatchable to an agent session
+with `code-review-local-comments-send'); only the forge paths
+stay closed."
+  (interactive)
+  (let ((section (magit-current-section)))
+    (with-current-buffer (code-review-review-buffer)
+      (setq code-review-comment-cursor-pos (point)
+            code-review-comment-suggestion? suggestion-code?)
+      (with-slots (value) section
+        (if (code-review-reactions-section-p section)
+            (code-review-reactions-reaction-at-point)
+          (code-review-comment-handler-add-or-edit value))))))
+
+;;; handlers COMMIT
+
+(defun code-review-comment--save-draft (obj entry)
+  "Persist OBJ's draft ENTRY, replacing an earlier save atomically.
+Keep its identity on OBJ so a render failure followed by retry cannot
+duplicate the comment."
+  (let* ((previous (and (slot-boundp obj 'internalId) (oref obj internalId)))
+         (node (car (a-get-in entry '(comments nodes))))
+         (id (or previous (a-get node 'internal-id)))
+         (entry (a-assoc-in entry '(comments nodes)
+                            (list (a-assoc node 'internal-id id)))))
+    (closql-with-transaction (code-review-db)
+      (when previous
+        (code-review-db-delete-raw-comment previous))
+      (code-review-db--pullreq-raw-comments-update entry))
+    (oset obj internalId id)))
+
+(cl-defmethod code-review-comment-handler-commit ((obj code-review-reply-comment-section) default-buff-msg)
+  "Commit the reply OBJ and clean the DEFAULT-BUFF-MSG from the text if any."
+  (let* ((reply-pos (- (+ (oref obj position)
+                          (length (split-string (oref obj msg) "\n")))
+                       2))
+         (clean-msg (code-review-utils--comment-clean-msg
+                     (oref obj msg)
+                     default-buff-msg))
+         (raw-comment `((author (login . ,(oref obj author)))
+                        (state . ,(oref obj state))
+                        (comments (nodes ((internal-id . ,(uuidgen-4))
+                                          (bodyText . ,clean-msg)
+                                          (path . ,(oref obj path))
+                                          (position . ,reply-pos)
+                                          (databaseId . ,(oref obj id))
+                                          (diffHunk . ,(oref obj diffHunk))
+                                          (outdated)
+                                          (local?)
+                                          (reply? . t)))))))
+    (when (string-empty-p clean-msg)
+      (user-error "Comment is empty"))
+    (code-review-comment--save-draft obj raw-comment)
+    (code-review--build-buffer)
+    (setq code-review-comment-uncommitted nil)))
+
+(cl-defmethod code-review-comment-handler-commit ((obj code-review-local-comment-section) default-buff-msg)
+  "Commit the local comment OBJ and clean the DEFAULT-BUFF-MSG from the text if any."
+  (let* ((buff-name (if code-review-comment-commit-buffer?
+                        code-review-commit-buffer-name
+                      (code-review-pr-buffer-name)))
+         (clean-msg (code-review-utils--comment-clean-msg
+                     (oref obj msg)
+                     default-buff-msg))
+         (raw-comment `((author (login . ,(oref obj author)))
+                        (state . ,(oref obj state))
+                        (comments (nodes ((internal-id . ,(uuidgen-4))
+                                          (bodyText . ,clean-msg)
+                                          (path . ,(oref obj path))
+                                          ;; keep position slot out for GitHub; internal uses may read it as nil
+                                          (position . ,(oref obj position))
+                                          (line . ,(oref obj line))
+                                          (side . ,(ignore-errors (oref obj side)))
+                                          (startLine . ,(ignore-errors (oref obj start-line)))
+                                          (startSide . ,(ignore-errors (oref obj start-side)))
+                                          (databaseId)
+                                          (diffHunk)
+                                          (outdated)
+                                          (reply?)
+                                          (line-type . ,(oref obj line-type))
+                                          (local? . t)))))))
+
+    (when (string-empty-p clean-msg)
+      (user-error "Comment is empty"))
+    (if (oref obj send?)
+        (let ((pr-id code-review-db--pullreq-id)
+              (draft-id (and (slot-boundp obj 'internalId) (oref obj internalId))))
+          (oset obj msg clean-msg)
+          (code-review-new-code-comment
+           (code-review-db-get-pullreq)
+           obj
+           (lambda (&rest _)
+             (let ((code-review-section-full-refresh? t)
+                   (code-review-db--pullreq-id pr-id))
+               (when draft-id
+                 (code-review-db-delete-raw-comment draft-id))
+               (code-review--build-buffer buff-name)))))
+      (progn
+        (code-review-comment--save-draft obj raw-comment)
+        (code-review--build-buffer buff-name)))))
+
+(cl-defmethod code-review-comment-handler-commit ((obj code-review-comment-promote-to-issue) _default-buff-msg)
+  "Commit the promotion of comment OBJ to new issue and clean the DEFAULT-BUFF-MSG from the text if any."
+  (save-match-data
+    (let ((text (oref obj buffer-text))
+          (regex (rx "Title:"
+                     (group-n 1 (* any) "\n")
+                     (one-or-more "\n")
+                     "Body:"
+                     (group-n 2 (zero-or-more anything))))
+          (title)
+          (body))
+      (and (string-match regex text)
+           (setq title (match-string 1 text))
+           (setq body (match-string 2 text)))
+      (let* ((pr (code-review-db-get-pullreq))
+             (body (concat (string-trim body)
+                           "\n\n"
+                           (format "_Originally posted by @%s in %s_"
+                                   (oref obj author)
+                                   (oref obj reference-link)))))
+        (setq code-review-promote-comment-to-issue? nil)
+        (code-review-new-issue
+         pr body title
+         (lambda (&rest _) (message "New issue created.")))))))
+
+(cl-defmethod code-review-comment-handler-commit ((obj code-review-editable-remote-comment) _default-buff-msg)
+  "Send the edit of an already-submitted comment OBJ to the forge.
+The new body is the `msg' slot the commit machinery sets from the
+comment buffer; the helper header is stripped first."
+  (let* ((pr (code-review-db-get-pullreq))
+         (pr-id (oref pr id))
+         (buff-name (code-review-pr-buffer-name pr))
+         (kind (oref obj kind))
+         (comment-id (oref obj id))
+         (new-body (code-review-utils--comment-clean-msg
+                    (oref obj msg)
+                    code-review-comment-edit-remote-msg)))
+    (if (string-empty-p new-body)
+        (user-error "Comment is empty")
+      (code-review-update-comment
+       pr kind comment-id new-body
+       (lambda (&rest _)
+         (let ((code-review-section-full-refresh? t))
+           ;; async callback: point the DB back at this PR
+           (setq code-review-db--pullreq-id pr-id)
+           (code-review--build-buffer buff-name nil "Comment edited")))))))
+
+(defun code-review-comment--refresh (pr)
+  "Refresh PR without depending on the current review's global context."
+  (let ((code-review-db--pullreq-id (oref pr id)))
+    (code-review--build-buffer (code-review-pr-buffer-name pr))))
+
+(defun code-review-comment--commit-text (pr comment-text)
+  "Dispatch COMMENT-TEXT for PR while the composer remains available."
+  (cond
+   (code-review-comment-description?
+    (oset pr raw-infos (-> (oref pr raw-infos)
+                          (a-assoc 'bodyText comment-text)
+                          (a-assoc 'bodyHTML nil)))
+    (code-review-send-description
+     pr
+     (lambda ()
+       (code-review-db-update pr)
+       (code-review-comment--refresh pr)
+       (code-review-comment-reset-global-vars))))
+   (code-review-comment-title?
+    (oset pr title comment-text)
+    (code-review-send-title
+     pr
+     (lambda ()
+       (code-review-db-update pr)
+       (code-review-comment--refresh pr)
+       (code-review-comment-reset-global-vars))))
+   (code-review-comment-feedback?
+    (let ((msg (code-review-utils--comment-clean-msg
+                comment-text code-review-comment-feedback-msg)))
+      (code-review-db--pullreq-feedback-update msg)
+      (code-review--build-buffer)
+      (code-review-comment-reset-global-vars)))
+   (code-review-promote-comment-to-issue?
+    (oset code-review-comment-uncommitted buffer-text comment-text)
+    (code-review-comment-handler-commit
+     code-review-comment-uncommitted code-review-comment-buffer-msg)
+    (code-review-comment-reset-global-vars))
+   (code-review-comment-send?
+    (oset code-review-comment-uncommitted msg comment-text)
+    (code-review-comment-handler-commit
+     code-review-comment-uncommitted code-review-comment-single-comment-msg)
+    (code-review-comment-reset-global-vars))
+   (code-review-comment-single-comment?
+    (let ((msg (code-review-utils--comment-clean-msg
+                comment-text code-review-comment-single-comment-msg))
+          (callback (lambda (&rest _)
+                      (let ((code-review-section-full-refresh? t))
+                        (code-review-comment--refresh pr)
+                        (code-review-comment-reset-global-vars)))))
+      (when (string-empty-p msg)
+        (user-error "Comment is empty"))
+      (code-review-new-issue-comment pr msg callback)))
+   (t
+    (oset code-review-comment-uncommitted msg comment-text)
+    (code-review-comment-handler-commit
+     code-review-comment-uncommitted
+     (if code-review-comment-suggestion?
+         code-review-comment-suggestion-msg
+       code-review-comment-buffer-msg))
+    (code-review-comment-reset-global-vars))))
+
+;;;###autoload
+(defun code-review-comment-commit ()
+  "Commit to the composer's recorded review, retaining it if saving fails."
+  (interactive)
+  (let* ((buffer (get-buffer code-review-comment-buffer-name))
+         (window (get-buffer-window buffer t))
+         (review-buffer (buffer-local-value 'code-review-comment-review-buffer buffer))
+         (code-review-db--pullreq-id
+          (if review-buffer
+              (or (and (buffer-live-p review-buffer)
+                       (buffer-local-value 'code-review-review-buffer-pr-id review-buffer))
+                  (user-error "Original review is no longer available"))
+            code-review-db--pullreq-id))
+         (comment-text (string-trim
+                        (with-current-buffer buffer
+                          (buffer-substring-no-properties (point-min) (point-max)))))
+         (pr (or (code-review-db-get-pullreq)
+                 (user-error "Original review is no longer available"))))
+    (code-review-comment--commit-text pr comment-text)
+    ;; The handler must persist the draft before the composer disappears.
+    ;; Use the captured buffer/window: rendering can change the selection.
+    (kill-buffer buffer)
+    (when (window-live-p window)
+      (if (= 1 (length (window-list (window-frame window))))
+          (when (> (length (frame-list)) 1)
+            (delete-frame (window-frame window)))
+        (delete-window window)))))
+
+;;; ----
+
+;;;###autoload
+(defun code-review-input-mention-user-at-point ()
+  "Insert @USERNAME at current point to mention an user.
+The candidates are the users @-mentionable in this repository:
+the members of the organization the repository belongs to, or
+its assignable users (`code-review-get-mentionable-users'), plus
+the people cache's display-name aliases (phase 33) — the reviewer
+knows the person, not the slug."
+  (interactive)
+  (let* ((pr (code-review-db-get-pullreq))
+         (users (code-review-get-mentionable-users pr)))
+    (if (not users)
+        (user-error "No mentionable users found for this repository")
+      (let* ((logins (sort (-map (lambda (it) (a-get it 'login)) users)
+                           #'string-lessp))
+             (people (code-review-people-match
+                      (or (code-review-people-ensure (oref pr owner))
+                          nil)
+                      ""))
+             (aliases (mapcar #'code-review-people--display people))
+             (cands (delete-dups (copy-sequence (append aliases logins))))
+             (picked (completing-read "Mention user: " cands nil nil))
+             (user (if (string-match "(\\([^)]+\\))\\'" picked)
+                       (match-string 1 picked)
+                     picked)))
+        (insert "@" user " ")))))
+
+;;;###autoload
+(defun code-review-comment-quit ()
+  "Quit the comment window."
+  (interactive)
+  (kill-buffer (current-buffer))
+  (if (= 1 (length (window-list (window-frame (selected-window)))))
+      (delete-frame (window-frame (selected-window)))
+    (delete-window (selected-window)))
+  (with-current-buffer (code-review-review-buffer)
+    (goto-char code-review-comment-cursor-pos)
+    (code-review-comment-reset-global-vars)))
+
+;;;###autoload
+(defun code-review-comment-to-criterion ()
+  "Turn this comment into a durable criterion (C-c C-t, phase 24).
+The reviewer authors CRITERIA, never code: the comment's first
+paragraph becomes the SHALL clause of a new criteria file,
+anchored to the comment's file (and line).  Submission runs the
+`code-review-criteria-submit-strategies' chain — by default the
+PR-attached agent, a push to the PR branch, then the SUGGESTION
+BLOCK (the full criteria file as a fenced block, for the AUTHOR
+to apply); the UNVERSIONED solo model sets the chain to
+`local' (the criteria file lands in the worktree, nothing
+leaves the machine).  A greppable verdict entry always lands in
+`code-review-criteria-verdicts-file' (nothing evaporates).  The
+anchors (path/side/line) come from the uncommitted comment
+object; the worktree from the current review."
+  (interactive)
+  (let* ((buffer (get-buffer code-review-comment-buffer-name))
+         (comment-text (string-trim
+                        (with-current-buffer buffer
+                          (save-excursion
+                            (buffer-substring-no-properties
+                             (point-min) (point-max))))))
+         (obj code-review-comment-uncommitted)
+         (worktree (or code-review-repo-worktree
+                       (code-review-registry--repo-dir))))
+    (if (not obj)
+        (user-error "No comment to turn into a criterion")
+      (let* ((path (oref obj path))
+             (line (oref obj line))
+             (criterion (code-review-criteria--from-comment
+                         comment-text path worktree)))
+        (cond
+         ((not criterion)
+          (user-error "The comment carries no sentence to keep"))
+         (t
+          (let ((strategy (code-review-criteria--submit criterion worktree)))
+            (code-review-criteria--verdict-sidecar
+             criterion comment-text path line worktree)
+            (cond
+             ((eq strategy 'agent)
+              (message "Criterion req-%s given to the PR agent"
+                       (plist-get criterion :id))
+              (code-review-comment-quit))
+             ((eq strategy 'push)
+              (message "Criterion req-%s pushed to the PR branch"
+                       (plist-get criterion :id))
+              (code-review-comment-quit))
+             ((eq strategy 'local)
+              (message "Criterion req-%s captured locally (unversioned \
+solo model); verdict recorded"
+                       (plist-get criterion :id))
+              (code-review-comment-quit))
+             ((eq strategy 'suggest)
+              ;; the suggestion block, ready to send as the comment
+              (erase-buffer)
+              (insert (code-review-criteria--suggestion-text criterion))
+              (goto-char (point-min))
+              (message "Criterion req-%s drafted as a suggestion block - \
+send it with C-c C-c"
+                       (plist-get criterion :id)))
+             (t
+              (message "Criterion req-%s captured; no submission strategy \
+fired (see code-review-criteria-submit-strategies)"
+                       (plist-get criterion :id)))))))))))
+
+(defvar code-review-comment-mode-map
+  (let ((map (copy-keymap markdown-mode-map)))
+    (define-key map (kbd "C-c C-c") 'code-review-comment-commit)
+    (define-key map (kbd "C-c C-k") 'code-review-comment-quit)
+    (define-key map (kbd "C-c @") 'code-review-input-mention-user-at-point)
+    (define-key map (kbd "C-c C-t") 'code-review-comment-to-criterion)
+    (set-keymap-parent map markdown-mode-map)
+    map))
+
+(define-derived-mode code-review-comment-mode markdown-mode "Code Review Comment"
+  "Code Review Comment."
+  ;; Review buffers are per-PR: bind this comment buffer to the
+  ;; review it was opened for.  The DB's current pullreq is the PR
+  ;; of the review buffer the user just interacted with.
+  (setq code-review-comment-review-buffer
+        (get-buffer (code-review-pr-buffer-name))))
+
+(provide 'code-review-comment)
+;;; code-review-comment.el ends here

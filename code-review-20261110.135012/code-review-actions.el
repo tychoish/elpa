@@ -1,0 +1,1576 @@
+;;; code-review-actions.el --- Functions to perform some action -*- lexical-binding: t; -*-
+;;
+;; Copyright (C) 2021 Wanderson Ferreira
+;;
+;; Author: Wanderson Ferreira <https://github.com/wandersoncferreira>
+;; Maintainer: Wanderson Ferreira <wand@hey.com>
+;; Version: 0.0.7
+;; Homepage: https://github.com/wandersoncferreira/code-review
+;;
+;; This file is not part of GNU Emacs.
+
+;; This file is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; For a full copy of the GNU General Public License
+;; see <http://www.gnu.org/licenses/>.
+;;
+;;; Commentary:
+;;
+;;  Functions to perform some action
+;;
+;;; Code:
+
+(require 'code-review-comment)
+(require 'code-review-db)
+(require 'code-review-bitbucket)
+(require 'code-review-gitlab)
+(require 'code-review-github)
+(require 'code-review-diff)
+(require 'let-alist)
+
+(defcustom code-review-always-restrict-approval? nil
+  "Set to non-nil to disallow approving a PR with a bad CI state."
+  :type 'boolean
+  :group 'code-review)
+
+(defcustom code-review-lgtm-message "LGTM! :thumbsup:"
+  "Message to add to fast track LGTM code review."
+  :group 'code-review
+  :type 'string)
+
+;; remove free variable warnings
+(defvar code-review-comment-buffer-name)
+(defvar code-review-commit-buffer-name)
+(defvar code-review-buffer-name)
+
+;;;
+;;;; * Submit review
+;;;
+
+(defclass code-review-submit-local-comment ()
+  ((path       :initarg :path)
+   (position   :initarg :position) ;; kept for non-GitHub for backward compat
+   (side       :initarg :side)
+   (line       :initarg :line)
+   (start-side :initarg :start-side)
+   (start-line :initarg :start-line)
+   (body       :initarg :body)
+   (internal-id :initarg :internal-id)
+   (line-type  :initarg :line-type)))
+
+(defclass code-review-submit-review ()
+  ((state :initform nil)
+   (pr :initform nil)
+   (local-comments :initform nil
+                   :type (satisfies
+                          (lambda (it)
+                            (-all-p #'code-review-submit-local-comment-p it))))
+   (feedback :initform nil)))
+
+(defclass code-review-submit-reply ()
+  ((reply-to-id :initarg :reply-to-id)
+   (body        :initarg :body)
+   (internal-id :initarg :internal-id)))
+
+(defclass code-review-submit-replies ()
+  ((pr      :initform nil)
+   (replies :initform nil
+            :type (satisfies
+                   (lambda (it)
+                     (-all-p #'code-review-submit-reply-p it))))))
+
+(defun code-review-submit--unique? (previous-obj current-id)
+  "Verify if PREVIOUS-OBJ has CURRENT-ID."
+  (if (not previous-obj)
+      t
+    (not (-contains-p (-map (lambda (it)
+                              (oref it internal-id))
+                            previous-obj)
+                      current-id))))
+
+(defun code-review--submit-feedback-required? (review-obj)
+  (and (not (oref review-obj feedback))
+       (not (string-equal (oref review-obj state) "APPROVE"))
+       (not (and (string-equal (oref review-obj state) "COMMENT")
+                 (or (code-review-github-repo-p (oref review-obj pr))
+                     (code-review-gitlab-repo-p (oref review-obj pr)))))))
+
+;;;###autoload
+(defun code-review--submit (event &optional feedback only-reply?)
+  "Submit your review with a final verdict (EVENT).
+If you already have a FEEDBACK string use it.
+If you want only to submit replies, use ONLY-REPLY? as non-nil."
+  (interactive)
+  (setq code-review-comment-cursor-pos (point))
+  (let* ((pr (code-review-db-get-pullreq))
+         (buff-name (code-review-pr-buffer-name pr))
+         (pr-id (oref pr id))
+         (review-obj (cond
+                      ((code-review-github-repo-p pr)
+                       (code-review-submit-github-review))
+                      ((code-review-gitlab-repo-p pr)
+                       (code-review-submit-gitlab-review))
+                      ((code-review-bitbucket-repo-p pr)
+                       (code-review-submit-bitbucket-review))))
+         (replies-obj (cond
+                       ((code-review-github-repo-p pr)
+                        (code-review-submit-github-replies))
+                       ((code-review-gitlab-repo-p pr)
+                        (code-review-submit-gitlab-replies))
+                       ((code-review-bitbucket-repo-p pr)
+                        (code-review-submit-bitbucket-replies)))))
+
+    (oset review-obj state event)
+    (oset review-obj pr pr)
+    (oset replies-obj pr pr)
+
+    (when feedback
+      (oset review-obj feedback feedback))
+
+    (let ((replies nil)
+          (local-comments nil))
+      (with-current-buffer (code-review-review-buffer)
+        (save-excursion
+          (goto-char (point-min))
+          (magit-wash-sequence
+           (lambda ()
+             (let ((section (magit-current-section)))
+               (with-slots (value) section
+                 ;; get feedback
+                 (when (and (code-review-feedback-section-p section)
+                            (not feedback))
+                   (oset review-obj feedback (oref value msg)))
+
+                 ;; get replies
+                 (when (code-review-reply-comment-section-p section)
+                   (when (code-review-submit--unique? replies (oref value internalId))
+                     (push (code-review-submit-reply
+                            :reply-to-id (oref value id)
+                            :body (oref value msg)
+                            :internal-id (oref value internalId))
+                           replies)))
+
+                 ;; get local comments
+                 (when (code-review-local-comment-section-p section)
+                   (when (code-review-submit--unique? local-comments (oref value internalId))
+                     (push (code-review-submit-local-comment
+                            :path (oref value path)
+                            :position (oref value position)
+                            :side (ignore-errors (oref value side))
+                            :line (ignore-errors (oref value line))
+                            :start-side (ignore-errors (oref value start-side))
+                            :start-line (ignore-errors (oref value start-line))
+                            :body (oref value msg)
+                            :internal-id (oref value internalId)
+                            :line-type (oref value line-type))
+                           local-comments))))
+               (forward-line))))))
+
+      (oset replies-obj replies replies)
+      (oset review-obj local-comments local-comments)
+
+      (if (and (code-review--submit-feedback-required? review-obj)
+               (not only-reply?))
+          (message "You must provide a feedback msg before submit your Review.")
+        (progn
+          (when (not only-reply?)
+            (code-review-send-review
+             review-obj
+             (lambda (&rest _)
+               (let ((code-review-section-full-refresh? t))
+                 (oset pr finished t)
+                 (oset pr finished-at (current-time-string))
+                 (oset pr feedback nil)
+                 (code-review-db-update pr)
+                 ;; async callback: point the DB back at this PR and
+                 ;; rebuild this PR's buffer
+                 (setq code-review-db--pullreq-id pr-id)
+                 (code-review--build-buffer
+                  buff-name
+                  nil
+                  "Done submitting review")))))
+
+          (when (oref replies-obj replies)
+            (code-review-send-replies
+             replies-obj
+             (lambda (&rest _)
+               (let ((code-review-section-full-refresh? t))
+                 (setq code-review-db--pullreq-id pr-id)
+                 (code-review--build-buffer
+                  buff-name
+                  nil
+                  "Done submitting review and replies"))))))))))
+
+;;;###autoload
+(defun code-review-submit-approve (&optional feedback)
+  "Approve current PR.
+Optionally set a FEEDBACK message."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let* ((pr (code-review-db-get-pullreq))
+         (last-commit (-> (oref pr raw-infos)
+                          (a-get-in (list 'commits 'nodes))
+                          (-last-item))))
+    (if (code-review-github-repo-p pr)
+        (let-alist last-commit
+          (cond
+           ((or (string-equal .commit.statusCheckRollup.state "SUCCESS")
+                (not .commit.statusCheckRollup))
+            (code-review--submit "APPROVE" feedback))
+           (code-review-always-restrict-approval?
+            (message "PR have CI issues. You cannot approve it."))
+           (t
+            (let ((res (y-or-n-p "PR have CI issues.  Do you want to proceed? ")))
+              (if res
+                  (code-review--submit "APPROVE" feedback)
+                (message "Approval process canceled."))))))
+      (code-review--submit "APPROVE" feedback))))
+
+;;; Comments export
+
+(defun code-review-comments--numbered-list (raw-infos raw-comments &optional open-only)
+  "Return (TEXT . COUNT) with all comments of a PR as a numbered list.
+Comments are merged oldest first by createdAt.  Top-level comments
+and review summaries come from RAW-INFOS (the same merge the
+conversation section renders); inline comments come from
+RAW-COMMENTS (the reviews nodes; each inline comment inherits its
+review's author, like the diff wash renders).  RAW-COMMENTS nil
+falls back to the reviews in RAW-INFOS (older db rows).  With
+OPEN-ONLY non-nil, skip inline comments on resolved review
+threads (the conversations GitHub marks resolved); top-level
+comments and review summaries are not threads, so they stay.
+Nil when the PR has no comments."
+  (let* ((entries nil)
+         (add
+          (lambda (author when where outdated body)
+            (when (and body (not (string-empty-p body)))
+              (push (list (or when "") (or author "unknown")
+                          where outdated body)
+                    entries))))
+         (reviews (or raw-comments
+                      (a-get-in raw-infos '(reviews nodes)))))
+    (dolist (c (a-get-in raw-infos '(comments nodes)))
+      (funcall add (a-get-in c '(author login)) (a-get c 'createdAt)
+               nil nil (a-get c 'body)))
+    (dolist (r reviews)
+      (let ((author (a-get-in r '(author login))))
+        (funcall add author (a-get r 'createdAt) nil nil
+                 (and (not (string-empty-p (or (a-get r 'bodyHTML) "")))
+                      (a-get r 'body)))
+        (dolist (c (a-get-in r '(comments nodes)))
+          (let* ((path (a-get c 'path))
+                 (line (or (a-get c 'line) (a-get c 'startLine)
+                           (a-get c 'position) (a-get c 'originalPosition)))
+                 (where (and path
+                             (format "%s%s" path
+                                     (if line (format ":%s" line) "")))))
+            (unless (and open-only (a-get c 'isResolved))
+              (funcall add author (a-get c 'createdAt) where
+                       (a-get c 'outdated) (a-get c 'body)))))))
+    (when entries
+      (let ((n 0)
+            (parts nil))
+        (dolist (e (sort entries
+                         (lambda (a b)
+                           (string-lessp (car a) (car b)))))
+          (setq n (1+ n))
+          (pcase-let ((`(,when ,author ,where ,outdated ,body) e))
+            (push (format "%d. %s%s%s:\n   %s"
+                          n author
+                          (if (string-empty-p when) ""
+                            (format " (%s)"
+                                    (code-review-utils--format-timestamp
+                                     when)))
+                          (concat (if where (concat " on " where) "")
+                                  (if outdated " [outdated]" ""))
+                          (replace-regexp-in-string "\n" "\n   " body))
+                  parts)))
+        (cons (string-join (nreverse parts) "\n") n)))))
+
+;;;###autoload
+(defun code-review-kill-comments (arg)
+  "Copy all comments of the current open PR into the kill ring.
+A numbered list, oldest first: author, timestamp, and for inline
+comments file:line and an [outdated] marker.  Reads the PR's
+fetched data (the same the review buffer renders), so run a full
+reload first for the very latest comments from the forge.
+
+With a universal argument (\\[universal-argument]), only feedback
+that is still open: comments on review threads already marked
+resolved are skipped.  Top-level comments and review summaries
+are not threads, so they are always included."
+  (interactive "P")
+  (let ((buf (code-review-review-buffer)))
+    (unless (and buf (buffer-live-p buf))
+      (user-error "No review buffer is open"))
+    (with-current-buffer buf
+      (code-review--sync-db-pullreq)
+      (let* ((pr (code-review-db-get-pullreq))
+             (res (code-review-comments--numbered-list
+                   (oref pr raw-infos) (oref pr raw-comments) arg)))
+        (if (not res)
+            (message "code-review: no comments on this PR")
+          (kill-new
+           (concat (format "#%s %s/%s - %s (%s)\n\n"
+                           (oref pr number) (oref pr owner) (oref pr repo)
+                           (or (oref pr title) "") (or (oref pr state) ""))
+                   (car res)))
+          (message "Copied %d %s of PR #%s to the kill ring"
+                   (cdr res)
+                   (if arg "open comments" "comments")
+                   (oref pr number)))))))
+
+;;;###autoload
+(defun code-review-submit-comments ()
+  "Submit a Review Comment for the current PR."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (code-review--submit "COMMENT"))
+
+;;;###autoload
+(defun code-review-submit-request-changes ()
+  "Submit a Request Change for the current PR."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (code-review--submit "REQUEST_CHANGES"))
+
+;;;###autoload
+(defun code-review-submit-lgtm ()
+  "Submit an Approve Review with a LGTM message."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (code-review-submit-approve code-review-lgtm-message))
+
+;;;###autoload
+(defun code-review-submit-only-replies ()
+  "Submit only replies comments."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (code-review--submit nil nil t))
+
+;;;###autoload
+(defun code-review-submit-single-top-level-comment ()
+  "Submit a single comment without an attached Review."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((code-review-comment-single-comment? t))
+    (code-review-comment-add
+     code-review-comment-single-comment-msg)))
+
+;;;###autoload
+(defun code-review-submit-single-diff-comment-at-point ()
+  "Submit a single diff comment without an attached Review."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((section (magit-current-section)))
+    (with-slots (value) section
+      (if (magit-hunk-section-p section)
+          (progn
+            (setq code-review-comment-send? t)
+            (let ((code-review-comment-buffer-msg
+                   code-review-comment-single-comment-msg))
+              (code-review-comment-add-or-edit)))
+        (error "Single diff comment at point only available in hunk sections")))))
+
+;;;
+;;;; * Save/Record unfinished Review
+;;;
+
+;;;###autoload
+(defun code-review-save-unfinished-review ()
+  "Save unfinished Review."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (oset pr saved t)
+    (oset pr saved-at (current-time-string))
+    (code-review-db-update pr)
+    (message "PR saved successfully!")))
+
+;;;###autoload
+(defun code-review-recover-unfinished-review (url)
+  "Recover unfinished Review for the given URL."
+  (interactive "sPR URL: ")
+  (let-alist (code-review-utils-pr-from-url url)
+    (let ((obj (code-review-db-search .owner .repo .num)))
+      (if (not obj)
+          (message "No Review found for this URL.")
+        (progn
+          (setq code-review-db--pullreq-id (oref obj id))
+          (let ((code-review-section-full-refresh? nil))
+            (code-review--build-buffer)))))))
+
+;;;###autoload
+(defun code-review-open-unfinished-review ()
+  "Choose an unfinished Review from the previous unfinished list."
+  (interactive)
+  (let* ((objs (code-review-db-all-unfinished))
+         (choice (completing-read "Unfinished Reviews: "
+                                  (-map
+                                   (lambda (o)
+                                     (format "%s/%s - %s - %s"
+                                             (oref o owner)
+                                             (oref o repo)
+                                             (oref o number)
+                                             (oref o saved-at)))
+                                   objs)))
+         (obj-chosen (car (-filter
+                           (lambda (o)
+                             (save-match-data
+                               (and (string-match "\\(.*\\)/\\(.*\\) - \\(.*\\) - \\(.*\\)" choice)
+                                    (let ((owner (match-string 1 choice))
+                                          (repo (match-string 2 choice))
+                                          (number (match-string 3 choice))
+                                          (saved-at (match-string 4 choice)))
+                                      (and (string-equal (oref o owner) owner)
+                                           (string-equal (oref o repo) repo)
+                                           (string-equal (oref o number) number)
+                                           (string-equal (oref o saved-at) saved-at))))))
+                           objs))))
+    (setq code-review-db--pullreq-id (oref obj-chosen id))
+    (let ((code-review-section-full-refresh? nil))
+      (code-review--build-buffer))))
+
+;;;
+;;;; * Merge PR
+;;;
+
+(defun code-review-merge--with (strategy)
+  "Merge the current PR using STRATEGY."
+  (let ((pr (code-review-db-get-pullreq)))
+    (if (code-review-github-repo-p pr)
+        (progn
+          (code-review-merge pr strategy)
+          (oset pr state "MERGED")
+          (code-review-db-update pr)
+          (code-review--build-buffer))
+      (code-review-gitlab-not-supported-message))))
+
+;;;###autoload
+(defun code-review-merge-merge ()
+  "Merge PR with MERGE strategy."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (code-review-merge--with "merge"))
+
+;;;###autoload
+(defun code-review-merge-rebase ()
+  "Merge PR with REBASE strategy."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (code-review-merge--with "rebase"))
+
+;;;###autoload
+(defun code-review-merge-squash ()
+  "Merge PR with SQUASH strategy."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (code-review-merge--with "squash"))
+
+
+;;;
+;;;; * Setters
+;;;
+
+;;;###autoload
+(defun code-review-set-feedback ()
+  "Add review FEEDBACK locally.  Required to Comment and Request Change reviews."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((buffer (get-buffer-create code-review-comment-buffer-name))
+        (pr (code-review-db-get-pullreq)))
+    (setq code-review-comment-feedback? t)
+    (setq code-review-comment-cursor-pos (point))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (insert (or (oref pr feedback) code-review-comment-feedback-msg))
+      (insert ?\n)
+      (switch-to-buffer-other-window buffer)
+      (code-review-comment-mode))))
+
+;;;###autoload
+(defun code-review-close-pr ()
+  "Close current PR.  Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((buffer (get-buffer-create code-review-comment-buffer-name))
+        (pr (code-review-db-get-pullreq)))
+    (if (code-review-github-repo-p pr)
+        (progn
+          (oset pr state "CLOSED")
+          (code-review-close
+           pr
+           (lambda ()
+             (code-review-db-update pr))))
+      (message "Not supported in %s yet."
+               (cond
+                ((code-review-gitlab-repo-p pr)
+                 "Gitlab")
+                ((code-review-bitbucket-repo-p pr)
+                 "Bitbucket"))))))
+
+;;;###autoload
+(defun code-review-reopen-pr ()
+  "Reopen current PR when it is closed.  Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (cond
+     ((not (code-review-github-repo-p pr))
+      (message "Not supported in %s yet."
+               (cond
+                ((code-review-gitlab-repo-p pr)
+                 "Gitlab")
+                ((code-review-bitbucket-repo-p pr)
+                 "Bitbucket"))))
+     ((not (member (oref pr state) '("CLOSED" "closed")))
+      (message "PR is not closed."))
+     (t
+      (let ((pr-id (oref pr id))
+            (buff-name (code-review-pr-buffer-name pr)))
+        (code-review-reopen
+         pr
+         (lambda ()
+           (oset pr state "OPEN")
+           (code-review-db-update pr)
+           ;; async callback: point the DB back at this PR
+           (setq code-review-db--pullreq-id pr-id)
+           (code-review--build-buffer buff-name))))))))
+
+;;;###autoload
+(defun code-review-toggle-pr-draft ()
+  "Toggle draft status of current PR (draft <-> ready for review).
+Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let* ((pr (code-review-db-get-pullreq))
+         (pr-id (oref pr id))
+         (buff-name (code-review-pr-buffer-name pr))
+         (is-draft (and (oref pr raw-infos)
+                        (a-get (oref pr raw-infos) 'isDraft))))
+    (if (not (code-review-github-repo-p pr))
+        (message "Not supported in %s yet."
+                 (cond
+                  ((code-review-gitlab-repo-p pr)
+                   "Gitlab")
+                  ((code-review-bitbucket-repo-p pr)
+                   "Bitbucket")))
+      (code-review-toggle-draft
+       pr (not is-draft)
+       (lambda ()
+         (oset pr raw-infos (a-assoc (oref pr raw-infos)
+                                     'isDraft (not is-draft)))
+         (code-review-db-update pr)
+         (setq code-review-db--pullreq-id pr-id)
+         (message (if is-draft
+                      "PR marked ready for review."
+                    "PR converted to draft."))
+         (code-review--build-buffer buff-name))))))
+
+;;;###autoload
+(defun code-review-set-title ()
+  "Change the title of current PR.  Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((buffer (get-buffer-create code-review-comment-buffer-name))
+        (pr (code-review-db-get-pullreq)))
+    (if (or (code-review-github-repo-p pr)
+            (code-review-gitlab-repo-p pr))
+        (progn
+          (setq code-review-comment-cursor-pos (point))
+          (setq code-review-comment-title? t)
+          (with-current-buffer buffer
+            (erase-buffer)
+            (insert (oref pr title))
+            (insert ?\n)
+            (switch-to-buffer-other-window buffer)
+            (code-review-comment-mode)))
+      (message "Not supported in %s yet."
+               (cond
+                ((code-review-bitbucket-repo-p pr)
+                 "Bitbucket"))))))
+
+(defun code-review--labels-to-send (pr choices)
+  "The PR has a list of CHOICES for labels that should be send.
+This function will make sure we clean the list of labels and/or disable all of them upstream."
+  (when (not (-contains-p choices "<clean all labels>"))
+    (code-review--distinct-labels
+     (append
+      (-map (lambda (x)
+              `((name . ,x)
+                (color . "0075ca")))
+            choices)
+      (oref pr labels)))))
+
+;;;###autoload
+(defun code-review-set-label ()
+  "Change the labels of current PR.  Sent immediately.
+Rewrite all current labels with the options chosen here."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (when-let (options (code-review-get-labels pr))
+      (let* ((choices (completing-read-multiple "Choose: " (append
+                                                            options
+                                                            (list "<clean all labels>"))))
+             (labels (code-review--labels-to-send pr choices)))
+        (setq code-review-comment-cursor-pos (point))
+        (oset pr labels labels)
+        (code-review-send-labels
+         pr
+         (lambda ()
+           (code-review-db-update pr)
+           (code-review--build-buffer)))))))
+
+(defun code-review--set-assignee-field (obj &optional assignee)
+  "Change assignee header field given an OBJ.
+If a valid ASSIGNEE is provided, use that instead."
+  (setq code-review-comment-cursor-pos (point))
+  (let ((candidate nil))
+    (if assignee
+        (setq candidate assignee)
+      (when-let (options (code-review-get-assignees obj))
+        (let* ((choice (completing-read "Choose: " options)))
+          (setq candidate choice))))
+    (oset obj assignees (list `((name) (login . ,candidate))))
+    (code-review-send-assignee
+     obj
+     (lambda ()
+       (closql-insert (code-review-db) obj t)
+       (code-review--build-buffer)))))
+
+(defun code-review-set-assignee (&rest _)
+  "Change assignee for the current PR.  Sent immediately.."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (code-review--set-assignee-field pr)))
+
+(defun code-review-set-yourself-assignee ()
+  "Assign yourself for the current PR.  Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (code-review--set-assignee-field
+     pr
+     (code-review-utils--git-get-user))))
+
+(defun code-review-set-milestone ()
+  "Change the milestone for the current PR.  Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (if (code-review-github-repo-p pr)
+        (progn
+          (if-let (options (code-review-get-milestones pr))
+              (let* ((choice (completing-read "Choose: " (a-keys options)))
+                     (milestone `((title . ,choice)
+                                  (perc . 0)
+                                  (number .,(alist-get choice options nil nil 'equal)))))
+                (setq code-review-comment-cursor-pos (point))
+                (oset pr milestones milestone)
+                (code-review-send-milestone
+                 pr
+                 (lambda ()
+                   (code-review-db-update pr)
+                   (code-review--build-buffer))))
+            (message "No milestone found.")))
+      (message "Not supported in %s yet."
+               (cond
+                ((code-review-gitlab-repo-p pr)
+                 "Gitlab")
+                ((code-review-bitbucket-repo-p pr)
+                 "Bitbucket"))))))
+
+;;;###autoload
+(defun code-review-set-description ()
+  "Submit new PR description.  Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((buffer (get-buffer-create code-review-comment-buffer-name))
+        (pr (code-review-db-get-pullreq)))
+    (setq code-review-comment-description? t)
+    (setq code-review-comment-cursor-pos (point-min))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (insert (-> (oref pr raw-infos)
+                  (a-get 'bodyText)))
+      (insert ?\n)
+      (switch-to-buffer-other-window buffer)
+      (code-review-comment-mode))))
+
+;;;
+;;;; * Delete
+;;;
+
+;;;###autoload
+(defun code-review-delete-feedback ()
+  "Delete review FEEDBACK locally."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (oset pr feedback nil)
+    (code-review-db-update pr)
+    (code-review--build-buffer)))
+
+;;;
+;;;; * Miscellaneous
+;;;
+
+;;;###autoload
+(defun code-review-reload ()
+  "Reload the buffer.  All your local comments will be lost."
+  (interactive)
+  (let* ((pr (code-review-db-get-pullreq))
+         (code-review-section-full-refresh? t))
+    (setq code-review-comment-cursor-pos (point))
+    (if pr
+        (progn
+          (let ((choice (y-or-n-p "You will lose all your local comments.  Do you need to proceed? ")))
+            (when choice
+              (code-review--build-buffer))))
+      (error "No PR found"))))
+
+;;;###autoload
+(defun code-review-promote-comment-at-point-to-new-issue ()
+  "Promote comment at point to a new issue.  Sent immediately."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (if (code-review-gitlab-repo-p pr)
+        (message "Promote comment to issue not supported in Gitlab yet.")
+      (let-alist (code-review-github-promote-comment-to-new-issue-data pr)
+        (-> (code-review-comment-promote-to-issue
+             :reference-link .reference-link
+             :author .author
+             :title .title
+             :body .body)
+            (code-review-comment-handler-add-or-edit))))))
+
+;;;###autoload
+(defun code-review-request-reviews (&optional login)
+  "Request reviewers for current PR using LOGIN if available."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let* ((pr (code-review-db-get-pullreq))
+         (users (code-review-get-assignable-users pr))
+         (choices
+          (if login
+              (list (format "@%s :- " login))
+            (completing-read-multiple
+             "Request review: "
+             (mapcar
+              (lambda (u)
+                (format "@%s :- %s" (a-get u 'login) (a-get u 'name)))
+              users))))
+         (logins)
+         (ids (mapcar
+               (lambda (choice)
+                 (let* ((login (-> choice
+                                   (split-string ":-")
+                                   (-first-item)
+                                   (split-string "@")
+                                   (-second-item)
+                                   (string-trim)))
+                        (usr (seq-find (lambda (el)
+                                         (equal (a-get el 'login) login))
+                                       users)))
+                   (unless usr
+                     (error "User %s not found" login))
+                   (setq logins
+                         (append logins
+                                 `(((requestedReviewer (login . ,(a-get usr 'login)))))))
+                   (a-get usr 'id)))
+               choices)))
+    (code-review-request-review
+     pr
+     ids
+     (lambda ()
+       (let* ((infos (oref pr raw-infos))
+              (new-infos
+               (a-assoc-in infos (list 'reviewRequests 'nodes) logins)))
+         (oset pr raw-infos new-infos)
+         (code-review-db-update pr)
+         (code-review--build-buffer))))))
+
+;;;###autoload
+(defun code-review-request-review-at-point (&rest _)
+  "Request reviewer at point."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((pr (code-review-db-get-pullreq)))
+    (if (code-review-github-repo-p pr)
+        (progn
+          (setq code-review-comment-cursor-pos (point))
+          (let* ((line (buffer-substring-no-properties
+                        (line-beginning-position)
+                        (line-end-position)))
+                 (login (-> line
+                            (split-string "- @")
+                            (-second-item)
+                            (string-trim))))
+            (code-review-request-reviews login)))
+      (message "Not supported in %s yet."
+               (cond
+                ((code-review-gitlab-repo-p pr)
+                 "Gitlab")
+                ((code-review-bitbucket-repo-p pr)
+                 "Bitbucket"))))))
+
+;;;###autoload
+(defun code-review-toggle-display-all-comments ()
+  "Toggle display comments."
+  (interactive)
+  (let ((flag (not code-review-section--display-all-comments)))
+    (setq code-review-section--display-all-comments flag
+          code-review-section--display-diff-comments flag
+          code-review-section--display-top-level-comments flag))
+  (code-review--build-buffer))
+
+;;;###autoload
+(defun code-review-toggle-display-top-level-comments ()
+  "Toggle display the top level comments."
+  (interactive)
+  (setq code-review-section--display-top-level-comments
+        (not code-review-section--display-top-level-comments))
+  (code-review--build-buffer))
+
+;;;###autoload
+(defun code-review-toggle-display-diff-comments ()
+  "Toggle display the top level comments."
+  (interactive)
+  (setq
+   code-review-section--display-all-comments t
+   code-review-section--display-diff-comments
+   (not code-review-section--display-diff-comments))
+  (code-review--build-buffer))
+
+;;;###autoload
+(defun code-review-toggle-focus-mode ()
+  "Toggle focus mode in this review buffer.
+In plain terms: focus mode HIDES the files that look like noise
+(generated lockfiles, changelogs and other docs, files whose only
+change is whitespace), leaving on screen only the files with real
+code changes that need your attention.  Nothing is lost: the
+\"Files changed\" heading always reports how many files were
+hidden and why, and pressing \\[code-review-toggle-focus-mode]
+again brings everything back."
+  (interactive)
+  (setq code-review-focus-mode (not code-review-focus-mode))
+  (code-review--build-buffer))
+
+;;;###autoload
+(defun code-review-comment-code-suggestion ()
+  "Add code suggestion box."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (let ((section (magit-current-section))
+        (pr (code-review-db-get-pullreq)))
+    (if (code-review-github-repo-p pr)
+        (progn
+          (setq code-review-comment-cursor-pos (point))
+          (with-slots (value type) section
+            (if (string-equal type "hunk")
+                (code-review-comment-add-or-edit t)
+              (message "Suggested not supported in this section."))))
+      (message "Not supported in %s yet."
+               (cond
+                ((code-review-gitlab-repo-p pr)
+                 "Gitlab")
+                ((code-review-bitbucket-repo-p pr)
+                 "Bitbucket"))))))
+
+;;;###autoload
+(defun code-review-comment-jump-next ()
+  "Go to next comment in the buffer."
+  (interactive)
+  (let ((initial-point (point)))
+    (with-current-buffer (code-review-review-buffer)
+      (let ((comment-position))
+        (save-excursion
+          (forward-line)
+          (while (not (or (eobp)
+                          (looking-at
+                           "Comment by\\|Reviewed by\\|Reply by")))
+            (forward-line))
+          (beginning-of-line)
+          (setq comment-position (point)))
+        (goto-char comment-position)
+        (when (equal initial-point comment-position)
+          (message "No more comments going forward."))))))
+
+;;;###autoload
+(defun code-review-comment-jump-previous ()
+  "Go to previous comment in the buffer."
+  (interactive)
+  (let ((initial-point (point)))
+    (with-current-buffer (code-review-review-buffer)
+      (let ((comment-position))
+        (save-excursion
+          (forward-line -1)
+          (while (not (or (bobp)
+                          (looking-at
+                           "Comment by\\|Reviewed by\\|Reply by")))
+            (forward-line -1))
+          (beginning-of-line)
+          (setq comment-position (point)))
+        (goto-char comment-position)
+        (when (equal initial-point comment-position)
+          (message "No more comments going backward."))))))
+
+;;;
+;;;; * Commit actions
+;;;
+
+(defun code-review-commit-at-point ()
+  "Review the current commit at point in Code Review buffer."
+  (interactive)
+  (let ((section (magit-current-section)))
+    ;; Walk up to a commit section
+    (while (and section (not (code-review-commit-section-p section)))
+      (setq section (and (slot-boundp section 'parent) (oref section parent))))
+    (if (not (code-review-commit-section-p section))
+        (user-error "Not on a commit entry")
+      (let* ((obj (oref section value))
+             (sha (and obj (oref obj sha)))
+             (subject (and obj (car (split-string (or (oref obj msg) "") "\n"))))
+             (subject (string-trim (or subject "")))
+             (subject (if (> (length subject) 60)
+                          (concat (substring subject 0 57) "...")
+                        subject))
+             (buff-name (format "*Code Review Commit %s %s*" sha subject)))
+        (unless sha
+          (user-error "Could not resolve commit SHA at point"))
+        ;; Store SHA and build commit buffer
+        (code-review-db--pullreq-sha-update sha)
+        (setq code-review-comment-commit-buffer? t
+              code-review-section-full-refresh? t
+              ;; Track current commit buffer name so follow-up actions know where to render
+              code-review-commit-buffer-name buff-name)
+        (code-review-section--build-commit-buffer buff-name)))))
+
+(defun code-review-commit-buffer-back ()
+  "Move from commit buffer to review buffer."
+  (interactive)
+  (if (not (bound-and-true-p code-review-commit-minor-mode))
+      (message "Command must be called from a Code Review Commit buffer.")
+    (setq code-review-comment-commit-buffer? nil
+          code-review-section-full-refresh? t)
+    (kill-this-buffer)
+    (code-review--build-buffer)))
+
+;;; * PR description popup (refer to the author's intent mid-review)
+
+(defconst code-review-pr-description-buffer-name
+  "*Code Review: PR description*"
+  "Popup buffer showing the description of the PR under review.")
+
+(defcustom code-review-pr-description-display-alist
+  '((display-buffer-in-side-window)
+    (side . bottom)
+    (window-height . 0.33))
+  "Display buffer alist for the PR description popup.
+The default pops a one-third-height bottom side window (see
+`display-buffer'): it never steals point from the review buffer.
+Dismiss with \\[quit-window] in the popup, or by running
+`code-review-popup-pr-description' again (toggle)."
+  :group 'code-review
+  :type 'alist)
+
+(declare-function code-review--insert-html "code-review-section")
+(declare-function code-review-criteria-brief--insert-pane
+                  "code-review-criteria-brief")
+
+(defun code-review-pr-description-insert (pr)
+  "Insert the title and description of PR into the current buffer.
+The body comes from PR's raw-infos: HTML rendered (same shr wash
+as the review buffer's description section), plain text inserted
+as-is, \"No description provided.\" when empty.  A local diff
+review has no forge description: its title (the commit subject,
+or what the diff being reviewed is) is the intent, shown with an
+explanatory note."
+  (let-alist (oref pr raw-infos)
+    (let* ((html? (and .bodyHTML (not (string-empty-p .bodyHTML))))
+           (body (cond (html? .bodyHTML)
+                       ((and .bodyText (not (string-empty-p .bodyText)))
+                        .bodyText)
+                       (t "No description provided."))))
+      (insert (propertize (oref pr title) 'face 'bold))
+      (insert ?\n ?\n)
+      (cond
+       ((equal (oref pr state) "LOCAL")
+        (insert (propertize
+                 (concat "Local review: no forge description. "
+                         "The title above is the reviewed diff's intent.")
+                 'face 'magit-dimmed)))
+       (html? (code-review--insert-html body))
+       (t (insert body))))))
+
+;;;###autoload
+(defun code-review-popup-pr-description ()
+  "Show the description of the PR under review in a popup buffer.
+Handy mid-review to check the code against the author's intent.
+The popup is a bottom side window (see
+`code-review-pr-description-display-alist') and does not steal
+point from the review buffer.  Toggle-style: with the popup
+visible, this command DISMISSES it instead; otherwise it
+(re)creates it with fresh content (the PR of the review buffer
+at point — comment buffers are followed to their review
+buffer).  \\[quit-window] dismisses from inside the popup too."
+  (interactive)
+  (let ((win (get-buffer-window code-review-pr-description-buffer-name)))
+    (if win
+        (quit-window nil win)
+      (let ((pr (ignore-errors
+                  (if-let ((buf (code-review-review-buffer)))
+                      (with-current-buffer buf
+                        (code-review--sync-db-pullreq)
+                        (code-review-db-get-pullreq))
+                    (code-review-db-get-pullreq)))))
+        (unless pr (user-error "No PR under review"))
+        (with-current-buffer
+            (get-buffer-create code-review-pr-description-buffer-name)
+          (let ((inhibit-read-only t))
+            (special-mode)
+            (erase-buffer)
+            ;; phase 27 station 1: the brief pane ABOVE the
+            ;; description — judge the change's claimed criteria
+            ;; before reading the code
+            (code-review-criteria-brief--insert-pane pr)
+            (code-review-pr-description-insert pr)
+            (goto-char (point-min))))
+        (display-buffer (get-buffer code-review-pr-description-buffer-name)
+                        code-review-pr-description-display-alist)))))
+
+;;; * Handle deprecated commands
+;;; all these commands were renamed and you should use the new version
+
+(eval-and-compile
+  (defvar code-review-actions--renamed
+    '((code-review-approve . code-review-submit-approve)
+      (code-review-comments . code-review-submit-comments)
+      (code-review-request-changes . code-review-submit-request-changes)
+      (code-review-choose-unfinished-review . code-review-open-unfinished-review)
+      (code-review-add-single-diff-comment . code-review-submit-single-diff-comment-at-point)
+      (code-review-submit-single-diff-comment . code-review-submit-single-diff-comment-at-point)
+      (code-review-add-single-comment . code-review-submit-single-top-level-comment)
+      (code-review-comment-set-feedback . code-review-set-feedback)
+      (code-review--set-assignee-yourself . code-review-set-yourself-assignee)
+      (code-review--set-assignee . code-review-set-assignee)
+      (code-review--set-milestone . code-review-set-milestone)
+      (code-review--set-label . code-review-set-label)
+      (code-review-comment-set-title . code-review-set-title)
+      (code-review-comment-set-description . code-review-set-description)
+      (code-review-promote-comment-to-new-issue . code-review-promote-comment-at-point-to-new-issue))
+    "Functions renamed in release 0.0.5."))
+
+(defmacro code-review-set-obsolete-fns ()
+  "Make functions in `code-review-actions--renamed' list obsolete."
+  `(progn
+     ,@(-map
+        (pcase-lambda (`(,old-name . ,new-name))
+          `(define-obsolete-function-alias ',old-name ',new-name "v0.0.5"))
+        code-review-actions--renamed)))
+
+(code-review-set-obsolete-fns)
+
+;;; * Section-bound interactive commands (moved from code-review-section.el)
+
+(require 'code-review-repo)
+(declare-function difftastic-git-diff-range "difftastic"
+                  (&optional rev-or-range args files))
+(declare-function code-review--build-buffer "code-review-section")
+(declare-function code-review-review-buffer "code-review-section")
+(declare-function code-review--sync-db-pullreq "code-review-section")
+(declare-function code-review--hunk-content-start "code-review-section")
+(declare-function code-review--nearest-patch-line-in-hunk "code-review-section")
+(declare-function code-review--count-patch-advances "code-review-section")
+(declare-function code-review--patch-line-p "code-review-section")
+(declare-function code-review-analysis--delicate-hunks "code-review-analysis")
+(declare-function code-review-section--goto-hunk-section "code-review-section")
+(declare-function code-review-section--find-hunk-section "code-review-section")
+(defvar code-review-comment-cursor-pos)
+(defvar code-review-section-full-refresh?)
+(defvar code-review-repo-worktree)
+(defvar code-review-username)
+
+(defun code-review-user-visit-at-remote (&rest _)
+  "Visit the user at point in the remote."
+  (interactive)
+  (with-slots (value) (magit-current-section)
+    (let ((url (oref value url)))
+      (if url
+          (browse-url url)
+        (message "Can't visit the user in remote. Missing profile URL.")))))
+(defalias 'code-review-assignee-visit-at-remote 'code-review-user-visit-at-remote)
+(defalias 'code-review-reviewer-visit-at-remote 'code-review-user-visit-at-remote)
+(defun code-review-commit-goto-check-at-remote (&rest _)
+  "Visit the details of the check at point in the remote."
+  (interactive)
+  (let ((section (magit-current-section)))
+    (if (code-review-commit-check-detail-section-p section)
+        (with-slots (value) section
+          (browse-url (oref value details)))
+      (message "Goto check at remote not defined in this section."))))
+;;;###autoload
+(defun code-review-section-delete-comment ()
+  "Delete a local comment."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (with-current-buffer (code-review-review-buffer)
+    (setq code-review-comment-cursor-pos (point))
+    (with-slots (value) (magit-current-section)
+      (code-review-db-delete-raw-comment (oref value internalId))
+      (code-review--build-buffer))))
+;;;###autoload
+(defun code-review-section-delete-comment-remote ()
+  "Delete comment at point locally and remotely (when applicable).
+For local comments, only deletes locally. For submitted diff comments,
+delete remotely via provider API and then drop from local DB."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (with-current-buffer (code-review-review-buffer)
+    (setq code-review-comment-cursor-pos (point))
+    (let* ((section (magit-current-section))
+           (val (and section (oref section value)))
+           (is-local (and val (code-review-local-comment-section-p val)))
+           (prompt (if is-local
+                       "Do you want to delete this comment locally? "
+                     "Do you want to delete this comment locally and remotely? ")))
+      (when (and val (y-or-n-p prompt))
+        (cond
+         ;; Local comments: just delete from DB
+         (is-local
+          (code-review-db-delete-raw-comment (oref val internalId))
+          (code-review--build-buffer))
+         ;; Remote code/reply/outdated comments: delete via provider
+         ((or (code-review-code-comment-section-p val)
+              (code-review-reply-comment-section-p val)
+              (code-review-outdated-comment-section-p val))
+          (let* ((comment-id (oref val id))
+                 (pr (code-review-db-get-pullreq))
+                 (callback (lambda (&rest _)
+                             (code-review-db-delete-raw-comment comment-id)
+                             (let ((code-review-section-full-refresh? t))
+                               (code-review--build-buffer)))))
+            (code-review-delete-code-comment pr comment-id callback)))
+         (t
+          (message "No deletable comment at point.")))))))
+(defun code-review--thread-info-at-point ()
+  "Return (THREAD-ID . RESOLVED?) for the review thread at point, or nil."
+  (let ((info (lambda (v)
+                (ignore-errors
+                  (and (slot-exists-p v 'thread-id)
+                       (slot-boundp v 'thread-id)
+                       (oref v thread-id)
+                       (cons (oref v thread-id)
+                             (and (slot-boundp v 'resolved?)
+                                  (oref v resolved?))))))))
+    (or (let ((sec (magit-current-section)))
+          (and sec
+               (slot-boundp sec 'value)
+               (funcall info (oref sec value))))
+        (let* ((sec (magit-current-section))
+               (parent (and sec
+                            (slot-boundp sec 'parent)
+                            (oref sec parent))))
+          (when parent
+            (cl-some (lambda (s)
+                       (and (slot-boundp s 'value)
+                            (funcall info (oref s value))))
+                     (oref parent children)))))))
+;;;###autoload
+(defun code-review-threads-toggle-resolved ()
+  "Toggle the resolved state of the review thread at point."
+  (interactive)
+  (when (code-review-db-local-pr-p)
+    (user-error "Local diff reviews are read-only (no forge connection)"))
+  (if-let ((info (code-review--thread-info-at-point)))
+      (let ((thread-id (car info))
+            (resolved? (cdr info))
+            (pr (code-review-db-get-pullreq)))
+        (message "code-review: %s thread..."
+                 (if resolved? "Unresolving" "Resolving"))
+        (code-review-toggle-resolved
+         pr thread-id (not resolved?)
+         (lambda (&rest _)
+           (let ((code-review-section-full-refresh? t))
+             (code-review--build-buffer)))))
+    (user-error "No review thread at point")))
+(defun code-review--resolve-worktree-position ()
+  "Return (FULL-PATH . LINE) for the diff position at point, or nil.
+LINE is nil when point is not inside a hunk.  Prefer the local
+worktree of the PR (`code-review-repo-worktree') and fall back to
+`magit-toplevel'.  Ignores inline review/comment lines when
+computing the target line inside a hunk."
+  (let* ((sec (magit-current-section))
+         (cur sec)
+         path)
+    ;; Walk up to find a section whose value carries our PATH
+    (while (and cur (not path))
+      (let ((val (and (slot-boundp cur 'value) (oref cur value))))
+        (when (listp val)
+          (setq path (alist-get 'path val))))
+      (unless path
+        (setq cur (and (slot-boundp cur 'parent) (oref cur parent)))))
+    (when path
+      (let* ((root (or code-review-repo-worktree
+                       (ignore-errors (magit-toplevel))))
+             (full (and root (expand-file-name path root))))
+        (when (and full (file-exists-p full))
+          (let* ((hunk (and (magit-hunk-section-p (magit-current-section))
+                            (magit-current-section)))
+                 (target nil))
+            (when hunk
+              (save-excursion
+                (let* ((startc (code-review--hunk-content-start hunk))
+                       (anchor (or (code-review--nearest-patch-line-in-hunk hunk)
+                                   startc))
+                       (adv (code-review--count-patch-advances hunk startc anchor))
+                       (new-start (car (oref hunk to-range)))
+                       (new-adv (cdr adv)))
+                  (setq target (+ new-start new-adv)))))
+            (cons full (and target (integerp target) (> target 0) target))))))))
+(defun code-review-visit-worktree-file (&rest _)
+  "Visit the worktree file at point using a robust line choice.
+This ignores inline review/comment lines when computing the target
+line inside a hunk. Falls back to `magit-diff-visit-worktree-file'
+when path cannot be determined or file does not exist."
+  (interactive)
+  (if-let ((pos (code-review--resolve-worktree-position)))
+      (progn
+        (find-file (car pos))
+        (when (cdr pos)
+          (goto-char (point-min))
+          (forward-line (1- (cdr pos)))))
+    (call-interactively 'magit-diff-visit-worktree-file)))
+(defun code-review-xref--find (fn)
+  "Run xref FN for the symbol at point.
+Opens the corresponding file of the PR worktree at the matching
+line first, so the xref backend operates on the reviewed version
+of the code."
+  (let ((sym (thing-at-point 'symbol t))
+        (pos (code-review--resolve-worktree-position)))
+    (unless code-review-repo-worktree
+      (user-error
+       "No local repo context for this review (check `code-review-projects-roots')"))
+    (unless pos (user-error "No file at point in the diff"))
+    (unless sym (user-error "No symbol at point"))
+    (find-file-other-window (car pos))
+    (when (cdr pos)
+      (goto-char (point-min))
+      (forward-line (1- (cdr pos))))
+    (funcall fn sym)))
+(defun code-review-xref-find-definitions ()
+  "Find definitions of the symbol at point in the PR worktree."
+  (interactive)
+  (code-review-xref--find #'xref-find-definitions))
+(defun code-review-xref-find-references ()
+  "Find references of the symbol at point in the PR worktree."
+  (interactive)
+  (code-review-xref--find #'xref-find-references))
+(defun code-review-difftastic--file-at-point ()
+  "Return the repository-relative path of the file section at point."
+  (let ((section (magit-current-section)))
+    (while (and section
+                (not (magit-file-section-p section)))
+      (setq section (oref section parent)))
+    (when section
+      (let ((path (substring-no-properties (oref section value))))
+        (cond ((string-prefix-p "a/" path) (substring path 2))
+              ((string-prefix-p "b/" path) (substring path 2))
+              (t path))))))
+(defun code-review-difftastic--range ()
+  "Return the base...HEAD range for the reviewed PR, or nil."
+  (let ((pr (ignore-errors (code-review-db-get-pullreq))))
+    (if (and pr (equal (oref pr state) "LOCAL"))
+        ;; local diff review: the stored git diff args
+        (oref pr base-ref-name)
+      (when-let* (((and pr (slot-boundp pr 'number)))
+                  (num (format "%s" (oref pr number)))
+                  (base (format "refs/remotes/code-review/%s/base" num))
+                  ((and code-review-repo-worktree
+                        (code-review-repo--git code-review-repo-worktree
+                                               "rev-parse" "--verify"
+                                               "--quiet" base))))
+        (format "%s...HEAD" base)))))
+(defun code-review-difftastic-file (&optional whole-pr-p)
+  "Show the changes of the file at point with difftastic.
+In plain terms, this \"drills down\" into one file: it opens a
+side-by-side view that understands syntax, so you see what REALLY
+changed (moved blocks, renamed things), not just line edits.  It
+is for READING only: comments cannot anchor there, so you cannot
+leave reviews in that view.  Press \\[quit-window] in the
+difftastic buffer to come back to the review.
+
+With WHOLE-PR-P (\\[universal-argument]) show the entire pull
+request instead of the file at point.  This needs the `difftastic'
+Emacs package (MELPA) and the external `difft' command."
+  (interactive "P")
+  (cond
+   ((not (fboundp 'difftastic-git-diff-range))
+    (user-error
+     "This needs the `difftastic' Emacs package and the external `difft' command.
+Install it with: M-x package-install RET difftastic RET
+and get difft from https://github.com/Wilfred/difftastic"))
+   ((not (executable-find (if (boundp 'difftastic-executable)
+                              difftastic-executable
+                            "difft")))
+    (user-error
+     "The external `difft' command is not installed; see https://github.com/Wilfred/difftastic"))
+   ((not code-review-repo-worktree)
+    (user-error "No local worktree for this review"))
+   (t
+    (let* ((range (code-review-difftastic--range))
+           (file (and (not whole-pr-p)
+                      (code-review-difftastic--file-at-point))))
+      (unless range
+        (user-error "Base ref not available locally; press G to fully reload this review"))
+      (if (and (not whole-pr-p) (not file))
+          (user-error "Point is not on a file section (use C-u for the whole PR)")
+        (let ((default-directory
+                (file-name-as-directory code-review-repo-worktree)))
+          (difftastic-git-diff-range range nil (and file (list file)))))))))
+(defun code-review-view-wdiff ()
+  "Show the whole pull request diff IGNORING whitespace.
+In plain terms, this answers \"what really changed?\" when the PR
+contains formatting churn (reindentation, line wrapping): the
+local git diff skips changes that only touch spaces, tabs and
+blank lines.  The buffer is VIEW-ONLY: comments cannot anchor
+there, so reviews are still left in the review buffer."
+  (interactive)
+  (if (not code-review-repo-worktree)
+      (user-error "No local worktree for this review")
+    (let* ((range (code-review-difftastic--range))
+           (out (and range
+                     (code-review-repo--git code-review-repo-worktree
+                                           "diff" "-w"
+                                           "--ignore-blank-lines"
+                                           range))))
+      (unless range
+        (user-error "Base ref not available locally; press G to fully reload this review"))
+      (with-current-buffer (get-buffer-create "*Code Review Diff (-w)*")
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert (propertize
+                   "View-only: what really changed in this PR, ignoring whitespace.
+Comments can only be placed in the review buffer, not here.
+
+"
+                   'face 'font-lock-warning-face))
+          (insert (or out "")))
+        (diff-mode)
+        (goto-char (point-min)))
+      (pop-to-buffer "*Code Review Diff (-w)*"))))
+(defun code-review--section-visible-p (section)
+  "Non-nil when SECTION and all its ancestors are expanded."
+  (let ((s section)
+        (visible t))
+    (while (and s visible)
+      (when (oref s hidden) (setq visible nil))
+      (setq s (oref s parent)))
+    visible))
+(defun code-review--hunk-sections ()
+  "All visible diff hunk sections of the buffer, in order."
+  (let ((hunks nil))
+    (magit-map-sections
+     (lambda (s)
+       (when (and (eq (eieio-object-class s) 'magit-hunk-section)
+                  (code-review--section-visible-p s))
+         (push s hunks))))
+    (nreverse hunks)))
+(defun code-review-next-hunk ()
+  "Move to the next diff hunk, skipping comment sections.
+Files that are collapsed (noise) are skipped, so this walks the
+code that actually needs your attention."
+  (interactive)
+  (let ((target nil))
+    (dolist (h (code-review--hunk-sections))
+      (when (and (not target) (> (oref h start) (point)))
+        (setq target h)))
+    (if target
+        (goto-char (oref target start))
+      (user-error "No next hunk"))))
+(defun code-review-previous-hunk ()
+  "Move to the previous diff hunk, skipping comment sections.
+When called from inside a hunk, moves to the hunk before it (not
+to the current hunk's heading)."
+  (interactive)
+  (let ((target nil))
+    (dolist (h (reverse (code-review--hunk-sections)))
+      (when (and (not target)
+                 (< (oref h start) (point))
+                 ;; exclude the hunk the point currently is in
+                 (not (and (>= (point) (oref h start))
+                           (<= (point) (oref h end)))))
+        (setq target h)))
+    (if target
+        (goto-char (oref target start))
+      (user-error "No previous hunk"))))
+(defun code-review--delicate-hunk-targets ()
+  "Top-K delicate hunk sections of the buffer as (PATH RANGES SEC).
+Score order (hottest first).  Entries with no section in the
+current diff are skipped."
+  (let ((targets nil))
+    (dolist (e (code-review-analysis--delicate-hunks))
+      (let* ((path (plist-get e :path))
+             (ranges (plist-get e :ranges))
+             (sec (code-review-section--find-hunk-section path ranges)))
+        (when sec
+          (push (list path ranges sec) targets))))
+    (nreverse targets)))
+(defun code-review-next-delicate-hunk ()
+  "Move to the next delicate hunk (phase 15), wrapping around.
+Cycles the top-K delicate hunks — the same ranked list the
+Analysis section shows — hottest first.  Called from inside a
+delicate hunk, it moves to the next one in the list (not the
+next one in the buffer).  A hunk inside a collapsed file is
+revealed."
+  (interactive)
+  (let ((targets (code-review--delicate-hunk-targets)))
+    (unless targets
+      (user-error "No delicate hunks"))
+    (let ((idx nil) (next nil) (i 0))
+      (dolist (tg targets)
+        (when (and (null idx)
+                   (>= (point) (oref (nth 2 tg) start))
+                   (<= (point) (oref (nth 2 tg) end)))
+          (setq idx i))
+        (cl-incf i))
+      (cond
+       (idx
+        (setq next (nth (mod (1+ idx) (length targets)) targets)))
+       (t
+        ;; first target below point, else wrap to the hottest one
+        (dolist (tg targets)
+          (when (and (null next)
+                     (> (oref (nth 2 tg) start) (point)))
+            (setq next tg)))
+        (unless next (setq next (car targets)))))
+      (code-review-section--goto-hunk-section
+       (nth 0 next) (nth 1 next)))))
+(defun code-review--update-header-line (&rest _)
+  "Pin the file of the hunk at point in the header line.
+In plain terms: when you scroll deep into a long hunk, the file
+heading has scrolled off screen and you lose track of which file
+you are in; this keeps its name visible at the top of the window.
+Nothing is shown while the real heading is still on screen."
+  (when (derived-mode-p 'code-review-mode)
+    (let ((section (magit-current-section)))
+      (while (and section (not (magit-file-section-p section)))
+        (setq section (oref section parent)))
+      (let ((file (and section (stringp (oref section value))
+                       (substring-no-properties (oref section value)))))
+        (setq header-line-format
+              (if (and file
+                       (> (point) (oref section start))
+                       (not (pos-visible-in-window-p (oref section start))))
+                  (concat " "
+                          (propertize (code-review-diff--strip-path file)
+                                      'face 'magit-diff-file-heading))
+                nil))))))
+
+;;; Phase 9: review ergonomics
+
+(defun code-review-eldoc--file-section (section)
+  "Nearest file SECTION at or above SECTION, or nil."
+  (while (and section (not (magit-file-section-p section)))
+    (setq section (and (slot-boundp section 'parent) (oref section parent))))
+  section)
+
+(defun code-review-eldoc-context (&optional _callback &rest _)
+  "Eldoc function: report WHERE point is in the review buffer.
+Shows \"file:hunk-line (kind)\" inside hunks (line numbers refer to
+the post-PR side of the diff, matching `code-review-jump-to-line'),
+\"file\" on file headers, and nil elsewhere (eldoc stays quiet).
+Registered buffer-locally on `eldoc-documentation-functions' by
+`code-review-mode'; eldoc passes a CALLBACK argument we ignore
+because the string is computed in bounded time."
+  (let* ((section (magit-current-section))
+         (file (code-review-eldoc--file-section section)))
+    (when (and file (stringp (oref file value)))
+      (let ((path (code-review-diff--strip-path (oref file value))))
+        (if (not (and section (magit-hunk-section-p section)
+                      (slot-boundp section 'to-range)
+                      (car (oref section to-range))))
+            path
+          (let ((pos (code-review--hunk-content-start section)))
+            (when pos
+              ;; search origin defaults to point: the nearest patch
+              ;; line AT OR ABOVE point is the line being reported
+              (let ((anchor (code-review--nearest-patch-line-in-hunk section)))
+                (when anchor
+                  (let* ((adv (code-review--count-patch-advances
+                               section pos anchor))
+                         (new-line (+ (car (oref section to-range)) (cdr adv)))
+                         (old-line (and (slot-boundp section 'from-range)
+                                        (car (oref section from-range))
+                                        (+ (car (oref section from-range))
+                                           (car adv))))
+                         (char (char-after anchor)))
+                    (cond
+                     ;; an ADDED line only exists on the new side
+                     ((eq char ?+) (format "%s:%d (added)" path new-line))
+                     ;; a REMOVED line only exists on the old side
+                     ((eq char ?-)
+                      (if old-line
+                          (format "%s:%d (removed)" path old-line)
+                        (format "%s:%d (removed)" path new-line)))
+                     ;; context: show both numbers when they differ
+                     ((and old-line (/= old-line new-line))
+                      (format "%s:%d (= old %d)" path new-line old-line))
+                     (t (format "%s:%d" path new-line)))))))))))))
+
+(defun code-review-fringe-jump-to-thread ()
+  "From a line with a fringe thread marker, jump to the thread."
+  (interactive)
+  (let ((start (cl-some (lambda (ov) (overlay-get ov 'cr-thread-start))
+                        (overlays-at (point)))))
+    (if (not start)
+        (message "code-review: no review thread marker on this line")
+      (goto-char start)
+      ;; Reveal the whole ancestor chain: the thread may sit inside a
+      ;; section folded away by bot-collapse or global fold.
+      (let ((s (magit-current-section)))
+        (while s
+          (magit-section-show s)
+          (setq s (and (slot-boundp s 'parent) (oref s parent))))))))
+
+(provide 'code-review-actions)
+;;; code-review-actions.el ends here
