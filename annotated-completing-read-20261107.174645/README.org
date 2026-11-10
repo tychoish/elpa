@@ -1,0 +1,431 @@
+#+TITLE: annotated-completing-read.el -- rich ergonomic completion interface
+#+OPTIONS: toc:2 num:nil
+
+[[https://melpa.org/#/annotated-completing-read][file:https://melpa.org/packages/annotated-completing-read-badge.svg]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=annotated-completing-read= (acr) is a thin wrapper around the standard Emacs
+=completing-read= facility, providing a more ergonomic Lisp interface with
+automatic annotation alignment, rich target handling, and multi-selection
+support. It shares core principles with =consult--read=, but is lightweight and
+packaged as a clean, public API. It works seamlessly with modern minibuffer
+completion interfaces like [[https://github.com/minad/vertico][vertico]], annotation formatters like [[https://github.com/oantolin/marginalia][marginalia]], and
+action dispatchers like [[https://github.com/oantolin/embark][embark]].
+
+The =annotated-completing-read= function provides intuitive, declarative semantics:
+keyword arguments for all optional parameters, candidate tables supplied as
+mappings (hash tables or alists) from candidates to annotations, and automatic
+column alignment. Beyond basic candidate selection, it features:
+
+- *Rich Target Return*: Entries can supply an arbitrary target object returned
+  instead of the candidate string, or tagged with =multi-category= for Embark actions.
+- *Multi-Candidate Selection*: Select multiple items in succession (~:multiple t~)
+  with dedicated keybindings (=M-,= to accept and continue, =M-.= to finish immediately).
+- *Context DWIM Helpers*: Built-in helpers for selecting directories with
+  structural relationships and entry counts (~annotated-completing-read-directory~)
+  and harvesting context from point, region, and kill-ring
+  (~annotated-completing-read-context-from-point~).
+- *History Tracking*: Tracks completion history per command symbol, with built-in
+  integration for =savehist= and =desktop= persistence across Emacs sessions.
+
+* Contents                                                       :TOC:
+:PROPERTIES:
+:CUSTOM_ID: contents
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#melpa][MELPA]]
+  - [[#use-package-with-vc][use-package with VC]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+  - [[#key-options--customization][Key Options & Customization]]
+- [[#core-workflows--examples][Core Workflows & Examples]]
+  - [[#basic-completion-with-annotations][Basic Completion with Annotations]]
+  - [[#returning-custom-targets][Returning Custom Targets]]
+  - [[#multi-candidate-selection][Multi-Candidate Selection]]
+  - [[#context-and-directory-helpers][Context and Directory Helpers]]
+- [[#related-packages][Related Packages]]
+- [[#api-reference][API Reference]]
+  - [[#annotated-completing-read][annotated-completing-read]]
+  - [[#annotated-completing-read-directory][annotated-completing-read-directory]]
+  - [[#annotated-completing-read-context-from-point][annotated-completing-read-context-from-point]]
+  - [[#annotated-completing-read-setup-history][annotated-completing-read-setup-history]]
+  - [[#annotated-completing-read-clear-history][annotated-completing-read-clear-history]]
+  - [[#annotated-completing-read-annotation-face][annotated-completing-read-annotation-face]]
+  - [[#annotated-completing-read-history][annotated-completing-read-history]]
+- [[#license][License]]
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** MELPA
+:PROPERTIES:
+:CUSTOM_ID: melpa
+:END:
+
+=annotated-completing-read= is available on [[https://melpa.org/#/annotated-completing-read][MELPA]]. If you already have MELPA in your
+~package-archives~, install via =package-install=:
+
+#+BEGIN_SRC emacs-lisp
+(package-install 'annotated-completing-read)
+#+END_SRC
+
+Or using ~use-package~:
+
+#+BEGIN_SRC emacs-lisp
+(use-package annotated-completing-read
+  :ensure t)
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+Requires Emacs 30+. Installs directly from the Git repository on first load:
+
+#+BEGIN_SRC emacs-lisp
+(use-package annotated-completing-read
+  :vc (:url "https://github.com/tychoish/annotated-completing-read"))
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository locally:
+
+#+BEGIN_SRC sh
+git clone https://github.com/tychoish/annotated-completing-read ~/.emacs.d/site-lisp/annotated-completing-read
+#+END_SRC
+
+Add the directory to your ~load-path~ and require the feature:
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/annotated-completing-read")
+(require 'annotated-completing-read)
+#+END_SRC
+
+Or configure with ~use-package~:
+
+#+BEGIN_SRC emacs-lisp
+(use-package annotated-completing-read
+  :load-path "~/.emacs.d/site-lisp/annotated-completing-read")
+#+END_SRC
+
+On Emacs 29.1+, you can also use ~package-vc-install~ to clone and register:
+
+#+BEGIN_SRC emacs-lisp
+(package-vc-install
+ '(annotated-completing-read
+   :url "https://github.com/tychoish/annotated-completing-read"))
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Below is a complete ~use-package~ configuration block setting useful options with
+explicit defaults and comments:
+
+#+BEGIN_SRC emacs-lisp
+(use-package annotated-completing-read
+  :ensure t
+  :defer t
+  :commands (annotated-completing-read
+             annotated-completing-read-directory
+             annotated-completing-read-context-from-point
+             annotated-completing-read-clear-history)
+  :init
+  ;; Persist per-command completion history across Emacs sessions
+  (annotated-completing-read-setup-history)
+  :config
+  ;; Face styling behavior applied to annotation strings:
+  ;;   'default  -- apply 'completions-annotations' to unstyled annotations (default)
+  ;;   'override -- unconditionally apply 'completions-annotations', overriding text faces
+  ;;   'strip    -- remove all face properties from annotations
+  ;;   <symbol>  -- custom face name to apply to unstyled annotations
+  (setq annotated-completing-read-annotation-face 'default)) ; default: 'default
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options--customization
+:END:
+
+- *Annotation Face Styling*: ~annotated-completing-read-annotation-face~ specifies
+  how face properties are applied to annotation strings. Defaults to ='default=
+  (applies ~completions-annotations~ face to annotations lacking their own face). Set to
+  ='override= to override existing candidate text properties, ='strip= to discard all faces,
+  or a custom face symbol.
+- *History Table*: ~annotated-completing-read-history~ is a global hash table mapping
+  command symbols (defaulting to ~this-command~) to their accumulated minibuffer
+  histories. Reset all stored histories at any time with =M-x annotated-completing-read-clear-history=.
+- *Session Persistence*: ~(annotated-completing-read-setup-history)~ registers
+  ~annotated-completing-read-history~ with Emacs's built-in =savehist= and =desktop=
+  libraries, persisting completion recency across restarts.
+- *Multi-Select Minibuffer Mode*: During multi-candidate selection (~:multiple t~),
+  ~annotated-completing-read-multi-mode~ is activated in the minibuffer:
+  - =M-,= (~annotated-completing-read--multi-continue~): Accept current candidate and prompt for another item.
+  - =M-.= (~annotated-completing-read--multi-finish-now~): Finish the selection immediately, discarding unsubmitted input.
+  - =RET=: Accept current candidate and finish the session.
+
+* Core Workflows & Examples
+:PROPERTIES:
+:CUSTOM_ID: core-workflows--examples
+:END:
+
+** Basic Completion with Annotations
+:PROPERTIES:
+:CUSTOM_ID: basic-completion-with-annotations
+:END:
+
+Pass candidates and annotations as an alist (dotted or list form) or a hash table.
+Column alignment is calculated and applied automatically:
+
+#+BEGIN_SRC emacs-lisp
+;; Dotted alist: ((CANDIDATE . ANNOTATION) ...)
+(annotated-completing-read
+ '(("apple"  . "fruit")
+   ("banana" . "fruit")
+   ("carrot" . "vegetable"))
+ :prompt "Select item: ")
+
+;; Hash table mapping candidate to annotation string
+(let ((table (make-hash-table :test #'equal)))
+  (puthash "emacs" "extensible editor" table)
+  (puthash "vim"   "modal editor" table)
+  (annotated-completing-read table :prompt "Editor: "))
+#+END_SRC
+
+** Returning Custom Targets
+:PROPERTIES:
+:CUSTOM_ID: returning-custom-targets
+:END:
+
+A completion entry can specify a target value returned instead of the candidate string.
+With an alist, use the triple form =((CANDIDATE ANNOTATION . TARGET) ...)=. With a hash
+table, set the value to =(ANNOTATION . TARGET)=:
+
+#+BEGIN_SRC emacs-lisp
+(annotated-completing-read
+ '(("production" "live cluster" . (env :name "prod" :port 443))
+   ("staging"    "test cluster" . (env :name "stage" :port 8443)))
+ :prompt "Environment: ")
+#+END_SRC
+
+When ~:category~ is specified, entries with targets are tagged with =multi-category= metadata,
+allowing packages like Embark to act on the target object directly.
+
+** Multi-Candidate Selection
+:PROPERTIES:
+:CUSTOM_ID: multi-candidate-selection
+:END:
+
+Enable multi-selection with ~:multiple t~. Chosen candidates are removed from the candidate
+pool in subsequent rounds to prevent duplicate selections:
+
+#+BEGIN_SRC emacs-lisp
+(annotated-completing-read
+ '(("alpha" . "greek letter")
+   ("beta"  . "greek letter")
+   ("gamma" . "greek letter"))
+ :multiple t
+ :min 1
+ :max 2
+ :prompt "Pick up to 2 items: ")
+#+END_SRC
+
+In the minibuffer:
+- Press =M-,= to accept the current candidate and select another.
+- Press =RET= to accept the current candidate and conclude the session.
+- Press =M-.= to finish immediately and discard any typed partial input.
+
+** Context and Directory Helpers
+:PROPERTIES:
+:CUSTOM_ID: context-and-directory-helpers
+:END:
+
+The package includes two high-level DWIM helpers:
+
+- ~annotated-completing-read-directory~: Gathers relevant directories from the current project
+  root, active buffer file paths, parent hierarchy, and point. Annotations indicate structural
+  relationships (project root, parent, child, sibling) and file/buffer counts:
+
+  #+BEGIN_SRC emacs-lisp
+  (annotated-completing-read-directory :prompt "Open project directory: ")
+  #+END_SRC
+
+- ~annotated-completing-read-context-from-point~: Collects contextual candidates from the current
+  line, active region, thing-at-point (symbols, words, URLs, defuns), and recent kill-ring items:
+
+  #+BEGIN_SRC emacs-lisp
+  (annotated-completing-read-context-from-point :prompt "Yank context: ")
+  #+END_SRC
+
+* Related Packages
+:PROPERTIES:
+:CUSTOM_ID: related-packages
+:END:
+
+- [[https://github.com/minad/vertico][vertico]]: Performant and minimalist completion UI based on the default minibuffer.
+- [[https://github.com/oantolin/marginalia][marginalia]]: Rich annotations in the minibuffer margin.
+- [[https://github.com/oantolin/embark][embark]]: Contextual minibuffer actions and act-at-point for candidates.
+- [[https://github.com/minad/consult][consult]]: Practical completion commands; =annotated-completing-read= provides an ergonomic alternative to =consult--read= with a clean public API.
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command | Kind | Description |
+|------------------+------+-------------|
+| [[#annotated-completing-read][~annotated-completing-read~]] | Function | Read a candidate from completion table with aligned annotations |
+| [[#annotated-completing-read-directory][~annotated-completing-read-directory~]] | Function | Select a directory using contextual candidate and relation annotations |
+| [[#annotated-completing-read-context-from-point][~annotated-completing-read-context-from-point~]] | Function | Context-aware candidate selection from point, region, and kill-ring |
+| [[#annotated-completing-read-setup-history][~annotated-completing-read-setup-history~]] | Function | Enable ~savehist~ and ~desktop~ session persistence for completion history |
+| [[#annotated-completing-read-clear-history][~annotated-completing-read-clear-history~]] | Command | Clear the per-command completion history table |
+| [[#annotated-completing-read-annotation-face][~annotated-completing-read-annotation-face~]] | Variable | Face styling behavior applied to annotation strings |
+| [[#annotated-completing-read-history][~annotated-completing-read-history~]] | Variable | Global hash table mapping command symbols to minibuffer histories |
+
+#+BEGIN_COMMENT
+Generated from docstrings across all .el files in annotated-completing-read.
+To regenerate: open this file in Emacs with annotated-completing-read on your
+load-path, place point in the source block below, and run C-c C-c (or M-x
+org-babel-execute-buffer).
+Do not edit the #+RESULTS: block by hand — it will be overwritten on the next run.
+#+END_COMMENT
+
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+  (org-docsgen-run
+   :scope '("annotated-completing-read"
+            "annotated-completing-read-directory"
+            "annotated-completing-read-context-from-point"
+            "annotated-completing-read-setup-history"
+            "annotated-completing-read-clear-history"
+            "annotated-completing-read-annotation-face"
+            "annotated-completing-read-history")
+   :namespace "annotated-completing-read")
+#+END_SRC
+
+#+RESULTS:
+** annotated-completing-read
+:PROPERTIES:
+:CUSTOM_ID: annotated-completing-read
+:END:
+
+: (fn TABLE &key (PROMPT "=> ") REQUIRE-MATCH CATEGORY HISTORY GROUP-NAME GROUP-DISPLAY INITIAL-INPUT SORT-FN DEFAULT OR-NIL MULTIPLE MIN MAX)
+
+Read a candidate from completion /TABLE/. /TABLE/ maps candidates to annotations or target values. Alignment is automatic.
+
+/TABLE/ can be a hash table or an alist:
+
+- A list-form alist uses the format: =((CANDIDATE ANNOTATION) ...)=. - A dotted alist uses the format: =((CANDIDATE . ANNOTATION) ...)=. - A triple-form alist uses the format: =((CANDIDATE ANNOTATION . TARGET) ...)=. - An annotation can be =nil=.
+
+PROMPT is the minibuffer prompt.  It defaults to =’=> ’=. A trailing space is appended if it is missing.
+
+/REQUIRE-MATCH/ forces the user to select an existing candidate. If nil, the minibuffer accepts arbitrary input.
+
+/CATEGORY/ is a symbol for the completion category. External packages like embark or marginalia use it to determine behavior. Common values include ‘file’, ‘buffer’, ‘command’, and ‘symbol’.
+
+/HISTORY/ is a symbol representing the history list. It defaults to ~this-command~. Use a shared symbol to share history between commands.
+
+/GROUP-NAME/ determines candidate grouping. It can be a function or a static string.
+
+/GROUP-DISPLAY/ formats the candidate text for display. It is a function that takes a candidate string. This option requires /GROUP-NAME/.
+
+/INITIAL-INPUT/ is an optional string to pre-fill in the minibuffer.
+
+/SORT-FN/ is a function to sort candidates before display.
+
+/DEFAULT/ is the fallback return value. It is returned on empty input or quit.
+
+/OR-NIL/ silences quit and empty input by returning nil. This option takes effect only when /DEFAULT/ is nil.
+
+A table entry can supply an optional TARGET. This TARGET is returned instead of the candidate string. It also affects selection via /DEFAULT/. It allows packages like embark to act on the target directly.
+
+/MULTIPLE/ allows selecting multiple candidates.  It returns an ordered list of selections.  Press ~annotated-completing-read--multi-continue~ to accept a pick and continue.  Press ~annotated-completing-read--multi-finish-now~ to finish immediately. Pressing RET accepts the current input and finishes.  /DEFAULT/ and /OR-NIL/ apply to the entire session.
+
+/MIN/ is the minimum number of required selections.
+
+/MAX/ is the maximum number of allowed selections.
+
+Reaching /MAX/ finishes the session automatically. These options require /MULTIPLE/.
+
+** annotated-completing-read-directory
+:PROPERTIES:
+:CUSTOM_ID: annotated-completing-read-directory
+:END:
+
+: (fn &optional &key CANDIDATES PROMPT REQUIRE-MATCH MULTIPLE MIN MAX)
+
+Select a directory using annotated completion. /CANDIDATES/ is an optional list of directory paths. If nil, candidates are gathered from the current context. /PROMPT/ is the minibuffer prompt.  It defaults to "directory:". /REQUIRE-MATCH/ determines whether a match is required. /MULTIPLE/ enables selecting multiple directories. /MIN/ and /MAX/ define selection limits for multiple selections. Annotations show directory relationships or entry counts.
+
+** annotated-completing-read-context-from-point
+:PROPERTIES:
+:CUSTOM_ID: annotated-completing-read-context-from-point
+:END:
+
+: (fn &optional &key PROMPT SEED INITIAL-INPUT HISTORY)
+
+Select a candidate from the current editing context.
+
+/PROMPT/ is the minibuffer prompt.
+
+/SEED/ specifies explicit candidate strings.
+
+/INITIAL-INPUT/ is the initial minibuffer text.
+
+/HISTORY/ specifies the history list.
+
+This function returns an empty string if no candidate is chosen.
+
+** annotated-completing-read-setup-history
+:PROPERTIES:
+:CUSTOM_ID: annotated-completing-read-setup-history
+:END:
+
+Enable savehist and desktop history integration for ~annotated-completing-read~.
+
+** annotated-completing-read-clear-history :command:
+:PROPERTIES:
+:CUSTOM_ID: annotated-completing-read-clear-history
+:END:
+
+Clear the per-command completion history.
+
+** annotated-completing-read-annotation-face
+:PROPERTIES:
+:CUSTOM_ID: annotated-completing-read-annotation-face
+:END:
+
+Controls how face properties are applied to annotation strings.
+
+~default~: apply ~completions-annotations~ to annotations that carry no face text property.  This is the default.
+
+‘override’: always apply ~completions-annotations~, overriding any existing face.
+
+‘strip’: remove all face text properties from annotations. Other symbols are treated as a face name and applied to annotations that carry no face text property.
+
+** annotated-completing-read-history
+:PROPERTIES:
+:CUSTOM_ID: annotated-completing-read-history
+:END:
+
+Hash table mapping command symbols to per-command minibuffer history lists. Keys are symbols, typically ~this-command~ at call time, and values are the standard Emacs history lists accumulated by ~completing-read~.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+Copyright (C) tychoish. GPL-3.0 or later. See the source file header
+for the full license text.

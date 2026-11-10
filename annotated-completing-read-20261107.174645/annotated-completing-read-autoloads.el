@@ -110,6 +110,7 @@ candidates to annotations.
 (fn &optional &key (PROMPT \"Font: \") REQUIRE-MATCH (DEFAULT (ignore-errors (face-attribute \\='default :family))) CANDIDATES)")
 (autoload 'annotated-completing-read-setup-history "annotated-completing-read"
 "Enable savehist and desktop history integration for `annotated-completing-read'.")
+(register-definition-prefixes "annotated-completing-read" '("annotated-completing-read-"))
 
 ;;; End of scraped data
 
