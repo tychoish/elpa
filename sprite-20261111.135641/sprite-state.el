@@ -84,10 +84,86 @@ it is next enabled."
   :type '(alist :key-type symbol :value-type sexp)
   :group 'sprite-state)
 
+(defcustom sprite-state-auto-mode-alist nil
+  "Alist of `(REGEXP . MODE)' associations merged into `auto-mode-alist'."
+  :type '(alist :key-type regexp :value-type symbol)
+  :group 'sprite-state)
+
+(defcustom sprite-state-mode-hooks nil
+  "Alist mapping hook variables to a function or list of functions.
+Each entry has the form `(HOOK . FUNCTION)' or `(HOOK . (FUNCTION ...))'.
+Functions are registered when `sprite-state-global-mode' is enabled and
+removed when it is disabled."
+  :type '(alist :key-type symbol
+                :value-type (choice function (repeat function)))
+  :group 'sprite-state)
+
+;;;###autoload
+(defun sprite-state-modes-merge-alist (current new-entries)
+  "Merge NEW-ENTRIES into CURRENT alist, overriding existing keys."
+  (append new-entries
+          (seq-remove (lambda (entry) (assoc (car entry) new-entries))
+                      current)))
+
+;;;###autoload
+(defun sprite-state-modes-initialize ()
+  "Merge `sprite-state-auto-mode-alist' into `auto-mode-alist'."
+  (setq auto-mode-alist
+        (sprite-state-modes-merge-alist auto-mode-alist sprite-state-auto-mode-alist)))
+
 (defvar sprite-state--saved-settings nil
   "Saved prior settings recorded by `sprite-state--apply-settings'.")
 (defvar sprite-state--owned-modes nil)
+(defvar sprite-state--owned-hooks nil)
 (defvar sprite-state-global-mode)
+
+(defun sprite-state--hook-functions (spec)
+  "Return a list of hook functions for SPEC."
+  (if (functionp spec)
+      (list spec)
+    (ensure-list spec)))
+
+;;;###autoload
+(defun sprite-state-register-auto-modes (entries)
+  "Register `(REGEXP . MODE)' ENTRIES in `sprite-state-auto-mode-alist'."
+  (setq sprite-state-auto-mode-alist
+        (sprite-state-modes-merge-alist sprite-state-auto-mode-alist entries))
+  (when (bound-and-true-p sprite-state-global-mode)
+    (sprite-state-modes-initialize)))
+
+;;;###autoload
+(defun sprite-state-register-mode-hooks (hooks)
+  "Register `(HOOK . FUNCTION-OR-FUNCTIONS)' HOOKS in `sprite-state-mode-hooks'."
+  (seq-do (lambda (entry)
+            (let* ((hook (car entry))
+                   (existing (when-let* ((cur (assq hook sprite-state-mode-hooks)))
+                               (sprite-state--hook-functions (cdr cur))))
+                   (combined (seq-uniq (append existing
+                                               (sprite-state--hook-functions (cdr entry))))))
+              (setf (alist-get hook sprite-state-mode-hooks)
+                    (if (cdr combined) combined (car combined)))))
+          hooks)
+  (when (bound-and-true-p sprite-state-global-mode)
+    (sprite-state--add-hooks hooks)))
+
+(defun sprite-state--add-hooks (&optional hooks)
+  "Add hook functions from HOOKS (default `sprite-state-mode-hooks')."
+  (seq-do (lambda (entry)
+            (let ((hook (car entry)))
+              (seq-do (lambda (fn)
+                        (unless (and (boundp hook)
+                                     (memq fn (symbol-value hook)))
+                          (push (cons hook fn) sprite-state--owned-hooks))
+                        (add-hook hook fn))
+                      (sprite-state--hook-functions (cdr entry)))))
+          (or hooks sprite-state-mode-hooks)))
+
+(defun sprite-state--remove-hooks ()
+  "Remove hook functions added by `sprite-state--add-hooks'."
+  (seq-do (lambda (entry)
+            (remove-hook (car entry) (cdr entry)))
+          sprite-state--owned-hooks)
+  (setq sprite-state--owned-hooks nil))
 
 (defun sprite-state--apply-settings (&optional settings)
   "Apply SETTINGS (default `sprite-state-settings').
@@ -243,6 +319,7 @@ independent of `sprite-mode'."
       (when sprite-state--desktop-timer
         (cancel-timer sprite-state--desktop-timer)
         (setq sprite-state--desktop-timer nil))
+      (sprite-state--remove-hooks)
       (sprite-state--restore-settings)
       (setq sprite-state--active nil)
       (when failure (signal (car failure) (cdr failure)))))
@@ -251,6 +328,8 @@ independent of `sprite-mode'."
         (progn
           (sprite-state-configure)
           (sprite-state--apply-settings)
+          (sprite-state-modes-initialize)
+          (sprite-state--add-hooks)
           (when sprite-state-savehist-enabled
             (sprite-state--start-mode 'savehist 'savehist-mode))
           (let ((inhibit-message t)
@@ -263,6 +342,7 @@ independent of `sprite-mode'."
              (when sprite-state--desktop-timer
                (cancel-timer sprite-state--desktop-timer)
                (setq sprite-state--desktop-timer nil))
+             (sprite-state--remove-hooks)
              (sprite-state--restore-settings)
              (setq sprite-state-global-mode nil)
              (signal (car err) (cdr err)))))))

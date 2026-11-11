@@ -264,25 +264,122 @@ or `describe-symbol' as fallback."
   :doc "Keymap active when `eglox-global-mode' is enabled."
   "C-c l" (cons "eglot" eglox-command-map))
 
-(defconst eglox-mode-hooks
-  '(js-mode-hook
-    js-ts-mode-hook
-    typescript-ts-mode-hook
-    go-ts-mode-hook
-    go-mod-ts-mode-hook
-    yaml-mode-hook
-    rustic-mode-hook
-    c++-ts-mode-hook
-    c-ts-mode-hook
-    c-or-c++-mode-hook
-    python-mode-hook
-    python-ts-mode-hook
-    go-mode-hook
-    go-mod-mode-hook
-    bash-ts-mode-hook
-    bash-mode-hook
-    sh-mode-hook)
-  "Major mode hooks where `eglox-ensure' is installed.")
+(defcustom eglox-auto-mode-alist
+  '(("\\(?:^\\|/\\)[Mm]akefile\\'" . makefile-mode)
+    ("\\.mk\\'" . makefile-mode)
+    ("PKGBUILD\\'" . pkgbuild-mode)
+    ("\\.proto\\'" . protobuf-mode)
+    ("\\.ninja\\'" . ninja-mode)
+    ("\\.tf\\'" . terraform-mode)
+    ("\\.tfvars\\'" . terraform-mode)
+    ("\\.tfvars\\.example\\'" . terraform-mode)
+    ("\\.sh\\'" . bash-ts-mode)
+    ("\\.bash\\'" . bash-ts-mode)
+    ("\\.bashrc\\'" . bash-ts-mode)
+    ("Dockerfile" . dockerfile-ts-mode)
+    ("\\.ya?ml\\'" . yaml-mode)
+    ("\\.go\\'" . go-ts-mode)
+    ("/go\\.work\\'" . go-mod-ts-mode)
+    ("/go\\.mod\\'" . go-mod-ts-mode)
+    ("\\.rs\\'" . rustic-mode)
+    ("/Cargo\\.lock\\'" . toml-ts-mode)
+    ("\\.py\\'" . python-ts-mode)
+    ("\\.html\\'" . web-mode)
+    ("\\.htm\\'" . web-mode)
+    ("\\.as[cp]x\\'" . web-mode)
+    ("\\.djhtml\\'" . web-mode)
+    ("\\.erb\\'" . web-mode)
+    ("\\.jsp\\'" . web-mode)
+    ("\\.mustache\\'" . web-mode)
+    ("\\.phtml\\'" . web-mode)
+    ("\\.tpl\\.php\\'" . web-mode)
+    ("\\.ts\\'" . typescript-ts-mode)
+    ("\\.js\\'" . js-ts-mode)
+    ("\\.tsx\\'" . tsx-ts-mode)
+    ("\\.css\\'" . css-ts-mode)
+    ("\\.json\\'" . json-ts-mode)
+    ("\\.toml\\'" . toml-ts-mode)
+    ("CMakeLists.txt" . cmake-ts-mode)
+    ("\\.lisp\\'" . lisp-mode)
+    ("\\.h\\'" . c-or-c++-mode)
+    ("\\.c\\'" . c-ts-mode)
+    ("\\.cpp\\'" . c++-ts-mode)
+    ("\\.cc\\'" . c++-ts-mode)
+    ("\\.hh\\'" . c++-ts-mode)
+    ("\\.cxx\\'" . c++-ts-mode)
+    ("\\.java\\'" . java-ts-mode))
+  "Alist of `(REGEXP . MODE)' associations merged into `auto-mode-alist'."
+  :type '(alist :key-type regexp :value-type symbol)
+  :group 'eglot)
+
+;;;###autoload
+(defun eglox-modes-merge-alist (current new-entries)
+  "Merge NEW-ENTRIES into CURRENT alist, overriding existing keys."
+  (let ((seen (make-hash-table :test #'equal)))
+    (seq-filter (lambda (entry)
+                  (unless (map-elt seen (car entry))
+                    (setf (map-elt seen (car entry)) t)))
+                (append new-entries current))))
+
+;;;###autoload
+(defun eglox-modes-initialize ()
+  "Merge `eglox-auto-mode-alist' into `auto-mode-alist'."
+  (setq auto-mode-alist
+        (eglox-modes-merge-alist auto-mode-alist eglox-auto-mode-alist)))
+
+(defcustom eglox-mode-hooks
+  '((js-mode-hook . eglox-ensure)
+    (js-ts-mode-hook . eglox-ensure)
+    (typescript-ts-mode-hook . eglox-ensure)
+    (go-ts-mode-hook . (eglox--go-setup eglox-ensure))
+    (go-mod-ts-mode-hook . eglox-ensure)
+    (yaml-mode-hook . (eglox--yaml-setup eglox-ensure))
+    (rustic-mode-hook . (eglox--rustic-setup eglox-ensure))
+    (c++-ts-mode-hook . eglox-ensure)
+    (c-ts-mode-hook . eglox-ensure)
+    (c-or-c++-mode-hook . eglox-ensure)
+    (python-mode-hook . eglox-ensure)
+    (python-ts-mode-hook . (eglox--python-setup eglox-ensure))
+    (go-mode-hook . eglox-ensure)
+    (go-mod-mode-hook . eglox-ensure)
+    (bash-ts-mode-hook . eglox-ensure)
+    (bash-mode-hook . eglox-ensure)
+    (sh-mode-hook . eglox-ensure)
+    (emacs-lisp-mode-hook . eglox--elisp-setup)
+    (window-selection-change-functions . eglox-activate-prioritize-visible))
+  "Alist mapping hook variables to a function or list of functions.
+Each entry has the form `(HOOK . FUNCTION)' or `(HOOK . (FUNCTION ...))'.
+Functions are registered when `eglox-global-mode' is enabled and removed
+when it is disabled."
+  :type '(alist :key-type symbol
+                :value-type (choice function (repeat function)))
+  :group 'eglot)
+
+(defun eglox--hook-functions (spec)
+  "Return a list of hook functions for SPEC."
+  (if (functionp spec)
+      (list spec)
+    (ensure-list spec)))
+
+(defun eglox--add-hooks (&optional hooks)
+  "Add hook functions from HOOKS (default `eglox-mode-hooks')."
+  (seq-do (lambda (entry)
+            (let ((hook (if (consp entry) (car entry) entry))
+                  (fns (if (consp entry)
+                           (eglox--hook-functions (cdr entry))
+                         (list #'eglox-ensure))))
+              (seq-do (lambda (fn) (add-hook hook fn)) fns)))
+          (or hooks eglox-mode-hooks)))
+
+(defun eglox--remove-hooks (&optional hooks)
+  "Remove hook functions from HOOKS (default `eglox-mode-hooks')."
+  (seq-do (lambda (entry)
+            (let ((hook (if (consp entry) (car entry) entry))
+                  (fns (if (consp entry)
+                           (eglox--hook-functions (cdr entry))
+                         (list #'eglox-ensure))))
+              (seq-do (lambda (fn) (remove-hook hook fn)) fns)))
+          (or hooks eglox-mode-hooks)))
 
 (defvar eglox-default-server-configuration
   `((:yaml :format
@@ -537,9 +634,14 @@ Buffers are queued for throttled activation against an existing server, and
 `eglot-ensure' covers projects with no server yet, so this does not start a
 connection storm.  Return the number of buffers scheduled."
   (interactive)
-  (let* ((modes (seq-map (lambda (hook)
-                           (intern (string-remove-suffix "-hook" (symbol-name hook))))
-                         eglox-mode-hooks))
+  (let* ((modes (thread-last eglox-mode-hooks
+                  (seq-filter (lambda (entry)
+                                (or (symbolp entry)
+                                    (memq 'eglox-ensure
+                                          (eglox--hook-functions (cdr entry))))))
+                  (seq-map (lambda (entry)
+                             (let ((hook (if (consp entry) (car entry) entry)))
+                               (intern (string-remove-suffix "-hook" (symbol-name hook))))))))
          (buffers (seq-filter
                    (lambda (buffer)
                      (with-current-buffer buffer
@@ -928,15 +1030,9 @@ Only called when `eglot' is loaded and `eglox-global-mode' is enabled."
     (eglox-project-mode 1)
     (setq eglox--owns-project-mode t))
   (eglox--apply-settings)
+  (eglox-modes-initialize)
   (eglox--configure-python)
-  (add-hook 'go-ts-mode-hook #'eglox--go-setup)
-  (add-hook 'python-ts-mode-hook #'eglox--python-setup)
-  (add-hook 'yaml-mode-hook #'eglox--yaml-setup)
-  (add-hook 'rustic-mode-hook #'eglox--rustic-setup)
-  (add-hook 'emacs-lisp-mode-hook #'eglox--elisp-setup)
-  (add-hook 'window-selection-change-functions #'eglox-activate-prioritize-visible)
-  (dolist (hook eglox-mode-hooks)
-    (add-hook hook #'eglox-ensure))
+  (eglox--add-hooks)
   (eglox--setup-dape)
   (when eglox--eglot-initialized
     (eglox--install-eglot-integrations)))
@@ -954,14 +1050,7 @@ Only called when `eglot' is loaded and `eglox-global-mode' is enabled."
       (keymap-set python-base-mode-map "M-<right>" (cadr eglox--python-keys)))
     (font-lock-remove-keywords 'python-ts-mode '(("\t" 0 'trailing-whitespace prepend)))
     (setq eglox--python-keys nil))
-  (remove-hook 'go-ts-mode-hook #'eglox--go-setup)
-  (remove-hook 'python-ts-mode-hook #'eglox--python-setup)
-  (remove-hook 'yaml-mode-hook #'eglox--yaml-setup)
-  (remove-hook 'rustic-mode-hook #'eglox--rustic-setup)
-  (remove-hook 'emacs-lisp-mode-hook #'eglox--elisp-setup)
-  (remove-hook 'window-selection-change-functions #'eglox-activate-prioritize-visible)
-  (dolist (hook eglox-mode-hooks)
-    (remove-hook hook #'eglox-ensure))
+  (eglox--remove-hooks)
   (eglox--uninstall-eglot-integrations)
   (eglox--teardown-dape)
   (when (timerp eglox-activate-timer)

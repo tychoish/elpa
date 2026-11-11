@@ -352,6 +352,20 @@ if a binding existed and was removed.
 
 ;;; Generated autoloads from sprite-state.el
 
+(autoload 'sprite-state-modes-merge-alist "sprite-state"
+"Merge NEW-ENTRIES into CURRENT alist, overriding existing keys.
+
+(fn CURRENT NEW-ENTRIES)")
+(autoload 'sprite-state-modes-initialize "sprite-state"
+"Merge `sprite-state-auto-mode-alist' into `auto-mode-alist'.")
+(autoload 'sprite-state-register-auto-modes "sprite-state"
+"Register `(REGEXP . MODE)' ENTRIES in `sprite-state-auto-mode-alist'.
+
+(fn ENTRIES)")
+(autoload 'sprite-state-register-mode-hooks "sprite-state"
+"Register `(HOOK . FUNCTION-OR-FUNCTIONS)' HOOKS in `sprite-state-mode-hooks'.
+
+(fn HOOKS)")
 (autoload 'sprite-state-configure "sprite-state"
 "Apply selected instance state mappings and optional lock policy.
 Call before consumers initialize.  This does not load optional packages.")

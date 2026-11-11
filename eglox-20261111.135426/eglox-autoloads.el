@@ -25,6 +25,12 @@ Otherwise: use `slime-describe-symbol' if slime is connected,
 or `describe-symbol' as fallback.
 
 (fn PREFIX)" t)
+(autoload 'eglox-modes-merge-alist "eglox"
+"Merge NEW-ENTRIES into CURRENT alist, overriding existing keys.
+
+(fn CURRENT NEW-ENTRIES)")
+(autoload 'eglox-modes-initialize "eglox"
+"Merge `eglox-auto-mode-alist' into `auto-mode-alist'.")
 (autoload 'eglox-ensure "eglox"
 "Initialize Eglot and ensure it manages the current buffer." t)
 (autoload 'eglox-format-for-hook "eglox"
