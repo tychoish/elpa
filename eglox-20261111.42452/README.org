@@ -1,0 +1,293 @@
+#+title: eglox
+#+author: sam kleinman
+#+email: sam@tychoish.com
+
+A programming environment for Emacs combining Eglot LSP extensions, IDE
+workflows, language defaults, and project integration.
+
+* Table of Contents :TOC:
+:PROPERTIES:
+:CUSTOM_ID: toc
+:END:
+- [[#overview][Overview]]
+- [[#installation][Installation]]
+  - [[#installation-elpaish][ELPAish (Recommended)]]
+  - [[#manual-installation][Manual Installation]]
+- [[#configuration][Configuration]]
+- [[#managed-settings][Managed Settings]]
+- [[#project-integration][Project Integration]]
+- [[#features][Features]]
+  - [[#throttled-activation][Throttled Activation]]
+  - [[#server-lifecycle--cleanup][Server Lifecycle & Cleanup]]
+  - [[#dape-debugging][Dape Debugging]]
+  - [[#keymaps--commands][Keymaps & Commands]]
+- [[#api-reference][API Reference]]
+- [[#license][License]]
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=eglox= combines LSP, IDE navigation, language-specific defaults, and project
+workflows for a multi-language programming environment. It extends Emacs'
+built-in =eglot= LSP client with:
+- Throttled buffer activation to prevent connection storms when opening multi-file projects.
+- Server lifecycle management: duplicate server pruning, dead connection cleanup, and reconnection resilience.
+- Structured keymaps under =C-c l= for Eglot commands, IDE navigation, debugging, and project-wide actions.
+- Dape debugging commands under =C-c l d=, with settings applied and restored by =eglox-global-mode=.
+- Optional Projectile project integration and cache warming.
+- Guarded completion-at-point handlers to prevent repetitive JSON-RPC errors.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: installation-elpaish
+:END:
+
+Install via ELPAish with =use-package=:
+
+#+begin_src emacs-lisp
+(use-package eglox
+  :ensure t)
+#+end_src
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository and add it to your Emacs =load-path=:
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "~/src/eglox")
+(require 'eglox)
+#+end_src
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+Enable =eglox-global-mode= in your init:
+
+#+begin_src emacs-lisp
+(use-package eglox
+  :ensure t
+  :commands (eglox-global-mode eglox-mode)
+  :init
+  (eglox-global-mode 1))
+#+end_src
+
+* Managed Settings
+:PROPERTIES:
+:CUSTOM_ID: managed-settings
+:END:
+
+Customize =eglox-settings= (an alist of =(SYMBOL . VALUE)= pairs) before enabling
+=eglox-global-mode= to adjust the global defaults managed by the mode. Disabling
+=eglox-global-mode= restores the saved prior defaults.
+
+#+begin_src emacs-lisp
+(setq eglox-settings
+      '((show-paren-delay . 0.25)
+        (makefile-electric-keys . nil)))
+#+end_src
+
+Go, Python, and YAML buffer defaults have separate fill-column and tab-width
+options, and YAML Pro or Builder integrations can be controlled with
+=eglox-enable-yaml-pro= and =eglox-enable-builder-elisp=.
+
+* Project Integration
+:PROPERTIES:
+:CUSTOM_ID: project-integration
+:END:
+
+=eglox-global-mode= enables =eglox-project-mode= by default; set
+=eglox-enable-project-mode= to nil to opt out. Project integration can also be
+used independently, without loading Eglox or Eglot:
+
+#+begin_src emacs-lisp
+(require 'eglox-project)
+(setq eglox-project-mode-hooks '(prog-mode-hook my-project-mode-hook))
+(setq eglox-project-settings
+      '((popper-group-function . popper-group-by-projectile)
+        (compilation-save-buffers-predicate . project-current)
+        (projectile-use-git-grep . nil)
+        (projectile-enable-caching . persistent)
+        (projectile-require-project-root . nil)))
+(eglox-project-mode 1)
+#+end_src
+
+Loading the project module loads Projectile without enabling it. The mode preserves a
+Projectile mode that was already enabled. Configured hooks and project changes
+queue cold project caches for background warming. =eglox-project-settings=
+captures the =(SYMBOL . VALUE)= defaults managed while =eglox-project-mode= is
+active and restored on disable.
+
+=eglox-project-cache-directory= selects the local directory for persistent
+Projectile caches (by default, =state/projectile-cache/= under
+=user-emacs-directory=). Cache names use a hash of the complete project root,
+including remote identity, so projects with the same basename remain distinct.
+Existing in-tree Projectile cache files are left untouched; the central cache
+is populated afresh. Creating the cache directory restricts its permissions.
+The module also provides incremental project buffer loading, session restore,
+and bulk cache purge commands. Those operations use =gen= and the save-buffers
+picker uses =annotated-completing-read=.
+
+* Features
+:PROPERTIES:
+:CUSTOM_ID: features
+:END:
+
+** Throttled Activation
+:PROPERTIES:
+:CUSTOM_ID: throttled-activation
+:END:
+
+When multiple programming buffers are loaded at once (e.g. during session restore or mass grep-edits), =eglox= rate-limits server initialization and prioritizes visible windows first. Inspect or flush the activation queue with:
+
+#+begin_src emacs-lisp
+(eglox-activate-queue-report)
+(eglox-activate-flush-queue)
+#+end_src
+
+** Server Lifecycle & Cleanup
+:PROPERTIES:
+:CUSTOM_ID: server-lifecycle--cleanup
+:END:
+
+- Automatically detects and prunes duplicate LSP servers on reconnect.
+- Shuts down orphaned and dead servers periodically during idle periods.
+- Re-establishes server connections on save if an LSP server died in the background.
+
+** Dape Debugging
+:PROPERTIES:
+:CUSTOM_ID: dape-debugging
+:END:
+
+[[https://github.com/svaante/dape][Dape]] is an optional dependency. =eglox= autoloads its commands, so Dape loads only when a command runs. While =eglox-global-mode= is on and =eglox-configure-dape= is non-nil, =eglox=:
+
+- Opens debugger windows on the right (=dape-buffer-window-arrangement=).
+- Leaves Dape's own global prefix unbound (=dape-key-prefix= is nil). Use =C-c l d= instead.
+- Saves modified file buffers when a debug session starts.
+- Saves breakpoints when Emacs exits, if Dape was loaded.
+
+Disabling the mode restores the previous values and removes the hooks. Set =eglox-configure-dape= to nil to opt out. The working directory comes from Dape's default, which uses =project.el= and so follows Projectile when =projectile-mode= is on.
+
+| Key         | Command                    |
+|-------------+----------------------------|
+| =C-c l d d= | =dape=                     |
+| =C-c l d b= | =dape-breakpoint-toggle=   |
+| =C-c l d B= | =dape-breakpoint-remove-all= |
+| =C-c l d c= | =dape-continue=            |
+| =C-c l d n= | =dape-next=                |
+| =C-c l d s= | =dape-step-in=             |
+| =C-c l d o= | =dape-step-out=            |
+| =C-c l d p= | =dape-pause=               |
+| =C-c l d r= | =dape-restart=             |
+| =C-c l d q= | =dape-quit=                |
+| =C-c l d R= | =dape-repl=                |
+| =C-c l d e= | =dape-evaluate-expression= |
+| =C-c l d w= | =dape-watch-dwim=          |
+| =C-c l d i= | =dape-info=                |
+| =C-c l d m= | =dape-memory=              |
+
+** Keymaps & Commands
+:PROPERTIES:
+:CUSTOM_ID: keymaps--commands
+:END:
+
+- =C-c l= prefix exposes standard Eglot actions (=r= rename, =a= code actions, =f= format, =o= organize imports).
+- =C-c l x= binds the IDE navigation keymap (xref definitions, references, and imenu).
+- =C-c l d= binds the Dape debugging keymap.
+- =M-x eglox-describe-symbol-dwim= contextual symbol lookup across Slime, Eglot, and Elisp.
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol | Type | Description |
+|---|---|---|
+| [[#eglox-global-mode][eglox-global-mode]] | Minor mode | Global LSP connection throttle and lifecycle manager |
+| [[#eglox-mode][eglox-mode]] | Minor mode | Buffer-local minor mode for Eglot-managed buffers |
+| [[#eglox-ensure][eglox-ensure]] | Command | Rate-limited buffer activation hook entry point |
+| [[#eglox-describe-symbol-dwim][eglox-describe-symbol-dwim]] | Command | DWIM symbol documentation lookup |
+| [[#eglox-cleanup-stale-connections][eglox-cleanup-stale-connections]] | Command | Prune dead or orphaned Eglot servers |
+| [[#eglox-activate-flush-queue][eglox-activate-flush-queue]] | Command | Flush pending throttled buffer activations |
+| [[#eglox-command-map][eglox-command-map]] | Keymap | Prefix command map for Eglot commands |
+| [[#eglox-ide-map][eglox-ide-map]] | Keymap | Submap for IDE navigation commands |
+| [[#eglox-dape-map][eglox-dape-map]] | Keymap | Submap for Dape debugging commands |
+| [[#eglox-configure-dape][eglox-configure-dape]] | Option | Whether the mode configures Dape settings and hooks |
+
+** eglox-global-mode
+:PROPERTIES:
+:CUSTOM_ID: eglox-global-mode
+:END:
+Global minor mode that manages server deduplication, connection throttling, and periodic stale server pruning.
+
+** eglox-mode
+:PROPERTIES:
+:CUSTOM_ID: eglox-mode
+:END:
+Buffer-local minor mode enabled when an Eglot server manages the current buffer.
+
+** eglox-ensure
+:PROPERTIES:
+:CUSTOM_ID: eglox-ensure
+:END:
+Entry point installed on major mode hooks to queue or initialize Eglot.
+
+** eglox-describe-symbol-dwim
+:PROPERTIES:
+:CUSTOM_ID: eglox-describe-symbol-dwim
+:END:
+Contextual symbol description dispatcher across Lisp (Slime), Eglot, and built-in help.
+
+** eglox-cleanup-stale-connections
+:PROPERTIES:
+:CUSTOM_ID: eglox-cleanup-stale-connections
+:END:
+Prunes dead and duplicate Eglot server processes.
+
+** eglox-activate-flush-queue
+:PROPERTIES:
+:CUSTOM_ID: eglox-activate-flush-queue
+:END:
+Drains and activates all pending buffers waiting in the activation queue.
+
+** eglox-command-map
+:PROPERTIES:
+:CUSTOM_ID: eglox-command-map
+:END:
+Keymap bound to =C-c l= for LSP commands.
+
+** eglox-ide-map
+:PROPERTIES:
+:CUSTOM_ID: eglox-ide-map
+:END:
+Keymap bound to =C-c l x= for definitions, references, and symbol navigation.
+
+** eglox-dape-map
+:PROPERTIES:
+:CUSTOM_ID: eglox-dape-map
+:END:
+Keymap bound to =C-c l d= for Dape debugging commands.
+
+** eglox-configure-dape
+:PROPERTIES:
+:CUSTOM_ID: eglox-configure-dape
+:END:
+User option, default t. When non-nil, =eglox-global-mode= applies the Dape settings and hooks described under Dape Debugging, and restores them when the mode is disabled.
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See LICENSE file for details.
