@@ -3058,7 +3058,9 @@ A.3 How can I autoload prefix and suffix commands?
 If your package only supports Emacs 30, just prefix the definition with
 ‘;;;###autoload’.  If your package supports older Emacs releases, you
 unfortunately have to use a long-form autoload comment as described in
-*note (elisp)Autoload::.
+*note (elisp)Autoload::.  That unfortunately also means that docstrings
+won't be autoloaded.  (Note that Magit still supports older Emacs
+releases.)
 
      ;;;###autoload (autoload 'magit-dispatch "magit" nil t)
      (transient-define-prefix magit-dispatch ()
@@ -4120,14 +4122,14 @@ Node: FAQ136731
 Ref: Can I control how the menu buffer is displayed?136860
 Ref: How can I copy text from the menu buffer?137184
 Ref: How can I autoload prefix and suffix commands?137891
-Ref: How does Transient compare to prefix keys and universal arguments?138359
-Ref: How does Transient compare to Magit-Popup and Hydra?138602
-Ref: Why does q not quit popups anymore?138796
-Node: Keystroke Index139897
-Node: Command and Function Index141762
-Node: Variable Index149229
-Node: Concept Index152519
-Node: GNU General Public License155196
+Ref: How does Transient compare to prefix keys and universal arguments?138483
+Ref: How does Transient compare to Magit-Popup and Hydra?138726
+Ref: Why does q not quit popups anymore?138920
+Node: Keystroke Index140021
+Node: Command and Function Index141886
+Node: Variable Index149353
+Node: Concept Index152643
+Node: GNU General Public License155320
 
 End Tag Table
 

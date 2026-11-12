@@ -66,6 +66,8 @@
 (defvar nerd-icons-completion-mode-hook)
 (defvar nerd-icons-xref-mode)
 (declare-function eglot-completion-at-point "eglot")
+(declare-function mu4e--compose-complete-contact-field "mu4e-compose")
+(defvar mu4e-compose-complete-addresses)
 (declare-function which-key-show-keymap "which-key")
 (declare-function which-key--popup-showing-p "which-key")
 (declare-function corfu-history-mode "corfu-history")
@@ -362,9 +364,16 @@ Non-nil only while `minaid-mode' owns the minibuffer bindings.")
   "Wrap INNER Capf using Cape WRAPPER function without defining synthetic symbols."
   (funcall wrapper inner))
 
+(defun minaid--dictionary-available-p ()
+  "Return non-nil when Cape's dictionary can be used."
+  (and (boundp 'cape-dict-file)
+       (or (functionp cape-dict-file)
+           (and (stringp cape-dict-file) (file-exists-p cape-dict-file))
+           (and (listp cape-dict-file) (seq-some #'file-exists-p cape-dict-file)))))
+
 (defun minaid--word-capfs ()
   "Return available word completion backends wrapped for comments and strings."
-  (when (and (boundp 'cape-dict-file) (file-exists-p cape-dict-file))
+  (when (minaid--dictionary-available-p)
     (list (cape-wrap-inside-comment #'cape-dict)
           (cape-wrap-inside-string #'cape-dict))))
 
@@ -377,7 +386,7 @@ Non-nil only while `minaid-mode' owns the minibuffer bindings.")
                       #'cape-rfc1345
                       #'cape-emoji
                       #'cape-dabbrev
-                      (and (boundp 'cape-dict-file) (file-exists-p cape-dict-file) #'cape-dict))
+                      (and (minaid--dictionary-available-p) #'cape-dict))
                 (seq-filter #'identity))))
 
 (defun minaid-text-mode-capf-setup ()
@@ -389,8 +398,16 @@ Non-nil only while `minaid-mode' owns the minibuffer bindings.")
                       #'cape-emoji
                       #'cape-file
                       #'cape-dabbrev
-                      (and (boundp 'cape-dict-file) (file-exists-p cape-dict-file) #'cape-dict))
+                      (and (minaid--dictionary-available-p) #'cape-dict))
                 (seq-filter #'identity))))
+
+(defun minaid-mu4e-capf-setup ()
+  "Configure mail completion and optional mu4e address completion."
+  (minaid-text-mode-capf-setup)
+  (when mu4e-compose-complete-addresses
+    (add-hook 'completion-at-point-functions
+              (cape-capf-prefix-length #'mu4e--compose-complete-contact-field 4)
+              -10 t)))
 
 (defun minaid-elisp-capf-setup ()
   "Configure buffer-local `completion-at-point-functions' for Emacs Lisp mode."
@@ -448,6 +465,8 @@ Non-nil only while `minaid-mode' owns the minibuffer bindings.")
   "Configure local `completion-at-point-functions' for the current buffer."
   (interactive)
   (cond
+   ((derived-mode-p 'mu4e-compose-mode) (minaid-mu4e-capf-setup))
+   ((derived-mode-p 'message-mode) (minaid-text-mode-capf-setup))
    ((bound-and-true-p eglot--managed-mode) (minaid-eglot-capf-setup))
    ((derived-mode-p 'emacs-lisp-mode) (minaid-elisp-capf-setup))
    ((derived-mode-p 'prog-mode) (minaid-prog-mode-capf-setup))
@@ -849,6 +868,8 @@ Returns STRING when non-empty, or nil to discard it from the kill ring."
   (add-hook 'emacs-lisp-mode-hook #'minaid-elisp-capf-setup)
   (add-hook 'telega-chat-mode-hook #'minaid-text-mode-capf-setup)
   (add-hook 'text-mode-hook #'minaid-text-mode-capf-setup)
+  (add-hook 'message-mode-hook #'minaid-text-mode-capf-setup)
+  (add-hook 'mu4e-compose-mode-hook #'minaid-mu4e-capf-setup)
   (add-hook 'prog-mode-hook #'minaid-prog-mode-capf-setup)
 
   ;; Corfu buffer hooks (add-hook works even before modes load)
@@ -913,6 +934,8 @@ Returns STRING when non-empty, or nil to discard it from the kill ring."
   (remove-hook 'emacs-lisp-mode-hook #'minaid-elisp-capf-setup)
   (remove-hook 'telega-chat-mode-hook #'minaid-text-mode-capf-setup)
   (remove-hook 'text-mode-hook #'minaid-text-mode-capf-setup)
+  (remove-hook 'message-mode-hook #'minaid-text-mode-capf-setup)
+  (remove-hook 'mu4e-compose-mode-hook #'minaid-mu4e-capf-setup)
   (remove-hook 'prog-mode-hook #'minaid-prog-mode-capf-setup)
 
   ;; Remove Corfu sub-mode hooks
