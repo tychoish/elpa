@@ -11,8 +11,8 @@
 
 ;;; Generated autoloads from agent-shell-notifications.el
 
-(autoload 'agent-shell-notifications-mode "agent-shell-notifications" "\
-Toggle libnotify notifications for the current agent-shell buffer.
+(autoload 'agent-shell-notifications-mode "agent-shell-notifications"
+"Toggle libnotify notifications for the current agent-shell buffer.
 
 This is a minor mode.  If called interactively, toggle the
 `Agent-Shell-Notifications mode' mode.  If the prefix argument is
@@ -30,8 +30,8 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(autoload 'agent-shell-notifications-viewport-edit-mode "agent-shell-notifications" "\
-Toggle notifications hooks for an agent-shell viewport edit buffer.
+(autoload 'agent-shell-notifications-viewport-edit-mode "agent-shell-notifications"
+"Toggle notifications hooks for an agent-shell viewport edit buffer.
 
 Add to `agent-shell-viewport-edit-mode-hook' to cancel idle timers and
 close notifications when the viewport edit window is selected.
@@ -52,8 +52,8 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(autoload 'agent-shell-notifications-viewport-view-mode "agent-shell-notifications" "\
-Toggle notifications hooks for an agent-shell viewport view buffer.
+(autoload 'agent-shell-notifications-viewport-view-mode "agent-shell-notifications"
+"Toggle notifications hooks for an agent-shell viewport view buffer.
 
 Add to `agent-shell-viewport-view-mode-hook' to cancel idle timers and
 close notifications when the viewport view window is selected or a reply is sent.
@@ -74,8 +74,8 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(autoload 'agent-shell-notifications-set-provider "agent-shell-notifications" "\
-Load PROVIDER and validate that it sets the required functions.
+(autoload 'agent-shell-notifications-set-provider "agent-shell-notifications"
+"Load PROVIDER and validate that it sets the required functions.
 PROVIDER is a symbol naming the feature to require.  The feature
 must set `agent-shell-notifications-send-function' and
 `agent-shell-notifications-close-function'.  When PROVIDER is nil,
@@ -86,14 +86,19 @@ Interactively, reads a provider symbol from the minibuffer.
 (register-definition-prefixes "agent-shell-notifications" '("agent-shell-notifications-"))
 
 
-;;; Generated autoloads from agent-shell-notifications-knockknock.el
+;;; Generated autoloads from agent-shell-notifications-alert.el
 
-(register-definition-prefixes "agent-shell-notifications-knockknock" '("agent-shell-notifications--"))
+(autoload 'agent-shell-notifications-alert-setup "agent-shell-notifications-alert"
+"Configure `agent-shell-notifications' to use `alert.el'.")
+(register-definition-prefixes "agent-shell-notifications-alert" '("agent-shell-notifications-alert-"))
 
 
 ;;; Generated autoloads from agent-shell-notifications-libnotify.el
 
+(autoload 'agent-shell-notifications-libnotify-setup "agent-shell-notifications-libnotify"
+"Configure `agent-shell-notifications' to use libnotify.")
 (register-definition-prefixes "agent-shell-notifications-libnotify" '("agent-shell-notifications--"))
+
 
 ;;; End of scraped data
 

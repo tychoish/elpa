@@ -6,7 +6,7 @@
 ;; Author: Zachary Hanham
 ;; URL: https://github.com/zackattackz/agent-shell-notifications
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (agent-shell "0.50"))
+;; Package-Requires: ((emacs "29.1") (agent-shell "0.50") (alert "1.2"))
 
 ;; This package is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@
   "Notifications for agent-shell."
   :group 'agent-shell)
 
-(defcustom agent-shell-notifications-provider 'agent-shell-notifications-libnotify
+(defcustom agent-shell-notifications-provider 'agent-shell-notifications-alert
   "Notification provider to load.
 A symbol naming the feature to require, which must set
 `agent-shell-notifications-send-function' and
@@ -39,13 +39,13 @@ Set to nil to configure those functions manually.
 
 After changing this value, call `agent-shell-notifications-set-provider'
 with the new symbol to load the provider and validate the result."
-  :type '(choice (const :tag "libnotify (notifications.el)" agent-shell-notifications-libnotify)
-                 (const :tag "knockknock (optional dependency)" agent-shell-notifications-knockknock)
+  :type '(choice (const :tag "alert.el (alert)" agent-shell-notifications-alert)
+                 (const :tag "libnotify (notifications.el)" agent-shell-notifications-libnotify)
                  (const :tag "None (configure manually)" nil)
                  (symbol :tag "Custom provider"))
   :group 'agent-shell-notifications)
 
-(defcustom agent-shell-notifications-timeout 0
+(defcustom agent-shell-notifications-timeout 30
   "Timeout in seconds for notifications.
 When a number, use the same timeout for all event types.
 When an alist of (TYPE . SECONDS) pairs, use a per-type timeout.
@@ -374,6 +374,7 @@ meta properties: :app-icon, :timeout, :actions, and :on-action."
                                  (agent-shell-notifications--resolve-timeout
                                   agent-shell-notifications-timeout type event))
                 :actions '("default" "Switch to shell")
+		:shell-buffer-name (buffer-name shell-buffer)
                 :on-action (lambda (_id _key)
                              (agent-shell-notifications--switch-to-shell shell-buffer)))))
 
@@ -596,7 +597,10 @@ skips loading and validation (the functions must be set manually).
 Interactively, reads a provider symbol from the minibuffer."
   (interactive "SProvider symbol: ")
   (when provider
-    (require provider))
+    (require provider)
+    (let ((setup-fn (intern (format "%s-setup" provider))))
+      (when (fboundp setup-fn)
+        (funcall setup-fn))))
   (unless agent-shell-notifications-send-function
     (error "agent-shell-notifications: `agent-shell-notifications-send-function' is nil; \
 the provider must set it"))
