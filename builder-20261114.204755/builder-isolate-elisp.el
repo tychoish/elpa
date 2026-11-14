@@ -27,6 +27,7 @@
 
 (declare-function comp-el-to-eln-filename "comp-run" (filename &optional base-dir))
 (declare-function sprite-name "sprite-daemon")
+(defvar treesit-auto-install-grammar)
 (declare-function sprite-get-or-create-next "sprite-daemon")
 (declare-function sprite-direct-open "sprite-direct")
 (declare-function sprite-direct-eval-non-blocking "sprite-direct")
@@ -85,7 +86,9 @@ Installs a TIMEOUT-second kill guard (default 240) before running."
   (unless (eq (daemonp) t)
     (user-error "builder-emacs-conf-run-ci-tests: refusing to run outside an unnamed --fg-daemon CI process (daemonp = %S); this function calls `kill-emacs' unconditionally" (daemonp)))
   (let ((test-dir (expand-file-name "test" user-emacs-directory))
-        (noninteractive t))
+        (noninteractive t)
+        ;; Never block CI on a tree-sitter grammar install prompt (Emacs 31+).
+        (treesit-auto-install-grammar 'never))
     (add-to-list 'load-path test-dir)
     (load (expand-file-name "test-helper" test-dir) nil t)
     (run-with-timer (or timeout 240) nil (lambda () (kill-emacs 1)))

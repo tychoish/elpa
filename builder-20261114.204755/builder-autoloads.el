@@ -18,8 +18,6 @@
  (autoload 'builder-compile "builder-mode" "Run interactive compile operation." t)
  (autoload 'builder-mode "builder-mode" "Global minor mode for compilation enhancements." t)
  (autoload 'builder-elisp-mode "builder-elisp" "Buffer-local mode for Emacs Lisp buffers." t)
- (autoload 'builder-elisp-minor-mode "builder-elisp" "Buffer-local minor mode for Emacs Lisp buffers." t)
- (autoload 'builder-emacs-lisp-mode "builder-elisp" "Buffer-local mode for Emacs Lisp buffers." t)
  (autoload 'builder-elisp-package-reload "builder-elisp" "Reload an elisp package into current session." t)
  (autoload 'builder-elisp-package-test "builder-elisp" "Run tests for elisp package." t)
  (autoload 'builder-elisp-package-compile "builder-elisp" "Compile elisp package files." t)
@@ -94,8 +92,6 @@ disabled.
 \\{builder-elisp-mode-map}
 
 (fn &optional ARG)" t)
-(defalias 'builder-elisp-minor-mode #'builder-elisp-mode)
-(defalias 'builder-emacs-lisp-mode #'builder-elisp-mode)
 (autoload 'builder-elisp-package-test "builder-elisp"
 "Run ert tests for the elisp package at `approximate-project-root`.
 Loads package sources and any test/test-*.el or test/*-test.el files,

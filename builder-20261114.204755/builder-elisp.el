@@ -102,15 +102,12 @@ Omitted warnings: `free-vars', `docstrings-wide'."
           (builder-elisp-enable-ert-advice)))
     (kill-local-variable 'byte-compile-warnings)
     (kill-local-variable 'checkdoc-force-docstrings-flag)
-    (kill-local-variable 'checkdoc-spellcheck-documentation-flag)))
-
-;;;###autoload
-(defalias 'builder-elisp-minor-mode #'builder-elisp-mode)
-(defvaralias 'builder-elisp-minor-mode 'builder-elisp-mode)
-
-;;;###autoload
-(defalias 'builder-emacs-lisp-mode #'builder-elisp-mode)
-(defvaralias 'builder-emacs-lisp-mode 'builder-elisp-mode)
+    (kill-local-variable 'checkdoc-spellcheck-documentation-flag)
+    (unless (or (bound-and-true-p builder-mode)
+                (seq-some (lambda (buf)
+                            (buffer-local-value 'builder-elisp-mode buf))
+                          (buffer-list)))
+      (builder-elisp-disable-ert-advice))))
 
 (defun builder-elisp-package--name (root)
   "Return the package name for the elisp project at ROOT.
@@ -424,9 +421,6 @@ ORIG-FN and ARGS identify the original ERT invocation."
   "Disable ERT focus-prevention and EWOC buffer advice."
   (advice-remove 'ert--results-update-stats-display #'builder--ert-results-update-stats-display-advice)
   (advice-remove 'ert-run-tests-interactively #'builder--ert-no-focus-advice))
-
-(when builder-elisp-ert-prevent-focus
-  (builder-elisp-enable-ert-advice))
 
 ;;;###autoload
 (defun builder-elisp-package-compile ()
