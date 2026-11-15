@@ -1,0 +1,56 @@
+#+TITLE: Auto-Sync and Hooks
+
+* Features
+
+- *Fine-Grained Auto-Sync Operations*: Configure automated repository synchronization
+  for =fetch=, =pull=, =commit=, and =push= per repository via [[file:api.org::#magit-dash-register][~magit-dash-register~]].
+- *Targeted Pre and Post Hooks*: Run verification scripts, stage checks, or notifications
+  before and after each sync operation. A failure in a =:pre= hook safely aborts that operation
+  (=skipped=), while =:post= hooks report status without failing the overall sync.
+- *Operation Pipeline Replacement*: Replace any single operation or the entire =:sync= meta-operation
+  using an =:operation= override.
+- *Global Hook Wrapping*: Enforce workspace-wide policies (e.g. status notifications, linters)
+  using [[file:api.org::#magit-dash-set-global-hooks][~magit-dash-set-global-hooks~]], wrapping repository hooks outermost-to-innermost.
+- *Automated Background Timers*: Schedule recurring synchronization via
+  [[file:api.org::#magit-dash-register-sync-timer][~magit-dash-register-sync-timer~]] and regulate network frequency using
+  [[file:api.org::#magit-dash-sync-min-interval][~magit-dash-sync-min-interval~]].
+- *Refresh-Triggered Fetch and Full-Sync*: Automatically run git fetches or full syncs
+  during dashboard refresh (~magit-dash-refresh~ / ~g~), throttled by
+  [[file:api.org::#magit-dash-refresh-fetch-min-interval][~magit-dash-refresh-fetch-min-interval~]] (default 10 minutes) and
+  [[file:api.org::#magit-dash-refresh-sync-min-interval][~magit-dash-refresh-sync-min-interval~]] (default 1 hour).
+
+* Key Functions and Options
+
+- [[file:api.org::#magit-dash-register][~magit-dash-register~]]: Register a repository with sync flags, commands, hooks, and remote sync targets.
+- [[file:api.org::#magit-dash-sync-repo][~magit-dash-sync-repo~]]: Interactively select a repository and execute its configured sync pipeline.
+- [[file:api.org::#magit-dash-set-global-hooks][~magit-dash-set-global-hooks~]]: Validate and assign global =:pre= and =:post= hooks across all repositories.
+- [[file:api.org::#magit-dash-global-hooks][~magit-dash-global-hooks~]]: Variable holding the active global hook specification.
+- [[file:api.org::#magit-dash-sync-min-interval][~magit-dash-sync-min-interval~]]: Minimum threshold (in seconds) between automatic sync runs.
+- [[file:api.org::#magit-dash-register-sync-timer][~magit-dash-register-sync-timer~]]: Start periodic background synchronization timer.
+- [[file:api.org::#magit-dash-cancel-all-sync-timers][~magit-dash-cancel-all-sync-timers~]]: Cancel all active background sync timers.
+- [[file:api.org::#magit-dash-refresh-fetch][~magit-dash-refresh-fetch~]]: Non-nil enables automatic git fetch on dashboard refresh.
+- [[file:api.org::#magit-dash-refresh-fetch-min-interval][~magit-dash-refresh-fetch-min-interval~]]: Minimum threshold (in seconds, default 600) between fetches during refresh.
+- [[file:api.org::#magit-dash-refresh-sync-min-interval][~magit-dash-refresh-sync-min-interval~]]: Minimum threshold (in seconds, default 3600) between full syncs during refresh for repositories with ~:sync-on-refresh~.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Register a repository with custom pre/post hooks and full-sync on refresh
+  (magit-dash-register
+   :name "work-repo"
+   :path "~/src/work-repo"
+   :auto-fetch t
+   :auto-commit t
+   :sync-on-refresh t
+   :hooks '(:fetch  (:post (docs))
+            :commit (:pre  (lint-staged))
+            :sync   (:post (notify-sync-complete))))
+
+  ;; Set a global post-sync hook across all repositories
+  (magit-dash-set-global-hooks
+   '(:sync (:post (magit-dash-refresh))))
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for full documentation of these functions.
