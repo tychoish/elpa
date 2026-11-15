@@ -202,6 +202,80 @@ Kept for backward compatibility." t)
 (register-definition-prefixes "mcpkit-emacs" '("mcpkit-emacs-service"))
 
 
+;;; Generated autoloads from mcpkit-gptel.el
+
+(autoload 'mcpkit-gptel-register-service-tools "mcpkit-gptel"
+"Register a gptel tool for every `mcpkit-tool' on SERVICE-NAME.
+SERVICE-NAME is resolved via `mcpkit-get-service' (a symbol, string, or
+`mcpkit-service' instance).  Each generated gptel tool wraps the underlying
+mcpkit tool's handler, translating its JSON-schema `input-schema' into
+gptel's :args format and its callback-based `handler' into gptel's
+asynchronous :function calling convention.  Tools are grouped in gptel's UI
+under a :category matching the service name.
+
+Return the list of `gptel-tool' structs created.
+
+(fn SERVICE-NAME)")
+(autoload 'mcpkit-gptel-register-all-services "mcpkit-gptel"
+"Register gptel tools for every service currently in `mcpkit-registry'.
+When LOAD-SERVICES is non-nil or when `mcpkit-registry' is empty,
+calls `mcpkit-load-all-services' first if available.
+Return an alist of (SERVICE-NAME . TOOLS) for each registered service.
+
+(fn &optional LOAD-SERVICES)" t)
+(autoload 'mcpkit-gptel-get-tools "mcpkit-gptel"
+"Return a list of `gptel-tool' structs for SERVICES.
+If SERVICES is nil, uses `mcpkit-gptel-default-services'.
+If SERVICES is `all' or t, collects tools from all registered services.
+SERVICES can also be a single symbol or a list of service name symbols.
+Tools are retrieved from `gptel--known-tools'.
+
+(fn &optional SERVICES)")
+(autoload 'mcpkit-gptel-setup-session "mcpkit-gptel"
+"Configure BUFFER (defaults to current buffer) for mcpkit tool calling.
+Registers all mcpkit services if not already registered, sets `gptel-use-tools'
+buffer-locally to t (if `mcpkit-gptel-auto-enable-tools' is non-nil), and populates
+`gptel-tools' buffer-locally with tools for SERVICES (defaulting to
+`mcpkit-gptel-default-services').
+
+(fn &optional BUFFER SERVICES)" t)
+(autoload 'mcpkit-gptel-enable "mcpkit-gptel"
+"Enable mcpkit tools for SERVICES in the current gptel buffer.
+
+(fn &optional SERVICES)" t)
+(autoload 'mcpkit-gptel-disable "mcpkit-gptel"
+"Remove all mcpkit tools from the current buffer's `gptel-tools'." t)
+(defvar mcpkit-gptel-mode nil
+"Non-nil if Mcpkit-Gptel mode is enabled.
+See the `mcpkit-gptel-mode' command
+for a description of this minor mode.
+Setting this variable directly does not take effect;
+either customize it (see the info node `Easy Customization')
+or call the function `mcpkit-gptel-mode'.")
+(custom-autoload 'mcpkit-gptel-mode "mcpkit-gptel" nil)
+(autoload 'mcpkit-gptel-mode "mcpkit-gptel"
+"Global minor mode to automatically inject mcpkit tools into gptel chat sessions.
+
+When enabled, attaches `mcpkit-gptel-setup-session' to `gptel-mode-hook'.
+
+This is a global minor mode.  If called interactively, toggle the
+`Mcpkit-Gptel mode' mode.  If the prefix argument is positive, enable
+the mode, and if it is zero or negative, disable the mode.
+
+If called from Lisp, toggle the mode if ARG is `toggle'.  Enable the
+mode if ARG is nil, omitted, or is a positive number.  Disable the mode
+if ARG is a negative number.
+
+To check whether the minor mode is enabled in the current buffer,
+evaluate `(default-value \\='mcpkit-gptel-mode)'.
+
+The mode's hook is called both when the mode is enabled and when it is
+disabled.
+
+(fn &optional ARG)" t)
+(register-definition-prefixes "mcpkit-gptel" '("gptel-mcp-" "mcpkit-gptel-"))
+
+
 ;;; Generated autoloads from mcpkit-org.el
 
 (register-definition-prefixes "mcpkit-org" '("mcpkit-org-service"))

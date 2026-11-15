@@ -96,9 +96,18 @@
                   (format "http://127.0.0.1:%d/mcp" port))))
       `((name . "emacs") (type . "http") (url . ,url) (headers . ())))))
 
-(defconst mcpkit-agent-shell--resolver
+(defvar mcpkit-agent-shell--resolver
   (lambda () (mcpkit-agent-shell--server-spec))
   "Identity of the entry installed in `agent-shell-mcp-servers'.")
+
+(defun mcpkit-agent-shell--resolver-p (entry)
+  "Return non-nil if ENTRY is an MCPKit resolver function."
+  (or (eq entry mcpkit-agent-shell--resolver)
+      (equal entry mcpkit-agent-shell--resolver)
+      (and (functionp entry)
+           (not (symbolp entry))
+           (or (equal entry (lambda () (mcpkit-agent-shell--server-spec)))
+               (string-match-p "mcpkit-agent-shell--server-spec" (format "%s" entry))))))
 
 (defun mcpkit-agent-shell--environment ()
   "Return environment defaults for the current direct endpoint."
@@ -113,13 +122,16 @@
   "Resolve our entry before ORIGINAL, omitting it when unavailable.
 ARGS are passed to ORIGINAL.  Agent-specific lists are left untouched."
   (if (or (map-nested-elt agent-shell--state '(:agent-config :mcp-servers))
-          (not (memq mcpkit-agent-shell--resolver agent-shell-mcp-servers)))
+          (not (seq-some #'mcpkit-agent-shell--resolver-p agent-shell-mcp-servers)))
       (apply original args)
     (let* ((spec (funcall mcpkit-agent-shell--resolver))
+           (replaced nil)
            (agent-shell-mcp-servers
             (seq-mapcat (lambda (entry)
-                          (if (eq entry mcpkit-agent-shell--resolver)
-                              (and spec (list spec))
+                          (if (mcpkit-agent-shell--resolver-p entry)
+                              (if (not replaced)
+                                  (progn (setq replaced t) (and spec (list spec)))
+                                nil)
                             (list entry)))
                         agent-shell-mcp-servers)))
       (let ((resolved (apply original args)))
@@ -152,8 +164,9 @@ ARGS are passed to ORIGINAL.  Agent-specific lists are left untouched."
                     agent-shell-mcp-servers)
       (mcpkit-agent-shell-mode -1)
       (user-error "MCPKit agent-shell: an MCP server named emacs already exists"))
-    (unless (memq mcpkit-agent-shell--resolver agent-shell-mcp-servers)
-      (push mcpkit-agent-shell--resolver agent-shell-mcp-servers))
+    (setq agent-shell-mcp-servers
+          (cons mcpkit-agent-shell--resolver
+                (seq-remove #'mcpkit-agent-shell--resolver-p agent-shell-mcp-servers)))
     (advice-add 'agent-shell--mcp-servers :around #'mcpkit-agent-shell--resolve-servers)
     (advice-add 'agent-shell--make-acp-client :around #'mcpkit-agent-shell--inject-environment)))
 
@@ -174,7 +187,7 @@ the mode clears that error.  Disabling leaves services running."
     (setq mcpkit-agent-shell--failed-server nil)
     (when (boundp 'agent-shell-mcp-servers)
       (setq agent-shell-mcp-servers
-            (delq mcpkit-agent-shell--resolver agent-shell-mcp-servers)))
+            (seq-remove #'mcpkit-agent-shell--resolver-p agent-shell-mcp-servers)))
     (advice-remove 'agent-shell--mcp-servers #'mcpkit-agent-shell--resolve-servers)
     (advice-remove 'agent-shell--make-acp-client #'mcpkit-agent-shell--inject-environment)))
 
