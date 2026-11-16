@@ -65,6 +65,7 @@
              ("C-x g o" . magit-dash-open-repo)
              ("C-x g g" . magit-dash-gh-menu)
              ("C-x g w" . magit-dash-worktree-dispatch))
+  :transient-suffixes ((magit-gh (-1) ["magit-dash" ("g" "magit-dash: prune/CI logs/PR comments/gh auth" magit-dash-gh-menu)]))
   :commands ((cmdr-spec-command :category magit-dash
                                 :command magit-dash-open
                                 :description "repo dashboard"
@@ -110,6 +111,12 @@
              ("C-c r s s b" . agent-shell-menu-send-buffer)
              ("C-c r s s p" . agent-shell-menu-send-file)
              ("C-c r s s y" . agent-shell-yank-dwim))
+  :keymap-bindings ((agent-shell agent-shell-mode-map
+                     ("C-c j" . (cons "robot-agent-shell" (cmdr-keys-prefix cmdr-mode-map "C-c r s" "agent-shell")))
+                     ("C-c C-c" . agent-shell-submit)
+                     ("C-c C-k" . agent-shell-interrupt))
+                    (agent-shell-queue agent-shell-queue-mode-map
+                     ("C-c j" . (cons "robot-agent-shell" (cmdr-keys-prefix cmdr-mode-map "C-c r s" "agent-shell")))))
   :commands ((cmdr-spec-command :category agent-shell
                                 :command agent-shell-new-shell
                                 :description "new agent shell"
@@ -176,6 +183,7 @@
 (cmdr-register-spec
   :name org
   :probe orgx-capture
+  :bindings (("M-o" . orgx-capture-shell-toggle))
   :commands ((cmdr-spec-command :row 2
                                 :category org-mode
                                 :command orgx-capture
@@ -228,6 +236,7 @@
 (cmdr-register-spec
   :name elpaish
   :probe elpaish-install-upgrade-packages
+  :transient-suffixes ((elpaish-menu (-1 -1 0) ("x" "extended elpaish commands" execute-extended-elpaish-command)))
   :commands ((cmdr-spec-command :row 2
                                 :category elpaish
                                 :command elpaish-install-upgrade-packages
@@ -282,13 +291,38 @@
              ("C-c r o t b" . ollama-tailnet-set-gptel-backend)
              ("C-c r o t l" . ollama-tailnet-models)
              ("C-c r o t f" . ollama-tailnet-search-model)
-             ("C-c r o t x" . execute-extended-ollama-tailnet-command)))
+             ("C-c r o t x" . execute-extended-ollama-tailnet-command))
+  :transient-suffixes ((ollama-transient-menu (-1 0) ("x" "emacs ollama commands" execute-extended-ollama-command))))
+
+(cmdr-register-spec
+  :name hud-modeline
+  :probe hud-modeline-mode
+  :prefixes (("C-c t" . "core")
+             ("C-c t t" . "theme"))
+  :bindings (("C-c t t i" . toggle-hud-modeline-icons)
+             ("C-c t t s" . toggle-hud-modeline-show-buffer-size)))
+
+(cmdr-register-spec
+  :name daemons-dash
+  :probe daemons-dash
+  :prefixes (("C-c t" . "core"))
+  :bindings (("C-c t s" . daemons-dash)))
+
+(cmdr-register-spec
+  :name eglox
+  :probe eglox-describe-symbol-dwim
+  :prefixes (("C-c h" . "docs")
+             ("C-x C-b" . "buffer-control"))
+  :bindings (("C-c h s" . eglox-describe-symbol-dwim)
+             ("C-x C-b s" . projectile-save-project-buffers-picker)))
 
 (cmdr-register-spec
   :name tools
   :prefixes (("C-c t" . "core")
+             ("C-c t t" . "theme")
              ("C-c h" . "docs"))
-  :bindings (("C-c t k" . execute-extended-clipboard-command)
+  :bindings (("C-c t t r" . disable-all-themes)
+             ("C-c t k" . execute-extended-clipboard-command)
              ("C-c t e" . execute-extended-elpaish-command)
              ("C-c t j" . journalctl)
              ("C-c t c" . builder-compile)

@@ -31,6 +31,7 @@
 (require 'cmdr-macros)
 
 (declare-function cmdr-register-command "cmdr")
+(declare-function cmdr-transient-insert-suffix-once "cmdr")
 
 (defgroup cmdr-spec nil
   "Declarative cmdr specs."
@@ -51,7 +52,7 @@ These contain only `cmdr-register-spec' forms and require nothing else."
 
 (cl-defstruct (cmdr-spec (:copier nil))
   "One feature's prefixes, bindings and registry commands."
-  name doc probe autoloads opt-in prefixes bindings deferred-keymaps commands keymap-bindings)
+  name doc probe autoloads opt-in prefixes bindings deferred-keymaps commands keymap-bindings transient-suffixes)
 
 (cl-defstruct (cmdr-spec-command (:copier nil))
   "A registry command carried by a spec until `cmdr' loads.
@@ -68,6 +69,9 @@ Mirrors the arguments of `cmdr-register-command'."
 (defvar cmdr-spec--pending nil
   "Specs whose commands wait for `cmdr' to load.")
 
+(defvar cmdr-spec--pending-transient-suffixes nil
+  "List of (PREFIX LOC SUFFIX) entries waiting for `transient--layout'.")
+
 (cl-defmacro cmdr-spec-command (&key category command description transient-key display-name row if ifapt exclude-from-transient)
   "Construct a `cmdr-spec-command'; symbol arguments are quoted data.
 The keywords are those of `cmdr-register-command'.  IF and IFAPT are
@@ -80,7 +84,7 @@ function symbols or lambda forms."
                            :inapt ,(when ifapt `(function ,ifapt))
                            :exclude-from-transient ',exclude-from-transient))
 
-(cl-defmacro cmdr-register-spec (&key name doc probe autoloads opt-in prefixes bindings deferred-keymaps commands keymap-bindings)
+(cl-defmacro cmdr-register-spec (&key name doc probe autoloads opt-in prefixes bindings deferred-keymaps commands keymap-bindings transient-suffixes)
   "Register or replace the spec NAME, a required symbol.
 Every argument is quoted data.
 PROBE is a function symbol (must be `fboundp') or library name string
@@ -93,7 +97,9 @@ DEFERRED-KEYMAPS a list of (KEY PACKAGE KEYMAP-SYMBOL LABEL).  COMMANDS is a
 list of `cmdr-spec-command' forms and is the one argument that is evaluated.
 KEYMAP-BINDINGS is a list of (PACKAGE KEYMAP-SYMBOL . SPEC) defining bindings
 in external keymaps immediately if available, or via mode hooks.
-SPEC may include :hook to specify custom activation hook(s)."
+SPEC may include :hook to specify custom activation hook(s).
+TRANSIENT-SUFFIXES is a list of (PACKAGE PREFIX LOC SUFFIX) or
+(PREFIX LOC SUFFIX) entries passed to `cmdr-transient-insert-suffix-once'."
   (declare (indent 0))
   (unless (and name (symbolp name))
     (user-error "cmdr-register-spec requires a symbol :name, got %S" name))
@@ -103,7 +109,8 @@ SPEC may include :hook to specify custom activation hook(s)."
                                    :bindings ',bindings
                                    :deferred-keymaps ',deferred-keymaps
                                    :commands (list ,@commands)
-                                   :keymap-bindings ',keymap-bindings)))
+                                   :keymap-bindings ',keymap-bindings
+                                   :transient-suffixes ',transient-suffixes)))
 
 (defun cmdr-spec--put (spec)
   "Add SPEC to `cmdr-spec-table', replacing a same-named spec in place."
@@ -206,6 +213,34 @@ Return non-nil if applied, nil otherwise."
               bindings)
       t)))
 
+(defun cmdr-spec--flush-transient-suffixes (&rest _)
+  "Insert any pending transient suffixes whose prefix layout is now defined."
+  (setq cmdr-spec--pending-transient-suffixes
+        (seq-remove (pcase-lambda (`(,prefix ,loc ,suffix))
+                      (when (get prefix 'transient--layout)
+                        (unless (fboundp 'cmdr-transient-insert-suffix-once)
+                          (require 'cmdr))
+                        (cmdr-transient-insert-suffix-once prefix loc suffix)
+                        t))
+                    cmdr-spec--pending-transient-suffixes))
+  (unless cmdr-spec--pending-transient-suffixes
+    (remove-hook 'after-load-functions #'cmdr-spec--flush-transient-suffixes)))
+
+(defun cmdr-spec--install-transient-suffix (entry)
+  "Install or defer transient suffix ENTRY.
+ENTRY is either (PREFIX LOC SUFFIX) or (PACKAGE PREFIX LOC SUFFIX)."
+  (pcase-let ((`(,prefix ,loc ,suffix)
+               (if (= (length entry) 4) (cdr entry) entry)))
+    (if (get prefix 'transient--layout)
+        (progn
+          (unless (fboundp 'cmdr-transient-insert-suffix-once)
+            (require 'cmdr))
+          (cmdr-transient-insert-suffix-once prefix loc suffix))
+      (let ((norm (list prefix loc suffix)))
+        (unless (member norm cmdr-spec--pending-transient-suffixes)
+          (push norm cmdr-spec--pending-transient-suffixes))
+        (add-hook 'after-load-functions #'cmdr-spec--flush-transient-suffixes)))))
+
 ;;;###autoload
 (defun cmdr-spec-install (name)
   "Install the spec called NAME into `cmdr-mode-map', ignoring its probe.
@@ -265,6 +300,8 @@ Installing again is idempotent."
                     (dolist (h hooks)
                       (add-hook h installer))))))
             (ignore-errors (cmdr-spec-keymap-bindings spec)))
+    (seq-do #'cmdr-spec--install-transient-suffix
+            (cmdr-spec-transient-suffixes spec))
     (when (cmdr-spec-commands spec)
       (setq cmdr-spec--pending (cons spec (delq spec cmdr-spec--pending)))
       (when (featurep 'cmdr)

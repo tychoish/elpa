@@ -74,8 +74,11 @@ prefix keymap."
 Signal `user-error' for a malformed SEQ, when an intermediate key is bound to
 a non-prefix command, or when SEQ itself is currently a prefix."
   (let* ((events (cmdr-keys--events seq))
-         (parent (cmdr-keys--descend map (seq-take events (1- (length events))) seq)))
-    (when (keymapp (lookup-key parent (seq-drop events (1- (length events)))))
+         (parent (cmdr-keys--descend map (seq-take events (1- (length events))) seq))
+         (target-is-map (or (keymapp command)
+                            (and (consp command) (stringp (car command)) (keymapp (cdr command))))))
+    (when (and (not target-is-map)
+               (keymapp (lookup-key parent (seq-drop events (1- (length events))))))
       (user-error "Key sequence %s is a prefix in the map" seq))
     (keymap-set map seq command)))
 

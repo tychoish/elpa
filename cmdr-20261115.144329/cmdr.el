@@ -337,10 +337,14 @@ The layout is rebuilt on each invocation from `cmdr-command-table'."
 No-op if PREFIX has no `transient--layout' defined yet, or if a suffix
 with the same key already exists in PREFIX."
   (when (get prefix 'transient--layout)
-    (let ((key (if (consp suffix)
-                   (car suffix)
-                 suffix)))
-      (unless (ignore-errors (transient-get-suffix prefix key))
+    (let ((key (cond
+                ((consp suffix) (car suffix))
+                ((vectorp suffix)
+                 (seq-some (lambda (elt)
+                             (and (consp elt) (stringp (car elt)) (car elt)))
+                           suffix))
+                (t suffix))))
+      (unless (and key (ignore-errors (transient-get-suffix prefix key)))
         (transient-insert-suffix prefix loc suffix)))))
 
 ;;;; Completing-read frontend

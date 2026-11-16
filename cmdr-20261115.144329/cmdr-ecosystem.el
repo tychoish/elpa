@@ -72,7 +72,8 @@
              ("C-x d v" . docker-volumes)
              ("C-x d m" . docker-contexts)
              ("C-x d p" . docker-compose)
-             ("C-x d x" . execute-extended-docker-command)))
+             ("C-x d x" . execute-extended-docker-command))
+  :transient-suffixes ((docker (-1 0) ("m" "emacs docker commands" execute-extended-docker-command))))
 
 (cmdr-register-spec
   :name shell
