@@ -49,7 +49,10 @@
   :keymap-bindings ((magit magit-mode-map
                      :prefixes (("/" "magit-command" magit-command-mode-map))
                      :bindings (("/ x" . (cons "magit-commands" 'execute-extended-magit-command))
-                                ("/ m" . (cons "(s)merge-commands" 'execute-extended-smerge-command))))))
+                                ("/ m" . (cons "(s)merge-commands" 'execute-extended-smerge-command))))
+                    (magit magit-status-mode-map
+                     ("C-n" . next-line)
+                     ("C-p" . previous-line))))
 
 (cmdr-register-spec
   :name smerge

@@ -260,7 +260,9 @@
              ("C-c r g a" . gptel-agent)
              ("C-c r g w" . gptel-aibo-summon)
              ("C-c r g b" . execute-extended-gptel-set-backend-command)
-             ("C-c r g x" . execute-extended-gptel-command)))
+             ("C-c r g x" . execute-extended-gptel-command))
+  :keymap-bindings ((gptel gptel-mode-map
+                     ("C-c m" . gptel-menu))))
 
 (cmdr-register-spec
   :name ollama

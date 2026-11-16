@@ -107,7 +107,17 @@
              ("s-<right>" . increase-window-right)
              ("M-<up>" . move-text-up)
              ("M-<down>" . move-text-down)
-             ("<mouse-2>" . clipboard-yank)))
+             ("<mouse-2>" . clipboard-yank))
+  :keymap-bindings
+  ((isearch isearch-mode-map
+    ("C-o" . isearch-occur))
+   (comint comint-mode-map
+    ("M-n" . comint-next-input)
+    ("M-p" . comint-previous-input)
+    ("<down>" . comint-next-matching-input-from-input)
+    ("<up>" . comint-previous-matching-input-from-input))
+   (dired dired-mode-map
+    ("w" . wdired-change-to-wdired-mode))))
 
 (provide 'cmdr-defaults)
 ;;; cmdr-defaults.el ends here
