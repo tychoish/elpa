@@ -57,10 +57,6 @@ it is next enabled."
   :type 'natnum
   :group 'sprite-state)
 
-(defcustom sprite-state-savehist-enabled nil
-  "When non-nil, manage Savehist while the state mode is enabled."
-  :type 'boolean :group 'sprite-state)
-
 (defcustom sprite-state-recentf-enabled nil
   "When non-nil, manage Recentf while the state mode is enabled."
   :type 'boolean :group 'sprite-state)
@@ -82,6 +78,31 @@ it is next enabled."
     (desktop-restore-eager . t))
   "Alist of `(SYMBOL . VALUE)' settings managed by `sprite-state-start-desktop'."
   :type '(alist :key-type symbol :value-type sexp)
+  :group 'sprite-state)
+
+(defcustom sprite-state-desktop-modes-not-to-save
+  '(dired-mode Info-mode org-mode eww-mode info-lookup-mode fundamental-mode)
+  "Modes excluded from saved desktops, in addition to Desktop defaults."
+  :type '(repeat symbol)
+  :group 'sprite-state)
+
+(defcustom sprite-state-desktop-buffers-not-to-save
+  (concat "\\` \\|\\("
+          "^nn\\.a[0-9]+\\|\\.log\\|(ftp)\\|^tags\\|^TAGS\\|"
+          "\\.emacs.*\\|\\.diary\\|\\.newsrc-dribble\\|\\.bbdb"
+          "\\)$")
+  "Regexp matching buffer names excluded from saved desktops, or nil."
+  :type '(choice regexp (const nil))
+  :group 'sprite-state)
+
+(defcustom sprite-state-desktop-files-not-to-save
+  (concat "\\(\\`/[^/:]*:\\|(ftp)\\'\\)\\|"
+          "^/usr/lib/go/.*\\|"
+          "^/usr/lib/rustlib/.*\\|"
+          "^/home.+go/pkg/mod\\|"
+          "^/home.+\\.cargo")
+  "Regexp matching files excluded from saved desktops, or nil."
+  :type '(choice regexp (const nil))
   :group 'sprite-state)
 
 (defcustom sprite-state-auto-mode-alist nil
@@ -269,6 +290,12 @@ Call before consumers initialize.  This does not load optional packages."
           (expand-file-name desktop-base-file-name sprite-state--desktop-directory)
           sprite-state--last-save-time (current-time))))
 
+(defun sprite-state--merge-desktop-regexps (current extra)
+  "Match either CURRENT or EXTRA, preserving each regexp's grouping."
+  (if (and current extra)
+      (concat "\\(?:" current "\\)\\|\\(?:" extra "\\)")
+    (or current extra)))
+
 ;;;###autoload
 (defun sprite-state-start-desktop ()
   "Start desktop persistence after the state mode is enabled.
@@ -278,6 +305,16 @@ This may be called later in startup after setting
              (not sprite-state--desktop-timer)
              (not (equal (sprite-instance-name) "solo")))
     (require 'desktop)
+    (sprite-state--apply-settings
+     (list (cons 'desktop-modes-not-to-save
+                 (append sprite-state-desktop-modes-not-to-save
+                         desktop-modes-not-to-save))
+           (cons 'desktop-buffers-not-to-save
+                 (sprite-state--merge-desktop-regexps
+                  desktop-buffers-not-to-save sprite-state-desktop-buffers-not-to-save))
+           (cons 'desktop-files-not-to-save
+                 (sprite-state--merge-desktop-regexps
+                  desktop-files-not-to-save sprite-state-desktop-files-not-to-save))))
     (setq sprite-state--desktop-directory
           (file-name-directory (sprite-state-path "desktop.el")))
     (make-directory sprite-state--desktop-directory t)
@@ -330,8 +367,7 @@ independent of `sprite-mode'."
           (sprite-state--apply-settings)
           (sprite-state-modes-initialize)
           (sprite-state--add-hooks)
-          (when sprite-state-savehist-enabled
-            (sprite-state--start-mode 'savehist 'savehist-mode))
+          (sprite-state--start-mode 'savehist 'savehist-mode)
           (let ((inhibit-message t)
                 (message-log-max nil))
             (sprite-state--start-mode 'recentf 'recentf-mode))

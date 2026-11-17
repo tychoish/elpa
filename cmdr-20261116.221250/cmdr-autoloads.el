@@ -333,6 +333,7 @@ Installing again is idempotent.
 "Install every applicable spec and record the rest in `cmdr-spec-skipped'.
 Safe to call again, for instance after installing a package." t)
 (register-definition-prefixes "cmdr-spec" '("cmdr-"))
+
 
 ;;; End of scraped data
 

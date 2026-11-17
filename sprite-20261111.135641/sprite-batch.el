@@ -70,12 +70,21 @@ If FRAME is non-nil and live, BODY executes with FRAME selected."
                   (with-current-buffer (get-buffer-create ,buf-sym) ,@body))
                  (t ,@body)))))))
 
+(defun sprite-batch--startup-mode (entry)
+  "Return the mode named by ENTRY, or signal a user error."
+  (unless (and (consp (cdr entry)) (null (cddr entry))
+               (symbolp (cadr entry)) (cadr entry) (not (keywordp (cadr entry))))
+    (user-error "Startup mode entry must contain exactly one mode symbol: %S" entry))
+  (cadr entry))
+
 (defun sprite-batch--execute-operation (fn &optional args frame buffer log-prefix)
   "Run operation FN with ARGS in FRAME and BUFFER context, reporting errors.
 When `sprite-slow-op-reporting' or `init-file-debug' is non-nil,
 log operation duration with LOG-PREFIX if it exceeds `sprite-slow-op-threshold'."
   (condition-case err
       (sprite-batch--with-context frame buffer
+        (when (and (consp fn) (eq (car fn) :mode))
+          (setq fn (sprite-batch--startup-mode fn)))
         (when (and (symbolp fn) (fboundp fn) (autoloadp (symbol-function fn)))
           (autoload-do-load (symbol-function fn) fn))
         (with-sprite-slow-op-timer (format "%s %s" (or log-prefix "[run]") fn)
@@ -210,6 +219,37 @@ Return a cancellation function."
 
 ;;;###autoload
 (defalias 'sprite-run #'sprite-run-batch)
+
+
+(defvar sprite-state-reload-hook nil
+  "Hook run after startup mode recovery completes.")
+
+(defun sprite-state--reload-finished ()
+  "Run `sprite-state-reload-hook' after recovery."
+  (run-hooks 'sprite-state-reload-hook))
+
+;;;###autoload
+(defun sprite-state-reload ()
+  "Re-enable inactive startup modes asynchronously.
+Report individual failures in *Messages*.  Return a cancellation function,
+or nil if all configured modes are active.  Run `sprite-state-reload-hook'
+when recovery completes, including when no modes needed recovery."
+  (interactive)
+  (let (inactive)
+    (seq-do (lambda (entry)
+              (when (and (consp entry) (eq (car entry) :mode))
+                (unless (and (consp (cdr entry)) (null (cddr entry))
+                             (symbolp (cadr entry)) (cadr entry)
+                             (not (keywordp (cadr entry)))
+                             (default-boundp (cadr entry))
+                             (default-value (cadr entry)))
+                  (push entry inactive))))
+            sprite-startup-operations)
+    (if inactive
+        (sprite-batch-startup (nreverse inactive) :name "mode recovery"
+                              :on-done #'sprite-state--reload-finished)
+      (sprite-state--reload-finished)
+      nil)))
 
 ;;;###autoload
 (defun sprite-batch-startup (&optional operations &rest args)

@@ -599,6 +599,7 @@ disabled.
 (autoload 'agent-shell-queue-ui-install-nerd-icons "agent-shell-queue-ui"
 "Register `agent-shell-queue' mode icons in `nerd-icons-mode-icon-alist'." t)
 (register-definition-prefixes "agent-shell-queue-ui" '("agent-shell-queue-"))
+
 
 ;;; End of scraped data
 

@@ -16,7 +16,9 @@
 
 (fn NAME)")
 (defvar sprite-startup-operations nil
-"List of operations run in sequence during startup.")
+"Operations run during startup, in order.
+Each entry is a function or (:mode SYMBOL), which enables a global mode.
+Mode entries are also audited by `sprite-state-reload'.")
 (custom-autoload 'sprite-startup-operations "sprite" t)
 (defvar sprite-first-frame-operations nil
 "List of operations run after the first frame is created.")
@@ -77,6 +79,11 @@ Return a cancellation function.
 (fn &key OPERATIONS OPS (DELAY 0.1) RUN-AFTER INITIAL-DELAY ARGS ARGLIST ON-DONE FRAME BUFFER (LOG-PREFIX \"[run]\") NAME)")
 (defalias 'sprite-batch-run #'sprite-run-batch)
 (defalias 'sprite-run #'sprite-run-batch)
+(autoload 'sprite-state-reload "sprite-batch"
+"Re-enable inactive startup modes asynchronously.
+Report individual failures in *Messages*.  Return a cancellation function,
+or nil if all configured modes are active.  Run `sprite-state-reload-hook'
+when recovery completes, including when no modes needed recovery." t)
 (autoload 'sprite-batch-startup "sprite-batch"
 "Run startup OPERATIONS yielding between each in interactive sessions.
 OPERATIONS defaults to `sprite-startup-operations'.
@@ -165,7 +172,7 @@ Disable the mode if ARG is a negative number.
 See `sprite-batch-mode' for more information on Sprite-Batch mode.
 
 (fn &optional ARG)" t)
-(register-definition-prefixes "sprite-batch" '("sprite-batch-"))
+(register-definition-prefixes "sprite-batch" '("sprite-"))
 
 
 ;;; Generated autoloads from sprite-daemon.el
@@ -311,7 +318,8 @@ LOG, when non-nil, enables logging on `sprite-future-eval'.
 
 (autoload 'sprite-list "sprite-list"
 "Open the sprite overview buffer." t)
-(autoload 'sprite-list-menu "sprite-list" nil t)
+(autoload 'sprite-list-menu "sprite-list"
+"Actions for the sprite overview buffer." t)
 (register-definition-prefixes "sprite-list" '("sprite-list-"))
 
 
@@ -424,6 +432,7 @@ Logs deregistration and delegates to `sprite-system-sync-idle-timer'.
 
 (fn FN)")
 (register-definition-prefixes "sprite-system" '("sprite-system-"))
+
 
 ;;; End of scraped data
 

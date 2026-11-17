@@ -17,6 +17,7 @@
 ;;; Code:
 
 (require 'compile)
+(require 'savehist)
 (require 'ansi-color)
 (require 'seq)
 
@@ -250,6 +251,7 @@ COMMAND is the default compile command string."
   :keymap builder-mode-map
   (if builder-mode
       (progn
+        (add-to-list 'savehist-additional-variables 'compile-history)
         ;; 1. Register error regexps
         (pcase-dolist (`(,name . ,spec) builder-default-error-syntax)
           (apply #'builder-compile-add-error-syntax name spec))

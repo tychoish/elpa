@@ -14,6 +14,7 @@
 ;;; Code:
 
 (require 'cmdr-keys)
+(require 'which-key)
 
 (autoload 'cmdr-set-frame-font-interactive "cmdr-ops" nil t)
 
@@ -26,7 +27,7 @@
 ;; is never copied, so re-enabling sees any changes made while disabled.
 
 (defcustom cmdr-which-key-integration t
-  "When non-nil, configure `which-key' side-window bottom display.
+  "When non-nil, enable and configure `which-key' side-window bottom display.
 This configuration is attached to `which-key-mode-hook'."
   :type 'boolean
   :group 'convenience)
@@ -48,7 +49,11 @@ side-window-bottom display and use the cmdr interactive font prompt."
       (progn
         (advice-add 'set-frame-font :around #'cmdr-set-frame-font-interactive)
         (when cmdr-which-key-integration
+          (setq which-key-idle-delay 0.25)
+          (setq which-key-idle-secondary-delay 0.125)
+          (setq which-key-lighter "")
           (add-hook 'which-key-mode-hook #'cmdr-mode--setup-which-key)
+          (which-key-mode 1)
           (when (bound-and-true-p which-key-mode)
             (cmdr-mode--setup-which-key))))
     (advice-remove 'set-frame-font #'cmdr-set-frame-font-interactive)

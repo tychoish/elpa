@@ -179,8 +179,10 @@ If FULL-NAME is nil, returns path under the sprite root."
 
 ;;;###autoload
 (defcustom sprite-startup-operations nil
-  "List of operations run in sequence during startup."
-  :type '(repeat function)
+  "Operations run during startup, in order.
+Each entry is a function or (:mode SYMBOL), which enables a global mode.
+Mode entries are also audited by `sprite-state-reload'."
+  :type '(repeat (choice function (list (const :mode) symbol)))
   :group 'sprite)
 
 ;;;###autoload

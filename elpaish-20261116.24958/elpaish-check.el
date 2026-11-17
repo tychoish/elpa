@@ -314,12 +314,13 @@ VERBOSE enables logging.  Return list of error strings."
   (elpaish-check--log verbose "[elpaish-check] 5. Running ERT tests (%d file(s))..." (length test-files))
   (let* ((emacs-bin (expand-file-name invocation-name invocation-directory))
          (buf (generate-new-buffer " *elpaish-check-ert*"))
+         (work-dir (file-name-as-directory (make-temp-file "elpaish-check-ert-" t)))
          (load-args nil)
          (errs nil))
     (dolist (dir extra-load-path)
       (when (and (stringp dir) (file-directory-p dir))
         (push "-L" load-args)
-        (push dir load-args)
+        (push (expand-file-name dir) load-args)
         (let ((auto-file (car (directory-files dir t "-autoloads\\.el\\'"))))
           (when (and auto-file (file-exists-p auto-file))
             (push "-l" load-args)
@@ -328,18 +329,23 @@ VERBOSE enables logging.  Return list of error strings."
     (push "server" load-args)
     (dolist (pf pkg-files)
       (push "-l" load-args)
-      (push pf load-args))
+      (push (expand-file-name pf) load-args))
     (dolist (tf test-files)
       (push "-l" load-args)
-      (push tf load-args))
+      (push (expand-file-name tf) load-args))
     (setq load-args (nreverse load-args))
     (unwind-protect
                 (let* ((selector (format "\\`%s" (regexp-quote pkg-name)))
-               (args (append (list "-Q" "--batch" "-l" "cl-lib")
+               (args (append (list "-Q" "--batch" "--eval"
+                                   (format "(setq user-emacs-directory %S)" work-dir)
+                                   "-l" "cl-lib")
                              load-args
                              (list "--eval"
                                    (format "(ert-run-tests-batch-and-exit %S)" selector))))
-               (exit-code (apply #'call-process emacs-bin nil buf nil args))
+               (exit-code (let ((default-directory work-dir)
+                                (process-environment (copy-sequence process-environment)))
+                            (setenv "HOME" work-dir)
+                            (apply #'call-process emacs-bin nil buf nil args)))
                (output (with-current-buffer buf (buffer-string))))
           (unless (= exit-code 0)
             (when verbose
@@ -353,7 +359,8 @@ VERBOSE enables logging.  Return list of error strings."
             (when (null errs)
               (push (format "error: ERT subprocess failed with exit code %d:\n%s" exit-code output) errs))))
       (when (buffer-live-p buf)
-        (kill-buffer buf)))
+        (kill-buffer buf))
+      (delete-directory work-dir t))
     (nreverse errs)))
 
 ;;;###autoload
