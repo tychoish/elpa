@@ -102,6 +102,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "diff-review-magit" '("diff-review-magit-"))
+
 
 ;;; End of scraped data
 

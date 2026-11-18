@@ -75,6 +75,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "hud-modeline" '("hud-modeline-"))
+
 
 ;;; End of scraped data
 

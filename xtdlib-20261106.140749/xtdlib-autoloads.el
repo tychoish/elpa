@@ -33,6 +33,32 @@ Searches across all buffers, not just the current project.
 "Return the current project name, falling back to the directory basename.")
 (autoload 'approximate-project-buffers "xtd-project"
 "Return buffers belonging to the current project.")
+(register-definition-prefixes "xtd-project" '("compile-buffer-name"))
+
+
+;;; Generated autoloads from xtd-dash.el
+
+(register-definition-prefixes "xtd-dash" '("--" "-append" "-c" "-f" "-in-place" "-join" "-l" "-map" "-reverse" "-s" "-unwind" "larger" "option-set-p" "smaller"))
+
+
+;;; Generated autoloads from xtd-f.el
+
+(register-definition-prefixes "xtd-f" '("f-"))
+
+
+;;; Generated autoloads from xtd-ht.el
+
+(register-definition-prefixes "xtd-ht" '("ht-"))
+
+
+;;; Generated autoloads from xtd-macro.el
+
+(register-definition-prefixes "xtd-macro" '("build-symbol-name" "disabled" "make-run-hooks-function-for" "merge-predicate-functions" "pos-arg" "slow-op-" "with-" "xtd--resolve-hooks"))
+
+
+;;; Generated autoloads from xtd-s.el
+
+(register-definition-prefixes "xtd-s" '("resolve-plural-form" "s-" "xtdlib--symbol-name-punctuation"))
 
 ;;; End of scraped data
 

@@ -13,6 +13,7 @@
 
 (autoload 'daemons-dash "daemons-dash"
 "Open the unified system service and daemon dashboard buffer." t)
+(register-definition-prefixes "daemons-dash" '("daemons-dash-"))
 
 
 ;;; Generated autoloads from daemons-dash-config.el
@@ -42,6 +43,8 @@ Example:
     :doc \"odem Telegram bot service\")
 
 (fn NAME &rest PROPS)" nil t)
+(register-definition-prefixes "daemons-dash-config" '("daemons-dash-config-"))
+
 
 ;;; End of scraped data
 

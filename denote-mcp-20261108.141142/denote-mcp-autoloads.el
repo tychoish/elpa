@@ -14,6 +14,8 @@
 (autoload 'denote-mcp-register "denote-mcp"
 "Ensure `denote-mcp-service' is registered in `mcpkit-registry' and return it.
 Kept for backward compatibility." t)
+(register-definition-prefixes "denote-mcp" '("denote-mcp-"))
+
 
 ;;; End of scraped data
 

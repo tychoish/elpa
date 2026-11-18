@@ -36,6 +36,7 @@ login', and the server only listens on `gptel-pup-host'.")
 (autoload 'gptel-pup-start-chat "gptel-pup"
 "Start (or reuse) the Pup server and open a gptel chat using it." t)
 (register-definition-prefixes "gptel-pup" '("gptel-pup-"))
+
 
 ;;; End of scraped data
 

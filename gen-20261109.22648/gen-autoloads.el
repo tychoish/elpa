@@ -121,6 +121,8 @@ REACTOR, if non-nil, replaces FN (pass nil): items are dispatched through
 Returns a cancellation function of zero arguments that aborts execution.
 
 (fn FN SEQUENCE &key (CONCURRENCY 1 CONCURRENCY-P) (DELAY 0.0) RUN-AFTER INITIAL-DELAY IDLE REACTOR (ORDER \\='preserve) ON-DONE ON-ERROR)")
+(register-definition-prefixes "gen" '("gen--"))
+
 
 ;;; End of scraped data
 

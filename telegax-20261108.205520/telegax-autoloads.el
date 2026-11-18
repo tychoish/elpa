@@ -73,6 +73,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "telegax" '("telegax-"))
+
 
 ;;; End of scraped data
 

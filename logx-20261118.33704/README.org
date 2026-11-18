@@ -1,0 +1,717 @@
+#+TITLE: logx
+#+AUTHOR: sam kleinman
+#+EMAIL: sam@tychoish.com
+#+LANGUAGE: en
+#+OPTIONS: toc:2 num:nil
+
+High-performance, zero-allocation structured logging and line-oriented JSON viewer for GNU Emacs.
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=logx= provides a high-performance structured logging pipeline, pluggable multi-output
+backends, and an interactive log viewer ecosystem for GNU Emacs. It is built strictly on
+GNU Emacs 29+ standard library primitives (=json.c=, =ring.el=, =map.el=, =cl-lib=) with
+zero external package dependencies.
+
+** Features
+- *Zero-Allocation Disabled Paths*: Bitmask severity gating evaluates in ~0.4 µs with zero allocations when below active threshold.
+- *Primary Ingress In-Memory Ring Buffer*: Uses core =ring.el= for O(1) in-memory retention (~3.9 µs latency) without custom vector pointer bookkeeping.
+- *Pluggable Output Backends*:
+  - *Ring Buffer* (=ring=): Primary in-memory circular storage; always active.
+  - *JSON Lines File* (=file=): Atomic batch-flushed log file writer.
+  - *systemd-journald* (=journald=): Direct Unix domain datagram socket writer (=/run/systemd/journal/socket=) with structured metadata.
+  - *Legacy syslog* (=syslog=): Standard RFC 3164 datagram socket writer (=/dev/log=).
+  - *Custom Backends*: Register arbitrary batch dispatchers via =logx-register-backend=.
+- *Asynchronous Batch Flushing & Backpressure*: Decouples disk/socket I/O from the UI thread using background timer or thread transports (~55x faster than synchronous writes under pressure), guarded with configurable backpressure policies (=:drop-oldest= or =:yield=).
+- *Strict Architectural Decoupling*:
+  - =logx.el=: Core structured logger, severity macros, ring buffer, backend registry, and async engine. Completely headless.
+  - =jsonl-view.el=: Generic, high-performance line-oriented JSON viewer with inline expandable disclosure widgets and full-record detail buffer (=*jsonl-info*=). Contains zero log concepts.
+  - =logx-view.el=: Specialized log viewer layered on =jsonl-view-mode=. Provides semantic faces (inheriting cleanly from standard faces without hardcoded hex colors), interactive level/category filtering, timestamp display cycling, and live throttled streaming.
+  - =logx-alert.el=: Optional integration sink routing =alert.el= notifications into =logx=.
+- *Extended Severity Scale*: Full 8-level hierarchy (=debug=, =info=, =notice=, =warn=, =error=, =critical=, =alert=, =fatal=).
+- *Cycle-Safe Object Sanitizer*: Defends against self-referential or cyclic Elisp data structures during serialization.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: installation
+:END:
+
+** ELPAish (Recommended)
+:PROPERTIES:
+:CUSTOM_ID: elpaish-recommended
+:END:
+
+Add =logx= to your ELPAish package list:
+
+#+BEGIN_SRC emacs-lisp
+(elpaish-install-add-bootstrap-packages '(logx))
+#+END_SRC
+
+** use-package with VC
+:PROPERTIES:
+:CUSTOM_ID: use-package-with-vc
+:END:
+
+For GNU Emacs 30+:
+
+#+BEGIN_SRC emacs-lisp
+(use-package logx
+  :vc (:url "https://github.com/tychoish/logx.git" :branch "main")
+  :defer t
+  :commands (logx-show-logs logx-fork-filtered-buffer))
+#+END_SRC
+
+** Manual Installation
+:PROPERTIES:
+:CUSTOM_ID: manual-installation
+:END:
+
+Clone the repository and add it to your =load-path=:
+
+#+BEGIN_SRC bash
+git clone https://github.com/tychoish/logx.git ~/src/logx
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path "~/src/logx")
+(require 'logx)
+#+END_SRC
+
+* Configuration
+:PROPERTIES:
+:CUSTOM_ID: configuration
+:END:
+
+#+BEGIN_SRC emacs-lisp
+(use-package logx
+  :defer t
+  :commands (logx-show-logs logx-fork-filtered-buffer)
+  :init
+  ;; Default minimum severity threshold
+  (setq logx-default-level 'info)
+  ;; Retain 10,000 events in memory
+  (setq logx-ring-buffer-size 10000)
+  ;; Optional: persistent disk log sink
+  (setq logx-log-file (expand-file-name "logs/emacs.jsonl" user-emacs-directory))
+  ;; Enable asynchronous batch flushing (recommended)
+  (setq logx-async-mode t
+        logx-async-transport 'timer
+        logx-async-flush-interval 0.05))
+
+(use-package jsonl-view
+  :defer t
+  :mode ("\\.jsonl\\'" . jsonl-view-mode))
+
+(use-package logx-view
+  :defer t
+  :after logx
+  :bind (:map logx-view-mode-map
+              ("RET" . logx-view-jump-to-source)
+              ("t"   . logx-view-cycle-timestamp-mode)
+              ("l"   . logx-view-filter-level)
+              ("c"   . logx-view-filter-category)
+              ("C"   . logx-view-clear-filters)
+              ("B"   . logx-fork-filtered-buffer)))
+#+END_SRC
+
+** Key Options & Customization
+:PROPERTIES:
+:CUSTOM_ID: key-options-and-customization
+:END:
+
+| Option | Type | Default | Description |
+|--------+------+---------+-------------|
+| ~logx-default-level~ | symbol | ='info= | Global minimum logging severity threshold |
+| ~logx-default-event-level~ | symbol | ='debug= | Default severity when not specified in ~logx~ |
+| ~logx-category-levels~ | alist | =nil= | Category-specific threshold overrides |
+| ~logx-ring-buffer-size~ | integer | =10000= | Max events retained in circular ring buffer |
+| ~logx-log-file~ | string/nil | =nil= | Path for appending JSON Lines records to disk |
+| ~logx-async-mode~ | boolean | =t= | Enable non-blocking asynchronous batch flushing |
+| ~logx-async-transport~ | symbol | ='timer= | Async engine: ='timer=, ='thread=, or ='sync= |
+| ~logx-async-flush-interval~ | number | =0.05= | Seconds between batch flushes |
+| ~logx-async-max-queue~ | integer | =10000= | Backpressure queue capacity |
+| ~logx-journald-socket~ | string | =/run/systemd/journal/socket= | Path to systemd-journald datagram socket |
+| ~logx-syslog-socket~ | string | =/dev/log= | Path to syslog datagram socket |
+| ~logx-quarantined-packages~ | list | ='("eglot" "flymake" "magit" "eldoc")= | Packages intercepted by =logx-quarantine-mode= |
+| ~jsonl-view-truncate-length~ | integer | =80= | Max string length before inline disclosure widget |
+
+* Workflows
+:PROPERTIES:
+:CUSTOM_ID: workflows
+:END:
+
+** Structured Logging
+:PROPERTIES:
+:CUSTOM_ID: structured-logging
+:END:
+
+Emit structured events with key-value pairs. Keys can be keyword symbols, strings, or numbers:
+
+#+BEGIN_SRC emacs-lisp
+(require 'logx)
+
+;; Unified `logx' macro with explicit or aliased severity level
+(logx 'info "User logged in" :cat 'auth :uid 1001 :ip "127.0.0.1")
+(logx 'warning "Slow query detected" :domain 'db :duration-ms 4200)
+(logx 'trace "Entering cache lookup" :key "user:1001")
+
+;; Untagged: uses `logx-default-event-level' (default: 'debug)
+(logx "Untagged background event" :item "task-1")
+
+;; Aliases: :category / :domain for :cat, and :message for :msg
+(logx-info :category 'auth :message "User logged in" :uid 1001)
+
+;; Positional message strings and dynamic expressions (supported in all macros)
+(logx-info "Service started" :port 8080)
+(logx-warn (format "Disk %s low" path) :free-gb 2)
+
+;; Dedicated level macros
+(logx-critical :cat 'billing :msg "Gateway unresponsive" :retries 3)
+(logx-alert :cat 'security :msg "Multiple failed authentications" :target "admin")
+(logx-fatal :cat 'system :msg "Out of memory" :free-bytes 0)
+#+END_SRC
+
+** Pluggable Output Backends
+:PROPERTIES:
+:CUSTOM_ID: pluggable-output-backends
+:END:
+
+By default, events are written immediately to the primary in-memory ring buffer. Additional
+destinations can be enabled or registered dynamically:
+
+#+BEGIN_SRC emacs-lisp
+;; Enable direct socket delivery to systemd-journald
+(logx-enable-backend 'journald)
+
+;; Enable direct RFC 3164 socket delivery to syslog
+(logx-enable-backend 'syslog)
+
+;; Register a custom telemetry backend
+(logx-register-backend 'cloud-telemetry
+  (lambda (events)
+    (message "Forwarding %d events to remote collector" (length events))))
+
+;; Synchronously flush all pending asynchronous writes immediately
+(logx-flush)
+#+END_SRC
+
+** Viewing Logs Interactively
+:PROPERTIES:
+:CUSTOM_ID: viewing-logs-interactively
+:END:
+
+Open the primary live viewer buffer:
+
+#+BEGIN_SRC emacs-lisp
+(logx-show-logs)
+#+END_SRC
+
+In =logx-view-mode=:
+- =RET=: Jump directly to the call-site source code location in another window.
+- =t=: Cycle timestamp presentation format (=Time-of-day= -> =Delta (+45ms)= -> =ISO-8601=).
+- =l=: Filter buffer by minimum severity level.
+- =c=: Filter buffer by category regex.
+- =C=: Clear all active filters.
+- =i=: Open side-window detail inspector (=*jsonl-info*=) pretty-printing full record.
+- =w=: Copy current line's JSON string to the kill-ring.
+- =B=: Fork the view into a dedicated live filtered buffer (e.g. =*logs:auth*=).
+
+** Generic Line-Oriented JSON Viewing
+:PROPERTIES:
+:CUSTOM_ID: generic-line-oriented-json-viewing
+:END:
+
+=jsonl-view= can be used independently of =logx= to browse any JSON Lines file or buffer:
+
+#+BEGIN_SRC emacs-lisp
+(find-file "production-export.jsonl")
+;; Automatically activates jsonl-view-mode
+#+END_SRC
+
+Use =TAB= to expand/collapse complex nested JSON values inline, or =i= to inspect them formatted in a dedicated buffer.
+
+** Intercepting Background Messages
+:PROPERTIES:
+:CUSTOM_ID: intercepting-background-messages
+:END:
+
+Quarantine noisy echo area messages into structured events:
+
+#+BEGIN_SRC emacs-lisp
+(logx-quarantine-mode 1)
+#+END_SRC
+
+* Performance & Benchmarks
+:PROPERTIES:
+:CUSTOM_ID: performance-and-benchmarks
+:END:
+
+Comprehensive comparative benchmarks against =log4e=, =elog=, =emacs-lgr=, and built-in
+primitives are detailed in [[file:docs/benchmarks.org][docs/benchmarks.org]].
+
+Key benchmark highlights on GNU Emacs 31.1:
+- *Disabled Macro Gating*: ~2,463,000 ops/sec (~0.4 µs/op) with zero allocations.
+- *Active In-Memory Ring Logging*: ~253,500 ops/sec (~3.9 µs/op) — within 1 µs of C =message=.
+- *Async Batch Flushing vs Sync Disk Writes*: Async flushing achieves ~253,500 ops/sec under pressure (*53x faster* than synchronous disk writes at ~4,760 ops/sec).
+- *Comparison to Existing Libraries*: =logx= is *10x to 20x faster* than =emacs-lgr=, =elog=, and =log4e=.
+
+* API Reference
+:PROPERTIES:
+:CUSTOM_ID: api-reference
+:END:
+
+| Symbol / Command | Kind | Description |
+|------------------+------+-------------|
+| ~logx~ | Macro | Emit a structured log event with optional leading severity level |
+| [[#logx-debug][~logx-debug~]] | Macro | Emit a DEBUG level log event |
+| [[#logx-info][~logx-info~]] | Macro | Emit an INFO level log event |
+| [[#logx-notice][~logx-notice~]] | Macro | Emit a NOTICE level log event |
+| [[#logx-warn][~logx-warn~]] | Macro | Emit a WARN level log event |
+| [[#logx-error][~logx-error~]] | Macro | Emit an ERROR level log event |
+| [[#logx-critical][~logx-critical~]] | Macro | Emit a CRITICAL level log event |
+| [[#logx-alert][~logx-alert~]] | Macro | Emit an ALERT level log event |
+| [[#logx-fatal][~logx-fatal~]] | Macro | Emit a FATAL level log event |
+| [[#logx-default-level][~logx-default-level~]] | Custom | Default minimum logging severity threshold |
+| ~logx-default-event-level~ | Custom | Default severity when not specified in ~logx~ |
+| [[#logx-category-levels][~logx-category-levels~]] | Custom | Alist mapping category symbols to severity thresholds |
+| [[#logx-log-file][~logx-log-file~]] | Custom | File path for appending JSON Lines log records |
+| [[#logx-ring-buffer-size][~logx-ring-buffer-size~]] | Custom | Maximum structured events retained in circular buffer |
+| [[#logx-async-mode][~logx-async-mode~]] | Custom | When non-nil, flush events to disk/network asynchronously |
+| [[#logx-async-transport][~logx-async-transport~]] | Custom | Transport driving asynchronous flushing: timer, thread, sync |
+| [[#logx-async-flush-interval][~logx-async-flush-interval~]] | Custom | Interval in seconds between asynchronous batch flushes |
+| [[#logx-async-max-queue][~logx-async-max-queue~]] | Custom | Maximum pending events retained in async queue |
+| [[#logx-journald-socket][~logx-journald-socket~]] | Custom | Path to systemd-journald Unix domain datagram socket |
+| [[#logx-syslog-socket][~logx-syslog-socket~]] | Custom | Path to Unix domain syslog datagram socket |
+| [[#logx-flush][~logx-flush~]] | Command | Synchronously flush all pending events in async queue |
+| [[#logx-register-backend][~logx-register-backend~]] | Function | Register backend ID with batch handler function |
+| [[#logx-unregister-backend][~logx-unregister-backend~]] | Function | Unregister backend ID |
+| [[#logx-enable-backend][~logx-enable-backend~]] | Function | Enable backend ID |
+| [[#logx-disable-backend][~logx-disable-backend~]] | Function | Disable backend ID |
+| [[#logx-backend-enabled-p][~logx-backend-enabled-p~]] | Function | Return non-nil if backend ID is registered and enabled |
+| [[#logx-quarantined-packages][~logx-quarantined-packages~]] | Custom | List of package prefix strings whose message calls are intercepted |
+| [[#logx-quarantine-mode][~logx-quarantine-mode~]] | Command | Global minor mode diverting background package messages to logx |
+| [[#logx-set-category-level][~logx-set-category-level~]] | Function | Set threshold for category to level |
+| [[#logx-register-subscriber][~logx-register-subscriber~]] | Function | Register subscriber handler called on each event |
+| [[#logx-unregister-subscriber][~logx-unregister-subscriber~]] | Function | Unregister subscriber from event delivery |
+| [[#logx-show-logs][~logx-show-logs~]] | Command | Display master structured logs viewer buffer |
+| [[#logx-fork-filtered-buffer][~logx-fork-filtered-buffer~]] | Command | Create and display a specialized live viewer buffer |
+| [[#jsonl-view-mode][~jsonl-view-mode~]] | Command | Major mode for viewing line-delimited JSON data streams |
+| [[#jsonl-view-toggle-info][~jsonl-view-toggle-info~]] | Command | Toggle auxiliary side window pretty-printing record at point |
+| [[#jsonl-view-copy-as-json][~jsonl-view-copy-as-json~]] | Command | Copy pretty-printed JSON of record under point to kill-ring |
+| [[#jsonl-view-filter][~jsonl-view-filter~]] | Command | Filter buffer records using predicate function or regex string |
+| [[#jsonl-view-clear-filters][~jsonl-view-clear-filters~]] | Command | Clear active filter predicate, restoring all lines |
+| [[#jsonl-view-toggle-follow][~jsonl-view-toggle-follow~]] | Command | Toggle auto-scrolling tail follow mode |
+| [[#jsonl-view-truncate-length][~jsonl-view-truncate-length~]] | Custom | Maximum string length before inline truncation |
+| [[#logx-view-mode][~logx-view-mode~]] | Command | Major mode for viewing live and persisted logx event streams |
+| [[#logx-view-jump-to-source][~logx-view-jump-to-source~]] | Command | Jump to call-site source definition of record at point |
+| [[#logx-view-cycle-timestamp-mode][~logx-view-cycle-timestamp-mode~]] | Command | Cycle timestamp display between Time-of-day, Delta, and ISO-8601 |
+| [[#logx-view-filter-level][~logx-view-filter-level~]] | Command | Filter buffer to show only log entries with severity >= level |
+| [[#logx-view-filter-category][~logx-view-filter-category~]] | Command | Filter buffer to show only log entries matching category regex |
+| [[#logx-view-clear-filters][~logx-view-clear-filters~]] | Command | Clear active severity and category filters |
+| [[#logx-view-project-record][~logx-view-project-record~]] | Function | Project raw JSON plist record into standardized log components |
+| [[#logx-view-render-record][~logx-view-render-record~]] | Function | Render raw record plist into formatted log string |
+| [[#logx-view-schema-mappings][~logx-view-schema-mappings~]] | Custom | Alist mapping standard semantic keys to candidate JSON property names |
+| [[#logx-alert-sink][~logx-alert-sink~]] | Function | Route alert notification info plist into logx structured logging |
+| [[#logx-alert-register][~logx-alert-register~]] | Function | Register logx style with alert if alert is loaded |
+
+#+BEGIN_COMMENT
+Generated from docstrings across all .el files in logx.
+To regenerate: open this file in Emacs, place point in the source block below,
+and run C-c C-c (or M-x org-babel-execute-buffer).
+Do not edit the #+RESULTS: block by hand.
+#+END_COMMENT
+
+#+BEGIN_SRC emacs-lisp :results output raw :exports none
+  (require 'org-docsgen)
+  (org-docsgen-run
+   :el-files (list (expand-file-name "logx.el")
+                   (expand-file-name "jsonl-view.el")
+                   (expand-file-name "logx-view.el")
+                   (expand-file-name "logx-alert.el"))
+   :scope '("logx-debug" "logx-info" "logx-notice" "logx-warn" "logx-error" "logx-critical" "logx-alert" "logx-fatal"
+            "logx-default-level" "logx-category-levels" "logx-log-file" "logx-ring-buffer-size"
+            "logx-async-mode" "logx-async-transport" "logx-async-flush-interval" "logx-async-max-queue"
+            "logx-journald-socket" "logx-syslog-socket" "logx-flush"
+            "logx-register-backend" "logx-unregister-backend" "logx-enable-backend" "logx-disable-backend" "logx-backend-enabled-p"
+            "logx-quarantined-packages" "logx-quarantine-mode" "logx-set-category-level"
+            "logx-register-subscriber" "logx-unregister-subscriber" "logx-show-logs" "logx-fork-filtered-buffer"
+            "jsonl-view-mode" "jsonl-view-toggle-info" "jsonl-view-copy-as-json"
+            "jsonl-view-filter" "jsonl-view-clear-filters" "jsonl-view-toggle-follow"
+            "jsonl-view-truncate-length"
+            "logx-view-mode" "logx-view-jump-to-source" "logx-view-cycle-timestamp-mode"
+            "logx-view-filter-level" "logx-view-filter-category" "logx-view-clear-filters"
+            "logx-view-project-record" "logx-view-render-record" "logx-view-schema-mappings"
+            "logx-alert-sink" "logx-alert-register")
+   :link-style 'org)
+#+END_SRC
+
+#+RESULTS:
+** [[file:logx.el::647][logx-debug]]
+:PROPERTIES:
+:CUSTOM_ID: logx-debug
+:END:
+
+Emit a DEBUG level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** [[file:logx.el::653][logx-info]]
+:PROPERTIES:
+:CUSTOM_ID: logx-info
+:END:
+
+Emit an INFO level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** [[file:logx.el::659][logx-notice]]
+:PROPERTIES:
+:CUSTOM_ID: logx-notice
+:END:
+
+Emit a NOTICE level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** [[file:logx.el::665][logx-warn]]
+:PROPERTIES:
+:CUSTOM_ID: logx-warn
+:END:
+
+Emit a WARN level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** [[file:logx.el::671][logx-error]]
+:PROPERTIES:
+:CUSTOM_ID: logx-error
+:END:
+
+Emit an ERROR level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** [[file:logx.el::677][logx-critical]]
+:PROPERTIES:
+:CUSTOM_ID: logx-critical
+:END:
+
+Emit a CRITICAL level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** [[file:logx.el::683][logx-alert]]
+:PROPERTIES:
+:CUSTOM_ID: logx-alert
+:END:
+
+Emit an ALERT level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** [[file:logx.el::689][logx-fatal]]
+:PROPERTIES:
+:CUSTOM_ID: logx-fatal
+:END:
+
+Emit a FATAL level log event. ARGS can include :cat CATEGORY, :msg MESSAGE, and arbitrary KEY VALUE pairs.
+
+** logx-default-level
+:PROPERTIES:
+:CUSTOM_ID: logx-default-level
+:END:
+
+Default minimum logging severity threshold.
+
+** logx-category-levels
+:PROPERTIES:
+:CUSTOM_ID: logx-category-levels
+:END:
+
+Alist mapping category symbols or strings to severity thresholds.
+
+** logx-log-file
+:PROPERTIES:
+:CUSTOM_ID: logx-log-file
+:END:
+
+File path for appending JSON Lines log records, or nil to disable disk sink.
+
+** logx-ring-buffer-size
+:PROPERTIES:
+:CUSTOM_ID: logx-ring-buffer-size
+:END:
+
+Maximum number of structured events retained in the circular ring buffer.
+
+** logx-async-mode
+:PROPERTIES:
+:CUSTOM_ID: logx-async-mode
+:END:
+
+When non-nil, flush events to disk and network backends asynchronously.
+
+** logx-async-transport
+:PROPERTIES:
+:CUSTOM_ID: logx-async-transport
+:END:
+
+Transport driving asynchronous flushing: ‘timer’, ‘thread’, or ‘sync’.
+
+** logx-async-flush-interval
+:PROPERTIES:
+:CUSTOM_ID: logx-async-flush-interval
+:END:
+
+Interval in seconds between asynchronous batch flushes.
+
+** logx-async-max-queue
+:PROPERTIES:
+:CUSTOM_ID: logx-async-max-queue
+:END:
+
+Maximum pending events retained in the async queue before applying backpressure.
+
+** logx-journald-socket
+:PROPERTIES:
+:CUSTOM_ID: logx-journald-socket
+:END:
+
+Path to systemd-journald Unix domain datagram socket.
+
+** logx-syslog-socket
+:PROPERTIES:
+:CUSTOM_ID: logx-syslog-socket
+:END:
+
+Path to Unix domain syslog datagram socket.
+
+** [[file:logx.el::488][logx-flush]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-flush
+:END:
+
+Synchronously flush all pending events in the async queue to active backends.
+
+** [[file:logx.el::313][logx-register-backend]]
+:PROPERTIES:
+:CUSTOM_ID: logx-register-backend
+:END:
+
+Register backend ID with batch HANDLER function. HANDLER is called with a list of event plists: (funcall HANDLER events).
+
+** [[file:logx.el::321][logx-unregister-backend]]
+:PROPERTIES:
+:CUSTOM_ID: logx-unregister-backend
+:END:
+
+Unregister backend ID.
+
+** [[file:logx.el::326][logx-enable-backend]]
+:PROPERTIES:
+:CUSTOM_ID: logx-enable-backend
+:END:
+
+Enable backend ID.
+
+** [[file:logx.el::333][logx-disable-backend]]
+:PROPERTIES:
+:CUSTOM_ID: logx-disable-backend
+:END:
+
+Disable backend ID.
+
+** [[file:logx.el::340][logx-backend-enabled-p]]
+:PROPERTIES:
+:CUSTOM_ID: logx-backend-enabled-p
+:END:
+
+Return non-nil if backend ID is registered and enabled.
+
+** logx-quarantined-packages
+:PROPERTIES:
+:CUSTOM_ID: logx-quarantined-packages
+:END:
+
+List of package prefix strings whose ~message~ calls are intercepted.
+
+** [[file:logx.el::745][logx-quarantine-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-quarantine-mode
+:END:
+
+Global minor mode diverting background package messages to logx.
+
+** [[file:logx.el::138][logx-set-category-level]]
+:PROPERTIES:
+:CUSTOM_ID: logx-set-category-level
+:END:
+
+Set threshold for CATEGORY to LEVEL.
+
+** [[file:logx.el::576][logx-register-subscriber]]
+:PROPERTIES:
+:CUSTOM_ID: logx-register-subscriber
+:END:
+
+Register subscriber ID with HANDLER function called on each event.
+
+** [[file:logx.el::583][logx-unregister-subscriber]]
+:PROPERTIES:
+:CUSTOM_ID: logx-unregister-subscriber
+:END:
+
+Unregister subscriber ID from log event delivery.
+
+** [[file:logx-view.el::481][logx-show-logs]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-show-logs
+:END:
+
+Display master structured logs viewer buffer, or BUFFER-NAME if specified.
+
+** [[file:logx-view.el::499][logx-fork-filtered-buffer]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-fork-filtered-buffer
+:END:
+
+Create and display a specialized live viewer buffer. Creates *logs:NAME* containing events matching FILTER-PRED.
+
+** [[file:jsonl-view.el::348][jsonl-view-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: jsonl-view-mode
+:END:
+
+Major mode for viewing line-delimited JSON data streams.
+
+** [[file:jsonl-view.el::284][jsonl-view-toggle-info]] :command:
+:PROPERTIES:
+:CUSTOM_ID: jsonl-view-toggle-info
+:END:
+
+Toggle auxiliary side window pretty-printing record at point.
+
+** [[file:jsonl-view.el::309][jsonl-view-copy-as-json]] :command:
+:PROPERTIES:
+:CUSTOM_ID: jsonl-view-copy-as-json
+:END:
+
+Copy pretty-printed JSON of the record under point to kill-ring.
+
+** [[file:jsonl-view.el::220][jsonl-view-filter]] :command:
+:PROPERTIES:
+:CUSTOM_ID: jsonl-view-filter
+:END:
+
+Filter buffer records using PREDICATE-OR-REGEX function or string.
+
+** [[file:jsonl-view.el::233][jsonl-view-clear-filters]] :command:
+:PROPERTIES:
+:CUSTOM_ID: jsonl-view-clear-filters
+:END:
+
+Clear active filter predicate, restoring all lines.
+
+** [[file:jsonl-view.el::322][jsonl-view-toggle-follow]] :command:
+:PROPERTIES:
+:CUSTOM_ID: jsonl-view-toggle-follow
+:END:
+
+Toggle auto-scrolling tail follow mode.
+
+** jsonl-view-truncate-length
+:PROPERTIES:
+:CUSTOM_ID: jsonl-view-truncate-length
+:END:
+
+Maximum string length before inline truncation with disclosure button.
+
+** [[file:logx-view.el::545][logx-view-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-view-mode
+:END:
+
+Major mode for viewing live and persisted logx event streams.
+
+** [[file:logx-view.el::250][logx-view-jump-to-source]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-view-jump-to-source
+:END:
+
+Jump to the call-site source definition of record at point.
+
+** [[file:logx-view.el::332][logx-view-cycle-timestamp-mode]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-view-cycle-timestamp-mode
+:END:
+
+Cycle timestamp display mode between Time-of-day, Delta, and ISO-8601.
+
+** [[file:logx-view.el::358][logx-view-filter-level]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-view-filter-level
+:END:
+
+Filter buffer to show only log entries with severity >= LEVEL.
+
+** [[file:logx-view.el::369][logx-view-filter-category]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-view-filter-category
+:END:
+
+Filter buffer to show only log entries matching category REGEX.
+
+** [[file:logx-view.el::377][logx-view-clear-filters]] :command:
+:PROPERTIES:
+:CUSTOM_ID: logx-view-clear-filters
+:END:
+
+Clear active severity and category filters, restoring all lines.
+
+** [[file:logx-view.el::154][logx-view-project-record]]
+:PROPERTIES:
+:CUSTOM_ID: logx-view-project-record
+:END:
+
+Project raw JSON plist RECORD into standardized log components. Returns a plist (:ts TS :lvl LVL :cat CAT :msg MSG :src SRC :data DATA).
+
+** [[file:logx-view.el::267][logx-view-render-record]]
+:PROPERTIES:
+:CUSTOM_ID: logx-view-render-record
+:END:
+
+Render RAW-RECORD plist into formatted log string with semantic text properties.
+
+** logx-view-schema-mappings
+:PROPERTIES:
+:CUSTOM_ID: logx-view-schema-mappings
+:END:
+
+Alist mapping standard semantic keys to candidate JSON property names.
+
+** [[file:logx-alert.el::24][logx-alert-sink]]
+:PROPERTIES:
+:CUSTOM_ID: logx-alert-sink
+:END:
+
+Route ‘alert’ notification INFO plist into ‘logx’ structured logging.
+
+** [[file:logx-alert.el::41][logx-alert-register]]
+:PROPERTIES:
+:CUSTOM_ID: logx-alert-register
+:END:
+
+Register ‘logx’ style with ‘alert’ if alert is loaded.
+
+* Development
+:PROPERTIES:
+:CUSTOM_ID: development
+:END:
+
+Run the ERT test suite locally:
+
+#+BEGIN_SRC bash
+emacs -batch -L . -l test/test-logx.el -l test/test-jsonl-view.el -l test/test-logx-alert.el -l test/test-logx-view.el -f ert-run-tests-batch-and-exit
+#+END_SRC
+
+Run comparative performance benchmarks:
+
+#+BEGIN_SRC bash
+emacs -batch -L . -l bench/comparative-benchmarks.el -f run-comparative-benchmarks
+#+END_SRC
+
+* License
+:PROPERTIES:
+:CUSTOM_ID: license
+:END:
+
+GPL-3.0-or-later. See =LICENSE= for details.

@@ -56,6 +56,7 @@ disabled.
 (fn HOST-NAME MODEL-NAME)" t)
 (autoload 'ollama-tailnet-status "ollama-tailnet-control"
 "Display status summary buffer for all registered tailnet Ollama hosts." t)
+(register-definition-prefixes "ollama-tailnet-control" '("ollama-tailnet--systemctl-cmd"))
 
 
 ;;; Generated autoloads from ollama-tailnet-gptel.el
@@ -83,6 +84,7 @@ Updates host models list and default-model if available.
 Invokes CALLBACK with (HOST-STRUCT SUCCESS-P) when complete.
 
 (fn HOST-NAME &optional CALLBACK)")
+(register-definition-prefixes "ollama-tailnet-gptel" '("ollama-tailnet-"))
 
 
 ;;; Generated autoloads from ollama-tailnet-models.el
@@ -102,6 +104,7 @@ have run, this mode runs the hook `ollama-tailnet-models-mode-hook',
 as the final or penultimate step during initialization." t)
 (autoload 'ollama-tailnet-models "ollama-tailnet-models"
 "Open the model dashboard across all registered tailnet hosts." t)
+(register-definition-prefixes "ollama-tailnet-models" '("ollama-tailnet-"))
 
 
 ;;; Generated autoloads from ollama-tailnet-vars.el
@@ -126,6 +129,8 @@ Recognized PROPS:
 "Return a list of all registered `ollama-tailnet-host' structures.")
 (autoload 'ollama-tailnet-setup-laptop-presets "ollama-tailnet-vars"
 "Register standard profiles from `ollama-tailnet-preset-profiles'." t)
+(register-definition-prefixes "ollama-tailnet-vars" '("ollama-tailnet-"))
+
 
 ;;; End of scraped data
 

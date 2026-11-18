@@ -36,6 +36,7 @@ Replaces the original heading with a denote link to the newly created note
 and tags it \"denoted\".  Preserves a timestamp found in the heading as the
 CREATED property when no DATE, CREATED, or CLOSED property is present." t)
 (register-definition-prefixes "denote-convert" '("denote-convert-"))
+
 
 ;;; End of scraped data
 

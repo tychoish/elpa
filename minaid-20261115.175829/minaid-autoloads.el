@@ -70,6 +70,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "minaid" '("minaid-"))
+
 
 ;;; End of scraped data
 

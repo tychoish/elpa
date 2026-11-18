@@ -51,6 +51,8 @@ disabled.
 \\{chex-global-mode-map}
 
 (fn &optional ARG)" t)
+(register-definition-prefixes "chex" '("chex-"))
+
 
 ;;; End of scraped data
 

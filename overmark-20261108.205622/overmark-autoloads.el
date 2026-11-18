@@ -99,6 +99,8 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
+(register-definition-prefixes "overmark" '("overmark--"))
+
 
 ;;; End of scraped data
 

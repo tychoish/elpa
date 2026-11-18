@@ -1,0 +1,111 @@
+#+title: Instance State and Desktop Persistence
+
+* Instance state
+
+=sprite-state= provides independent, opt-in state mappings, file locks, and
+desktop persistence.  None is enabled by default.  Select only the variables
+needed and call =sprite-state-configure= before their packages initialize:
+
+#+begin_src emacs-lisp
+(require 'sprite-state)
+(setq sprite-state-mappings
+      '((project-list-file . "projects.el")
+        (transient-history-file . "transient-history.el"))
+      sprite-state-locks-enabled t)
+(sprite-state-configure)
+#+end_src
+
+Each value uses =sprite-state-path=, preserving the host and instance prefix.
+Mappings can name variables from built-in or optional packages; applying them
+neither loads those packages nor adds dependencies on them.  Lock setup creates
+private directories.  Named instances use their instance-scoped lock directory;
+solo instances use a process-specific directory in the runtime or temporary
+area.  Setup errors propagate to the caller.
+
+* Desktop lifecycle
+
+Desktop support is selected separately and started at the desired late startup
+point, after any operations that must precede restoration:
+
+#+begin_src emacs-lisp
+(setq sprite-state-desktop-enabled t)
+(sprite-state-global-mode 1)
+#+end_src
+
+For named instances the mode restores the existing instance desktop eagerly,
+then schedules an idle check every 120 seconds by default.  Set
+=sprite-state-desktop-idle-interval= before enabling the mode to change the
+interval; re-enable the mode to apply later changes.  Each check saves with 40%
+probability or when more than 150 seconds have elapsed since the last save.
+Desktop files use the existing instance-prefixed name in the shared state
+directory.  The mode reads only that directory even though =desktop-path=
+retains the usual search locations.  Solo instances neither restore nor schedule
+a save.  The mode is independent of daemon-registry =sprite-mode=.
+
+Repeated enable calls do not duplicate the timer or restore.  Disabling cancels
+the timer; a fresh enable does not restore an already restored desktop again.
+A desktop that was missing or failed to load can be retried on a fresh enable.  Disabling cannot undo restored buffers
+or safely revert state variables.  Set options before enabling, and disable and
+re-enable the mode to apply desktop selection changes.  Read and filesystem
+failures are reported to the caller.
+
+* Staged Asynchronous Restore
+
+By default, desktop restoration is synchronous (=sprite-state-desktop-restore-style= is ='eager=).
+When set to ='staged=, =sprite-state-start-desktop= uses =sprite-desktop-read= to restore
+sessions incrementally without blocking interaction:
+
+#+begin_src emacs-lisp
+(setq sprite-state-desktop-enabled t
+      sprite-state-desktop-restore-style 'staged)
+#+end_src
+
+** Architecture and Lanes
+
+Restoration splits across four priority lanes:
+- =hot=: buffers in the active project or displayed within =sprite-desktop-hot-window= (default 24h).
+- =light=: buffers where no LSP server applies and estimated materialization cost is under =sprite-desktop-heavy-ms= (default 50ms).
+- =heavy=: buffers where an LSP server applies or estimated cost exceeds =sprite-desktop-heavy-ms=.
+- =cold=: buffers unvisited for longer than =sprite-desktop-cold-window= (default 14 days) or lacking history.
+
+The first =sprite-desktop-eager-count= (default 3) buffers restore synchronously so the
+initial frame displays a real buffer immediately.  Remaining buffers are enqueued and
+materialized at idle time through =sprite-batch=.
+
+** Await Semantics
+
+Pending entries exist only as queue data, not placeholder buffers.  Visiting any pending file
+via =find-file=, =project-find-file=, =consult-buffer=, or programmatic =find-file-noselect=
+acts like awaiting a future: the buffer is materialized immediately, jumping all queue lanes,
+and returned without duplicates.
+
+** Queue Inspection and Management
+
+Inspect background restoration with =M-x sprite-desktop-queue=.  The tabulated buffer
+supports interactive steering:
+- =b=: bump entry at point to restore next.
+- =p=: restore all buffers for the selected project immediately.
+- =d=: drop entry from the queue without materializing.
+- =SPC=: pause or resume background draining.
+- =g=: refresh queue status.
+
+Commands =sprite-desktop-pause=, =sprite-desktop-resume=, and =sprite-desktop-restore-all=
+provide programmatic and minibuffer control.  A mode-line indicator (=⧗ desktop DONE/TOTAL=)
+tracks progress while entries are pending.
+
+** Bulk File Opening API
+
+Any bulk file opener can leverage staged restoration via:
+
+#+begin_src emacs-lisp
+(sprite-desktop-open-files files :name "grep results" :project root)
+#+end_src
+
+Files are categorized into queue lanes and drain at idle, with full await semantics if visited.
+
+** Persistence Round-Trip Guarantee
+
+If Emacs saves or exits while entries are still pending, a =desktop-save-hook= handler writes
+pending entries into the desktop file as =(sprite-desktop--restore-entry 'ARGS)= forms.
+On subsequent startup in staged mode, these entries re-enqueue; in eager mode, they fall back
+to standard desktop restore without data loss.

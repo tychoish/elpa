@@ -33,6 +33,7 @@ Buffer is named *<project>-test-<directory>*.  Requires
 `eglot-test-at-point-list-fn' and `eglot-test-at-point-run-command-fn'
 to be set buffer-locally." t)
 (register-definition-prefixes "eglot-test-at-point" '("eglot-test-at-point-"))
+
 
 ;;; End of scraped data
 
