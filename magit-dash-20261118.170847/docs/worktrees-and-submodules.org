@@ -1,0 +1,55 @@
+#+TITLE: Worktrees and Submodule Management
+
+* Features
+
+- *Worktree Discovery & Display*: Automatically inspect and display active git worktrees
+  in the dashboard via [[file:api.org::#magit-dash-show-discovered-worktrees][~magit-dash-show-discovered-worktrees~]].
+- *Automated Environment Symlinking*: Share heavy developer dependencies (such as =node_modules=,
+  =.venv=, or secrets like =.env=) between main repositories and linked worktrees without disk duplication
+  via [[file:api.org::#magit-dash-worktree-global-symlinks][~magit-dash-worktree-global-symlinks~]] and [[file:api.org::#magit-dash-worktree-auto-symlink][~magit-dash-worktree-auto-symlink~]].
+- *Worktree Lifecycle Commands*: Interactively create ([[file:api.org::#magit-dash-worktree-add][~magit-dash-worktree-add~]]), remove
+  ([[file:api.org::#magit-dash-worktree-delete][~magit-dash-worktree-delete~]]), and resynchronize links ([[file:api.org::#magit-dash-worktree-sync-symlinks][~magit-dash-worktree-sync-symlinks~]]).
+- *Submodule Tracking & Fast Bumping*: Track dirty submodule revisions, status discrepancies,
+  and advance submodules to upstream HEAD with [[file:api.org::#magit-dash-bump-submodules-menu][~magit-dash-bump-submodules-menu~]] and
+  [[file:api.org::#magit-dash-bump-submodules-all][~magit-dash-bump-submodules-all~]].
+
+- *Branch Stacks*: View a stack of dependent local branches (=wv= in the Worktree menu group,
+  ~magit-dash-stack-open~) with parent, worktree, drift and commit sizes, export dot or mermaid
+  graphs, and sync it by merging each parent forward through a PR chain plan
+  (~magit-dash-stack-sync~, MCP tools =stack_show= and =stack_sync=). Missing worktrees are created
+  under =magit-dash-chain-worktree-directory= (default =.wt=). See the
+  [[file:../README.org::#pr-chain][PR Chain Merge Plans]] section.
+
+* Key Functions and Options
+
+- [[file:api.org::#magit-dash-worktree-add][~magit-dash-worktree-add~]]: Prompt to create a new git worktree with automatic symlink seeding.
+- [[file:api.org::#magit-dash-worktree-delete][~magit-dash-worktree-delete~]]: Select and prune an existing git worktree safely.
+- [[file:api.org::#magit-dash-worktree-sync-symlinks][~magit-dash-worktree-sync-symlinks~]]: Re-evaluate and link missing symlinks across worktrees.
+- [[file:api.org::#magit-dash-worktree-global-symlinks][~magit-dash-worktree-global-symlinks~]]: List of relative files and folders symlinked into new worktrees.
+- [[file:api.org::#magit-dash-worktree-auto-symlink][~magit-dash-worktree-auto-symlink~]]: Automatically link shared targets upon worktree creation.
+- [[file:api.org::#magit-dash-bump-submodules-menu][~magit-dash-bump-submodules-menu~]]: Interactive transient menu to inspect and advance submodules.
+- [[file:api.org::#magit-dash-bump-submodules-all][~magit-dash-bump-submodules-all~]]: Fast forward all registered submodules to latest upstream commits.
+- [[file:api.org::#magit-dash-show-discovered-worktrees][~magit-dash-show-discovered-worktrees~]]: Global default for worktree rows in the repository dashboard.
+- [[file:api.org::#magit-dash-show-discovered-submodules][~magit-dash-show-discovered-submodules~]]: Global default for submodule rows in the repository dashboard.
+- ~magit-dash-toggle-worktrees~ (bound to =w t=, =t w=, =M-t=): Toggle worktree visibility for the repository at point.
+- ~magit-dash-toggle-submodules~ (bound to =t s=): Toggle submodule visibility for the repository at point.
+- =magit-dash-register= options ~:show-worktrees~, ~:hide-worktrees~, ~:show-submodules~, ~:hide-submodules~: Configure per-repo worktree and submodule visibility defaults.
+
+* Example
+
+#+BEGIN_SRC emacs-lisp
+  ;; Customize shared symlinks across linked worktrees
+  (setq magit-dash-worktree-global-symlinks '("node_modules" ".venv" ".env" "target"))
+  (setq magit-dash-worktree-auto-symlink t)
+
+  ;; Add a new worktree
+  (magit-dash-worktree-add "~/src/project" "feature/refactor" "~/src/project-refactor")
+
+  ;; Synchronize symlinks across worktrees
+  (magit-dash-worktree-sync-symlinks)
+#+END_SRC
+
+* Reference
+
+See the [[file:api.org][API Reference]] for complete module documentation for =magit-dash-worktree=
+and =magit-dash-submodules=.
