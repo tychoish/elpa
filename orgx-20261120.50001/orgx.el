@@ -44,6 +44,7 @@
 (declare-function org-cycle-force-archived "org-cycle")
 (declare-function org-in-regexp "org")
 (declare-function org-element--property "org-element-ast")
+(declare-function org-element-type "org-element-ast")
 (declare-function org-table--shrink-columns "org-table")
 (declare-function org-table-shrink "org-table")
 (declare-function org-table-expand "org-table")
@@ -247,7 +248,7 @@ Updates `local-notes-directory', `org-directory',
   (when (and (buffer-live-p buf)
              (when-let* ((file (buffer-file-name buf)))
                (string-match-p "\\.org\\'" file))
-             (not (derived-mode-p 'org-mode)))
+             (with-current-buffer buf (not (derived-mode-p 'org-mode))))
     (let ((enable-local-variables (if (and (fboundp 'hitl-plan-restricted-p)
                                            (hitl-plan-restricted-p))
                                       nil
@@ -332,10 +333,19 @@ Otherwise call ORIG-FUN with EVENT."
 (defun orgx-set-weekday-of-timestamp ()
   "Add day of the week to an active timestamp at point."
   (interactive)
-  (let ((time (org-time-string-to-time (thing-at-point 'line t))))
-    (when time
-      (delete-region (line-beginning-position) (line-end-position))
-      (insert (format-time-string "<%Y-%m-%d %a>" time)))))
+  (when-let* ((element (org-element-context))
+              ((eq (org-element-type element) 'timestamp))
+              ((eq (org-element-property :type element) 'active))
+              ((not (org-element-property :hour-start element)))
+              ((not (org-element-property :repeater-type element)))
+              ((not (org-element-property :warning-type element)))
+              (begin (org-element-property :begin element))
+              (end (org-element-property :end element))
+              ((= begin (line-beginning-position)))
+              ((= end (line-end-position)))
+              (time (org-time-string-to-time (buffer-substring-no-properties begin end))))
+    (delete-region begin end)
+    (insert (format-time-string "<%Y-%m-%d %a>" time))))
 
 (defun orgx-skip-child-of-project-tag ()
   "Skip children of headings tagged with any element of `orgx-project-tags'.
@@ -434,8 +444,9 @@ processed; descendants move with their parent."
                             (and hl (string-prefix-p "ANSWERED " hl))))
            (is-metadata (member hl '("Context" "Response" "LOGBOOK" "PROPERTIES")))
            (is-sub-under-question (and (not (member "question" local-tags))
-                                       (org-up-heading-safe)
-                                       (member "question" (org-get-tags nil t)))))
+                                       (save-excursion
+                                         (and (org-up-heading-safe)
+                                              (member "question" (org-get-tags nil t)))))))
       (if (or is-answered is-metadata is-sub-under-question)
           (save-excursion (org-end-of-subtree t) (point))
         nil))))
@@ -560,22 +571,7 @@ file scope.  Candidates are grouped by file scope via
                  :group-name (lambda (candidate)
                                (when-let* ((e (cddr (assoc candidate acr-table))))
                                  (orgx--agenda-view-group e))))))
-    (let* ((key (car entry))
-           (custom-entry (assoc key (and (boundp 'org-agenda-custom-commands) org-agenda-custom-commands)))
-           (settings (and custom-entry (orgx--agenda-view-settings custom-entry)))
-           (files-binding (assq 'org-agenda-files settings))
-           (files (when files-binding
-                    (condition-case nil
-                        (eval (cadr files-binding) t)
-                      (error nil)))))
-      (if (and (fboundp 'orgx-denote-warm-buffers-and-run)
-               (consp files)
-               (seq-some (lambda (f) (and (stringp f) (not (get-file-buffer f)))) files))
-          (orgx-denote-warm-buffers-and-run
-           files
-           (lambda () (org-agenda nil key))
-           :label (format "agenda:%s" key))
-        (org-agenda nil key)))))
+    (org-agenda nil (car entry))))
 
 ;;; Heading search and navigation
 
@@ -754,7 +750,7 @@ buffer position."
   :doc "Global minor mode keymap activating commands under C-c o."
   "C-c o" orgx-command-map)
 
-(defvar orgx-mode--managed-settings
+(defcustom orgx-mode-managed-settings
   '((fill-column . 72)
     (org-return-follows-link . t)
     (org-use-speed-commands . orgx--use-speed-commands)
@@ -776,15 +772,17 @@ buffer position."
     (org-footnote-auto-label . nil)
     (org-footnote-define-inline . nil)
     (org-footnote-section . nil))
-  "Alist of (SYMBOL . VALUE) buffer-local settings managed by `orgx-mode'.")
+  "Alist of (SYMBOL . VALUE) buffer-local settings managed by `orgx-mode'."
+  :type '(alist :key-type symbol :value-type sexp)
+  :group 'orgx)
 
 (defvar-local orgx-mode--saved-settings nil
   "Alist of (SYMBOL . (LOCAL-P . VALUE)) saved before `orgx-mode' was enabled.")
 
 (defun orgx-mode--apply-settings ()
-  "Save previous buffer-local values and apply `orgx-mode--managed-settings'."
+  "Save previous buffer-local values and apply `orgx-mode-managed-settings'."
   (setq-local orgx-mode--saved-settings nil)
-  (dolist (pair orgx-mode--managed-settings)
+  (dolist (pair orgx-mode-managed-settings)
     (let ((sym (car pair))
           (val (cdr pair)))
       (push (cons sym (if (local-variable-p sym)
@@ -1116,7 +1114,7 @@ Activates `orgx-command-map' under C-c o."
   (add-to-list 'org-src-lang-modes '("javascript" . js))
   (add-to-list 'org-src-lang-modes '("rust" . rust)))
 
-(defvar orgx-global--managed-settings
+(defcustom orgx-global-managed-settings
   `((org-rst-headline-underline-characters . ,(list ?= ?- ?~ ?' ?^ ?`))
     (org-modules . ,orgx-default-modules)
     (org-todo-keywords . ,orgx-todo-keywords)
@@ -1147,15 +1145,17 @@ Activates `orgx-command-map' under C-c o."
     (org-agenda-todo-ignore-scheduled . t)
     (org-agenda-start-on-weekday . nil)
     (org-agenda-skip-function-global . orgx-skip-child-of-project-tag))
-  "Alist of (SYMBOL . VALUE) settings managed globally by `orgx-global-mode'.")
+  "Alist of (SYMBOL . VALUE) settings managed globally by `orgx-global-mode'."
+  :type '(alist :key-type symbol :value-type sexp)
+  :group 'orgx)
 
 (defvar orgx-global--saved-settings nil
   "Alist of (SYMBOL . (BOUNDP . VALUE)) saved before enabling.")
 
 (defun orgx-global--apply-settings ()
-  "Save previous values and apply `orgx-global--managed-settings'."
+  "Save previous values and apply `orgx-global-managed-settings'."
   (setq orgx-global--saved-settings nil)
-  (dolist (pair orgx-global--managed-settings)
+  (dolist (pair orgx-global-managed-settings)
     (let ((sym (car pair))
           (val (cdr pair)))
       (push (cons sym (if (boundp sym) (cons t (symbol-value sym)) (cons nil nil)))

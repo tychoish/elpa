@@ -24,7 +24,7 @@
 (require 'cl-lib)
 
 (declare-function org-element--property "org-element-ast")
-(declare-function denote-directories "denote")
+(autoload 'denote-directories "denote")
 (declare-function denote-retrieve-filename-keywords-as-list "denote")
 (declare-function denote-retrieve-filename-signature "denote")
 (declare-function denote-org-capture "denote")
@@ -57,6 +57,31 @@
 
 (defconst orgx-denote-agenda-category-width 8
   "Max width in characters for `orgx-denote-agenda-category'.")
+
+;;; Denote link storage
+
+(declare-function denote-file-is-in-denote-directory-p "denote")
+(declare-function denote-file-has-denoted-filename-p "denote")
+(declare-function denote-retrieve-filename-identifier "denote")
+(declare-function denote-get-link-description "denote")
+(defvar org-store-link-plist)
+
+(defun orgx-denote--store-non-org-link (original &rest args)
+  "Call ORIGINAL with ARGS, avoiding Org parsing in non-Org Denote files."
+  (if (derived-mode-p 'org-mode)
+      (apply original args)
+    (when-let* ((file (buffer-file-name))
+                ((file-regular-p file))
+                ((denote-file-is-in-denote-directory-p file))
+                ((denote-file-has-denoted-filename-p file))
+                (identifier (denote-retrieve-filename-identifier file))
+                (description (denote-get-link-description file)))
+      (org-link-store-props :type "denote" :description description
+                            :link (concat "denote:" identifier))
+      org-store-link-plist)))
+
+(with-eval-after-load 'denote
+  (advice-add 'denote-link-ol-store :around #'orgx-denote--store-non-org-link))
 
 ;;; File discovery and classification
 
@@ -195,13 +220,13 @@ signature, and formats the sequence category."
 
 ;;; Buffer warming and asynchronous agenda execution
 
-(defcustom orgx-denote-agenda-warm-chunk-size 5
-  "Number of denote buffers to open per idle tick during background warming."
+(defcustom orgx-denote-agenda-warm-chunk-size 1
+  "Number of denote buffers to open per timer tick during background warming."
   :type 'natnum
   :group 'orgx-denote)
 
-(defcustom orgx-denote-agenda-warm-delay 0.02
-  "Idle delay in seconds between buffer warming chunks."
+(defcustom orgx-denote-agenda-warm-delay 0.005
+  "Delay in seconds between buffer warming chunks."
   :type 'number
   :group 'orgx-denote)
 
@@ -257,21 +282,24 @@ immediately."
            #'orgx-denote--visit-file
            cold
            :chunk-size (max 1 (or chunk-size 5))
-           :idle t
+           :idle nil
            :delay (or delay 0.02)
            :name (format "orgx-denote-warm%s" (if label (format ":%s" label) ""))
            :on-progress (lambda (done total)
-                          (message "Warming Denote files for %s: %d/%d..."
-                                   (or label "agenda") done total))
+                          (when (or (= done total) (= (% done 25) 0))
+                            (message "Warming Denote files for %s: %d/%d..."
+                                     (or label "agenda") done total)))
            :on-done (lambda ()
                       (message "Denote files ready. Rendering %s..." (or label "agenda"))
                       (when on-done
                         (condition-case err
                             (funcall on-done)
                           (error
-                           (message "Error rendering %s: %s"
-                                    (or label "agenda")
-                                    (error-message-string err)))))))
+                           (display-warning 'orgx-denote
+                                            (format "Error rendering %s: %s"
+                                                    (or label "agenda")
+                                                    (error-message-string err))
+                                            :error))))))
         ;; Fallback when gen.el is not loaded
         (letrec ((rem cold)
                  (total (length cold))
@@ -281,7 +309,10 @@ immediately."
                     (let ((count 0)
                           (limit (max 1 (or chunk-size 5))))
                       (while (and rem (< count limit))
-                        (ignore-errors (orgx-denote--visit-file (pop rem)))
+                        (condition-case err
+                            (orgx-denote--visit-file (pop rem))
+                          (error (display-warning 'orgx-denote
+                                                  (error-message-string err) :warning)))
                         (cl-incf count)
                         (cl-incf done-count))
                       (message "Warming Denote files for %s: %d/%d..."
@@ -293,9 +324,11 @@ immediately."
                               (condition-case err
                                   (funcall on-done)
                                 (error
-                                 (message "Error rendering %s: %s"
-                                          (or label "agenda")
-                                          (error-message-string err))))))
+                                 (display-warning 'orgx-denote
+                                                  (format "Error rendering %s: %s"
+                                                          (or label "agenda")
+                                                          (error-message-string err))
+                                                  :error)))))
                         (run-at-time (or delay 0.02) nil step))))))
           (run-at-time (or delay 0.02) nil step))))))
 
@@ -419,18 +452,35 @@ immediately."
         (error nil)))))
 
 (defun orgx-denote--agenda-dispatcher-advice (orig-fn &optional arg keys restriction)
-  "Intercept Denote agenda views in `org-agenda' to warm buffers before rendering."
+  "Warm custom agenda files before calling ORIG-FN with ARG, KEYS, RESTRICTION."
   (let* ((key-str (and keys (format "%s" keys))))
-    (if (and key-str (string-prefix-p "d" key-str))
+    (if key-str
         (let* ((custom (assoc key-str (and (boundp 'org-agenda-custom-commands) org-agenda-custom-commands)))
-               (files (and custom (orgx-denote--extract-command-files custom)))
+               (files (and (proper-list-p custom)
+                           custom (orgx-denote--extract-command-files custom)))
                (cold (and (consp files)
                           (seq-filter (lambda (f) (and (stringp f) (not (orgx-denote--file-warmed-p f)))) files))))
           (if cold
-              (orgx-denote-warm-buffers-and-run
-               files
-               (lambda () (funcall orig-fn arg keys restriction))
-               :label key-str)
+              (let ((origin (current-buffer))
+                    (origin-window (selected-window))
+                    (commands org-agenda-custom-commands)
+                    (agenda-files org-agenda-files))
+                (orgx-denote-warm-buffers-and-run
+                 files
+                 (lambda ()
+                   (if (buffer-live-p origin)
+                       (let ((org-agenda-custom-commands commands)
+                             (org-agenda-files agenda-files))
+                         (if (window-live-p origin-window)
+                             (with-selected-window origin-window
+                               (with-current-buffer origin
+                                 (funcall orig-fn arg keys restriction)))
+                           (with-current-buffer origin
+                             (funcall orig-fn arg keys restriction))))
+                     (display-warning 'orgx-denote
+                                      "Agenda cancelled: the originating buffer was killed"
+                                      :warning)))
+                 :label key-str))
             (funcall orig-fn arg keys restriction)))
       (funcall orig-fn arg keys restriction))))
 
@@ -441,7 +491,7 @@ immediately."
   (when (and (buffer-live-p buf)
              (when-let* ((file (buffer-file-name buf)))
                (string-match-p "\\.org\\'" file))
-             (not (derived-mode-p 'org-mode)))
+             (with-current-buffer buf (not (derived-mode-p 'org-mode))))
     (let ((enable-local-variables (if (and (fboundp 'hitl-plan-restricted-p)
                                            (hitl-plan-restricted-p))
                                       nil

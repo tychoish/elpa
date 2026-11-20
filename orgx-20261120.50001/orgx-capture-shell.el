@@ -22,6 +22,8 @@
 
 (require 'cl-lib)
 (require 'comint)
+(require 'pcomplete)
+(require 'annotated-completing-read)
 (require 'button)
 (require 'seq)
 (require 'subr-x)
@@ -176,17 +178,62 @@ or `orgx-capture-shell-command-menu'."
                          (expand-file-name orgx-capture-shell-default-file))))
         (cons base-file orgx-capture-shell-default-headline))))))
 
+(defvar orgx-capture-shell--buffer nil
+  "The current capture shell buffer, or nil if it has been killed.")
+
+(defun orgx-capture-shell--find-buffer ()
+  "Return the existing capture shell buffer, if any."
+  (when (buffer-live-p orgx-capture-shell--buffer)
+    orgx-capture-shell--buffer))
+
+(defun orgx-capture-shell--rename-buffer ()
+  "Update the shell buffer name to show its current target and template."
+  (when (derived-mode-p 'orgx-capture-shell-mode)
+    (rename-buffer
+     (format "%s [%s · %s]" orgx-capture-shell-buffer-name
+             (if orgx-capture-shell-current-file
+                 (file-name-nondirectory orgx-capture-shell-current-file)
+               "none")
+             orgx-capture-shell-current-template)
+     t)))
+
 ;;; Popup window management
+
+(declare-function popper-popup-p "popper" (buffer))
+
+(defun orgx-capture-shell--display-below-other (buffer _alist)
+  "Display BUFFER below the other window when it shows an agenda or popup.
+Only split when the frame has exactly two side-by-side ordinary windows."
+  (let* ((windows (window-list nil 'no-minibuffer))
+         (selected (selected-window))
+         (other (and (= (length windows) 2)
+                     (seq-find (lambda (window) (not (eq window selected))) windows))))
+    (when (and other
+               (/= (car (window-edges other)) (car (window-edges selected)))
+               (or (with-current-buffer (window-buffer other)
+                     (derived-mode-p 'org-agenda-mode))
+                   (and (fboundp 'popper-popup-p)
+                        (popper-popup-p (window-buffer other))))
+               (let ((split-height-threshold 0))
+                 (window-splittable-p other)))
+      (let ((window (split-window
+                     other (- (min orgx-capture-shell-popup-height
+                                   (- (window-total-height other) window-min-height)))
+                     'below)))
+        (set-window-buffer window buffer)
+        window))))
 
 (defun orgx-capture-shell-register-window-rule ()
   "Register the 15-line bottom popup rule in `display-buffer-alist'."
   (interactive)
   (let ((rule `(,(regexp-quote orgx-capture-shell-buffer-name)
-                (display-buffer-reuse-window display-buffer-at-bottom)
+                (display-buffer-reuse-window orgx-capture-shell--display-below-other
+                 display-buffer-at-bottom)
                 (window-height . ,orgx-capture-shell-popup-height)
                 (reusable-frames . visible))))
-    (unless (assoc (car rule) display-buffer-alist)
-      (add-to-list 'display-buffer-alist rule))))
+    (setq display-buffer-alist
+          (cons rule (seq-remove (lambda (entry) (equal (car entry) (car rule)))
+                                 display-buffer-alist)))))
 
 
 ;;; Core capture engine
@@ -477,7 +524,7 @@ Values come from the shell buffer when it exists, else from target resolution."
                (list :file (car res)
                      :headline (cdr res)
                      :template orgx-capture-shell-current-template))))))
-    (if-let* ((buf (get-buffer orgx-capture-shell-buffer-name)))
+    (if-let* ((buf (orgx-capture-shell--find-buffer)))
         (with-current-buffer buf (funcall read-defaults))
       (funcall read-defaults))))
 
@@ -869,6 +916,7 @@ Use C-j to insert a literal newline before submitting with RET."
             (error
              (setq orgx-capture-shell--status 'error)
              (error-message-string err)))))
+    (orgx-capture-shell--rename-buffer)
     (when (and msg (not (string-empty-p msg)))
       (comint-output-filter proc (concat msg "\n")))
     (comint-output-filter proc (orgx-capture-shell--prompt-string orgx-capture-shell--status))
@@ -921,6 +969,105 @@ Completes command names, `/template' names, and `/target' files and headlines."
             (list arg-start (point) #'completion-file-name-table
                   :exclusive 'no))))))))
 
+(defvar-local orgx-capture-shell--completion-buffer nil
+  "Private Org buffer used to provide Org completions.")
+
+(defvar-local orgx-capture-shell--completion-context-cache nil
+  "Cached target file context for Org completion.")
+
+(defun orgx-capture-shell--completion-context (file source)
+  "Return Org completion variables for FILE, optionally visited in SOURCE."
+  (let* ((attributes (and file (not source) (file-attributes file)))
+         (key (list file source (and source (buffer-chars-modified-tick source))
+                    (and attributes (file-attribute-modification-time attributes))
+                    (and attributes (file-attribute-size attributes)))))
+    (unless (equal key (car orgx-capture-shell--completion-context-cache))
+      (let ((vars '(org-todo-keywords-1 org-todo-regexp org-current-tag-alist
+                    org-link-abbrev-alist-local org-file-tags)))
+        (setq orgx-capture-shell--completion-context-cache
+              (cons key
+                    (if (and source (with-current-buffer source (derived-mode-p 'org-mode)))
+                        (seq-map (lambda (var) (cons var (buffer-local-value var source))) vars)
+                      (with-temp-buffer
+                        (when file
+                          (setq default-directory (file-name-directory file))
+                          (if source
+                              (insert-buffer-substring source)
+                            (when (file-readable-p file) (insert-file-contents file))))
+                        (delay-mode-hooks (org-mode))
+                        (seq-map (lambda (var) (cons var (symbol-value var))) vars)))))))
+    (cdr orgx-capture-shell--completion-context-cache)))
+
+(defun orgx-capture-shell--kill-completion-buffer ()
+  "Kill the private completion buffer along with its shell."
+  (when (buffer-live-p orgx-capture-shell--completion-buffer)
+    (kill-buffer orgx-capture-shell--completion-buffer)))
+
+(defun orgx-capture-shell-org-completion-at-point ()
+  "Complete Org syntax in the current input using Org's completion table."
+  (when-let* ((process (get-buffer-process (current-buffer)))
+              (start (marker-position (process-mark process)))
+              ((>= (point) start)))
+    (let ((input (buffer-substring-no-properties start (point-max)))
+          (offset (- (point) start))
+          (target orgx-capture-shell-current-file)
+          (directory default-directory)
+          (source (and orgx-capture-shell-current-file
+                       (get-file-buffer orgx-capture-shell-current-file))))
+      (unless (buffer-live-p orgx-capture-shell--completion-buffer)
+        (setq orgx-capture-shell--completion-buffer
+              (generate-new-buffer " *orgx-capture-completion*"))
+        (with-current-buffer orgx-capture-shell--completion-buffer
+          (delay-mode-hooks (org-mode))))
+      (let ((shadow orgx-capture-shell--completion-buffer)
+            (context (orgx-capture-shell--completion-context target source)))
+        (with-current-buffer shadow
+          (setq-local default-directory
+                      (if target (file-name-directory target) directory))
+          (seq-do (lambda (entry)
+                    (set (make-local-variable (car entry)) (cdr entry)))
+                  context)
+          (let ((inhibit-read-only t))
+            (erase-buffer)
+            (insert input))
+          (goto-char (+ (point-min) offset))
+          (when-let* ((completion
+                       (or (pcomplete-completions-at-point)
+                           (save-excursion
+                             (when (re-search-backward "\\[\\[file:\\([^]]*\\)\\="
+                                                       (line-beginning-position) t)
+                               (list (match-beginning 1) (match-end 1)
+                                     #'completion-file-name-table))))))
+            (let ((table (nth 2 completion))
+                  (props (copy-sequence (nthcdr 3 completion)))
+                  (generation (buffer-chars-modified-tick))
+                  (termination pcomplete-termination-string))
+              (seq-do
+               (lambda (property)
+                 (when-let* ((fn (plist-get props property)))
+                   (setq props
+                         (plist-put props property
+                                    (lambda (&rest args)
+                                      (with-current-buffer shadow
+                                        (apply fn args)))))))
+               '(:predicate :annotation-function :company-docsig :company-kind))
+              (when-let* ((exit (plist-get props :exit-function)))
+                (setq props
+                      (plist-put props :exit-function
+                                 (lambda (string status)
+                                   (let ((pcomplete-termination-string termination))
+                                     (funcall exit string status))))))
+              (setq props (plist-put props :exclusive 'no))
+              (append
+               (list (+ start (1- (nth 0 completion)))
+                     (+ start (1- (nth 1 completion)))
+                     (lambda (string predicate action)
+                       (when (and (buffer-live-p shadow)
+                                  (= generation (buffer-chars-modified-tick shadow)))
+                         (with-current-buffer shadow
+                           (complete-with-action action table string predicate)))))
+               props))))))))
+
 ;;; Major Mode Definition
 
 (declare-function annotated-completing-read "annotated-completing-read")
@@ -971,7 +1118,9 @@ Only triggers command menu when point is at prompt start."
   :parent comint-mode-map
   "C-c C-u" #'orgx-capture-shell--undo-last
   "C-c C-k" #'comint-kill-input
+  "C-c C-c" #'comint-send-input
   "C-c C-o" #'orgx-capture-shell-command-menu
+  "C-c C-r" #'orgx-capture-shell-restart
   "C-c m"   #'orgx-capture-shell-transient
   "C-j" #'newline
   "C-<return>" #'orgx-capture-shell-send-form
@@ -1001,7 +1150,10 @@ Ignores prompts, slash commands, and short syntax."
   (setq comint-input-sender #'orgx-capture-shell-input-sender)
   (setq-local fill-column 80)
   (visual-line-mode 1)
+  (add-hook 'completion-at-point-functions #'orgx-capture-shell-org-completion-at-point nil t)
   (add-hook 'completion-at-point-functions #'orgx-capture-shell-completion-at-point nil t)
+  (add-hook 'kill-buffer-hook #'orgx-capture-shell--kill-completion-buffer nil t)
+  (add-hook 'change-major-mode-hook #'orgx-capture-shell--kill-completion-buffer nil t)
 
   ;; Autocomplete and spellcheck
   (when (and orgx-capture-shell-enable-corfu (fboundp 'corfu-mode))
@@ -1020,13 +1172,41 @@ Ignores prompts, slash commands, and short syntax."
 
 ;;; Interactive Entrypoints
 
+(defvar-local orgx-capture-shell--saved-input-marker nil
+  "Input boundary retained when the shell helper exits.")
+
+(defun orgx-capture-shell--process-sentinel (process _event)
+  "Save PROCESS input boundary when the helper exits."
+  (when (and (not (process-live-p process)) (buffer-live-p (process-buffer process)))
+    (with-current-buffer (process-buffer process)
+      (setq orgx-capture-shell--saved-input-marker
+            (copy-marker (process-mark process))))))
+
 (defun orgx-capture-shell--ensure-process (&optional buf)
   "Ensure a running dummy comint process exists in BUF."
   (let ((b (or buf (current-buffer))))
     (unless (comint-check-proc b)
       (let ((proc (start-process "orgx-capture-shell" b "cat")))
         (set-process-query-on-exit-flag proc nil)
+        (set-process-sentinel proc #'orgx-capture-shell--process-sentinel)
         proc))))
+
+(defun orgx-capture-shell-restart ()
+  "Restart the shell helper, preserving the current input."
+  (interactive)
+  (unless (derived-mode-p 'orgx-capture-shell-mode)
+    (user-error "Not in an orgx capture shell"))
+  (let* ((old-process (get-buffer-process (current-buffer)))
+         (input-start (or (and old-process (marker-position (process-mark old-process)))
+                          (and (markerp orgx-capture-shell--saved-input-marker)
+                               (marker-position orgx-capture-shell--saved-input-marker)))))
+    (when old-process
+      (delete-process old-process))
+    (let ((process (orgx-capture-shell--ensure-process)))
+      (if (and input-start (> (point-max) (point-min)))
+          (set-marker (process-mark process) input-start)
+        (set-marker (process-mark process) (point-max))
+        (comint-output-filter process (orgx-capture-shell--prompt-string))))))
 
 ;;;###autoload
 (defun orgx-capture-shell ()
@@ -1034,11 +1214,17 @@ Ignores prompts, slash commands, and short syntax."
   (interactive)
   (when orgx-capture-shell-window-rule
     (orgx-capture-shell-register-window-rule))
-  (let ((buf (get-buffer-create orgx-capture-shell-buffer-name)))
+  (let ((buf (or (orgx-capture-shell--find-buffer)
+                 (get-buffer-create orgx-capture-shell-buffer-name))))
+    (setq orgx-capture-shell--buffer buf)
     (with-current-buffer buf
       (unless (derived-mode-p 'orgx-capture-shell-mode)
         (orgx-capture-shell-mode))
-      (orgx-capture-shell--ensure-process buf)
+      (if (and (not (comint-check-proc buf))
+               orgx-capture-shell--saved-input-marker)
+          (orgx-capture-shell-restart)
+        (orgx-capture-shell--ensure-process buf))
+      (orgx-capture-shell--rename-buffer)
       (goto-char (point-max))
       (when (= (point-min) (point-max))
         (comint-output-filter
@@ -1055,7 +1241,7 @@ Ignores prompts, slash commands, and short syntax."
 If the shell window is visible and active, hide it and return to the previous
 window.  If it is hidden or not active, display it in the bottom popup window."
   (interactive)
-  (let* ((buf (get-buffer orgx-capture-shell-buffer-name))
+  (let* ((buf (orgx-capture-shell--find-buffer))
          (win (and buf (get-buffer-window buf))))
     (if (and win (eq win (selected-window)))
         (delete-window win)
@@ -1067,10 +1253,25 @@ window.  If it is hidden or not active, display it in the bottom popup window."
 (defun orgx-capture-shell-set-target-file (file &optional headline)
   "Set the capture target to FILE and optional HEADLINE."
   (interactive
-   (let* ((f (read-file-name "Org file: " nil nil t nil
-                             (lambda (name)
-                               (or (file-directory-p name)
-                                   (string-suffix-p ".org" name)))))
+   (let* ((files (delete-dups
+                  (delq nil
+                        (cons orgx-capture-shell-current-file
+                              (seq-map (lambda (buffer)
+                                         (with-current-buffer buffer
+                                           (when (and buffer-file-name
+                                                      (derived-mode-p 'org-mode))
+                                             buffer-file-name)))
+                                       (buffer-list))))))
+          (choice (annotated-completing-read
+                   (cons '("Browse..." . "Choose another file")
+                         (seq-map (lambda (file) (cons file "Open Org file")) files))
+                   :prompt "Org file: " :require-match t))
+          (f (if (equal choice "Browse...")
+                 (read-file-name "Org file: " nil nil t nil
+                                 (lambda (name)
+                                   (or (file-directory-p name)
+                                       (string-suffix-p ".org" name))))
+               choice))
           (h (completing-read "Headline (optional): "
                               (when (and f (file-regular-p f))
                                 (orgx-capture-shell--headline-paths f))
@@ -1088,6 +1289,7 @@ window.  If it is hidden or not active, display it in the bottom popup window."
     (setq orgx-capture-shell-current-file exp)
     (setq orgx-capture-shell-current-headline
           (and headline (not (string-empty-p (string-trim headline))) headline))
+    (orgx-capture-shell--rename-buffer)
     (message "Target set to %s%s"
              (file-name-nondirectory orgx-capture-shell-current-file)
              (if orgx-capture-shell-current-headline
@@ -1097,12 +1299,16 @@ window.  If it is hidden or not active, display it in the bottom popup window."
 (defun orgx-capture-shell-set-template (template)
   "Set the active capture TEMPLATE."
   (interactive
-   (list (intern (completing-read "Template: " (mapcar #'symbol-name orgx-capture-shell-templates) nil t))))
+   (list (intern (annotated-completing-read
+                  (seq-map (lambda (template) (cons (symbol-name template) nil))
+                           orgx-capture-shell-templates)
+                  :prompt "Template: " :require-match t))))
   (unless (memq template orgx-capture-shell-templates)
     (user-error "Invalid template: %s (choose %s)"
                 template
                 (mapconcat #'symbol-name orgx-capture-shell-templates ", ")))
   (setq orgx-capture-shell-current-template template)
+  (orgx-capture-shell--rename-buffer)
   (message "Template set to %s" template))
 
 (defun orgx-capture-shell-set-denote-target ()
@@ -1116,6 +1322,7 @@ window.  If it is hidden or not active, display it in the bottom popup window."
         (when-let* ((full (seq-find (lambda (f) (string-equal (file-name-nondirectory f) choice)) files)))
           (setq orgx-capture-shell-current-file full)
           (setq orgx-capture-shell-current-headline nil)
+          (orgx-capture-shell--rename-buffer)
           (message "Target set to denote note: %s" choice)))
     (user-error "Denote is not available")))
 
@@ -1140,6 +1347,7 @@ window.  If it is hidden or not active, display it in the bottom popup window."
     ("t" "Toggle Popup Window" orgx-capture-shell-toggle)
     ("F" "Capture Form" orgx-capture-shell-form)
     ("u" "Undo Last Capture" orgx-capture-shell-undo-command)
+    ("r" "Restart Helper" orgx-capture-shell-restart)
     ("o" "Visit Current Target" orgx-capture-shell-visit-target-command)]
    ["Switch Modality"
     ("f" "Set Target File" orgx-capture-shell-set-target-file)
