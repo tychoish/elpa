@@ -169,6 +169,7 @@ Returns a runner handle function `(lambda (&optional action) ...)`.
 (fn FN SEQUENCE &key (CHUNK-SIZE 1) (CONCURRENCY 1) (DELAY 0.0) RUN-AFTER INITIAL-DELAY IDLE (NAME nil) LABEL BUFFER FRAME REACTOR ON-PROGRESS ON-CANCEL ON-DONE ON-ERROR)")
 (defalias 'gen-each-async #'gen-mapc-async)
 (register-definition-prefixes "gen" '("gen--"))
+
 
 ;;; End of scraped data
 

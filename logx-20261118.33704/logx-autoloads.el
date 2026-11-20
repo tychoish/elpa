@@ -268,6 +268,7 @@ penultimate step during initialization.
 
 \\{logx-view-mode-map}" t)
 (register-definition-prefixes "logx-view" '("logx-view-"))
+
 
 ;;; End of scraped data
 
