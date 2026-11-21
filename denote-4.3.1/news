@@ -1,0 +1,105 @@
+                         ━━━━━━━━━━━━━━━━━━━━━━
+                          CHANGE LOG OF DENOTE
+
+                              Protesilaos
+                          info@protesilaos.com
+                         ━━━━━━━━━━━━━━━━━━━━━━
+
+
+This document contains the release notes for each tagged commit on the
+project’s main git repository: <https://github.com/protesilaos/denote>.
+
+The newest release is at the top.  For further details, please consult
+the manual: <https://protesilaos.com/emacs/denote>.
+
+Table of Contents
+─────────────────
+
+1. Version 4.3.0 on 2026-11-19
+
+
+1 Version 4.3.0 on 2026-11-19
+═════════════════════════════
+
+  This version introduces quality-of-life improvements as well as a
+  series of abstractions that empower developers to change how Denote
+  retrieves its data. Concretely, developers can write an optional cache
+  or database for Denote.
+
+  I am developing `denote-data', which is an in-memory cache. Its job is
+  to make certain operations faster. The package is still in
+  development, though I hope to have an initial release within the next
+  weeks: <https://github.com/protesilaos/denote-data>.
+
+  Once `denote-data' is ready, users will be able to experiment with
+  another package that will be made public soon. That one will provide a
+  much-requested feature. But I will write more about it when the time
+  is right.
+
+
+1.1 AI policy changes
+─────────────────────
+
+  I have added `AGENTS.md' and `CLAUDE.md' to denote.git. I copied those
+  files from the emacs.git repository. They instruct AI agents to not
+  write patches or comments for the Denote source code. Users can still
+  use whatever program they want, though they are expected to prepare
+  their own code or bug reports.
+
+  I am doing this because Denote is legally part of Emacs: I have
+  assigned copyright to the Free Software Foundation. The GNU project as
+  a whole is waiting for legal advice on how to handle AI-generated
+  contributions. I agree with the current GNU position and will adapt
+  accordingly.
+
+  In addition to that, I prefer to write even these release notes by
+  hand even if nobody will read them. They give me an opportunity to
+  review the entire package. I go through the commit logs and check back
+  on the diffs. Then I know what is the state of the project and what
+  may be done next.
+
+
+1.2 Abstractions for a cache or a database
+──────────────────────────────────────────
+
+  I have introduced several variables and hooks that allow developers to
+  affect how Denote retrieves its data. Existing users will not notice
+  any difference. This is relevant for those who plan to write relevant
+  packages. Users will have to opt in to whatever new functionality.
+
+  The manual describes all the technicalities:
+
+  Web page
+        <https://protesilaos.com/emacs/denote#h:175b3b5f-4490-4cb0-81d7-26652cf08e79>.
+  Info node
+        Evaluate `(info "(denote) Abstractions for a cache or
+        database")'.
+
+  I did this in response to issue 724 by kimsaram32, with participation
+  from Aaron Jensen, relict007, Samuel W. Flint, mentalisttraceur, Mirko
+  Hernandez: <https://github.com/protesilaos/denote/issues/724>.
+
+
+1.3 Disable the “fancy” file prompt
+───────────────────────────────────
+
+  By default, Denote’s file prompt reformats file names. A Denote-style
+  file name is split into columns so that its components are easier to
+  read. Users who prefer to see the actual file names can now set the
+  user option `denote-fancy-file-prompt' to a `nil' value.
+
+  I did this in response to issue 732 by Honza Pokorný:
+  <https://github.com/protesilaos/denote/issues/732>.
+
+  Note that in addition to this user option advanced users can also
+  change the relevant completion metadata. Check the variable
+  `denote-file-prompt-extra-metadata' and the functions mentioned
+  therein.
+
+
+1.4 Extra backslashes in query links now result in an error
+───────────────────────────────────────────────────────────
+
+  Denote supports direct links to files as well as “query links”. Those
+  look like links but actually produce a buffer with files that match …
+  …
