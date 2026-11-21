@@ -58,7 +58,9 @@
 
 (defun chex--ispell-cache-params (orig-fn &rest args)
   "Call ORIG-FN with ARGS using cached Aspell detection results."
-  (when (file-exists-p chex-ispell-cache-file)
+  ;; Once initialized, let Ispell handle program switches and its process.
+  (when (and (null ispell-last-program-name)
+             (file-exists-p chex-ispell-cache-file))
     (load chex-ispell-cache-file nil t))
   (let ((already-cached (equal ispell-last-program-name ispell-program-name)))
     (prog1 (apply orig-fn args)
