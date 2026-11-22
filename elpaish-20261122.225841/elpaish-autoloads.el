@@ -265,8 +265,8 @@ Returns `elpaish-install-upgrade-packages-list'.
 (autoload 'elpaish-install-register-group "elpaish-install"
 "Register package symbols PKGS under group symbol GROUP with POLICY.
 POLICY can be `upgrade' (default) or `install' (install-only).
-If GROUP is `install' or `install-only' and POLICY is nil, POLICY defaults
-to `install'.
+If GROUP matches `install', `install-only', or starts with \"install-\",
+and POLICY is nil, POLICY defaults to `install'.
 Packages are registered into `elpaish-install-packages-list' and, if POLICY
 is `upgrade', into `elpaish-install-upgrade-packages-list'.
 Returns the updated `elpaish-install-package-groups'.
@@ -694,6 +694,7 @@ OUTPUT-DIRECTORY-PATH defaults to `elpaish-output-dir'.
 
 (fn &optional OUTPUT-DIRECTORY-PATH)" t)
 (register-definition-prefixes "elpaish-website" '("elpaish-website-"))
+
 
 ;;; End of scraped data
 
