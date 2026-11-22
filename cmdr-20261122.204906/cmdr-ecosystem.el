@@ -291,5 +291,31 @@
                ("F" . magit-dash-review-sync)
                ("B" . magit-dash-review-open-backend)))))
 
+(declare-function grepx-mode "grepx")
+(declare-function telegax-mode "telegax")
+(declare-function builder-mode "builder-mode")
+
+(cmdr-register-spec
+  :name grepx
+  :probe grepx-menu
+  :feature grepx
+  :deferred-keymaps (("C-c g" grepx grepx-command-map "grepx"))
+  :activate-hook #'grepx-mode)
+
+(cmdr-register-spec
+  :name telega
+  :probe telega
+  :feature telegax
+  :deferred-keymaps (("C-c v" telegax telega-prefix-map "telega")
+                     ("C-c n" telegax telega-prefix-map "telega"))
+  :activate-hook #'telegax-mode)
+
+(cmdr-register-spec
+  :name builder
+  :probe builder-compile
+  :feature builder-mode
+  :activate-hook #'builder-mode
+  :bindings (("C-c t c" . builder-compile)))
+
 (provide 'cmdr-ecosystem)
 ;;; cmdr-ecosystem.el ends here

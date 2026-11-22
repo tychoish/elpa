@@ -29,10 +29,15 @@
 (make-read-extended-command-for-prefix "ollama-tailnet")
 (make-read-extended-command-for-prefix "tailscale")
 
+(declare-function denote-dash-global-mode "denote-dash")
+(declare-function magit-dash-global-mode "magit-dash-global")
 
 (cmdr-register-spec
   :name denote
   :probe denote-dash
+  :feature denote-dash
+  :deferred-keymaps (("C-c d" denote-dash denote-dash-global-map "denote"))
+  :activate-hook #'denote-dash-global-mode
   :keymap-bindings ((denote-dash denote-dash-global-map
                      ("x" . (cons "denote-commands" 'execute-extended-denote-command)))
                     (denote-dash denote-dash-org-map
@@ -62,6 +67,7 @@
   :name magit-dash
   :feature magit-dash-open
   :probe magit-dash-open
+  :activate-hook #'magit-dash-global-mode
   :bindings (("C-c t d" . magit-dash-open)
              ("C-c t g" . magit-dash-open)
              ("C-x g d" . magit-dash-open)

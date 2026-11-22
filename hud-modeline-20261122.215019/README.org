@@ -13,7 +13,7 @@ segments.
 - First-class segment management API (=hud-modeline-add-segment=, =hud-modeline-override-segment=, =hud-modeline-toggle-segment=).
 - Interactive segment toggle using =annotated-completing-read=.
 - Optional nerd-icons support for buffer icons, modified state, and diagnostic indicators.
-- Seamless delight integration for custom major-mode lighters.
+- Native lightweight lighter and mode renaming with full customization support (`hud-modeline-set-lighter`).
 - Customizable box styling presets (=none=, =raised=, =bordered=, =padded=).
 
 * Installation

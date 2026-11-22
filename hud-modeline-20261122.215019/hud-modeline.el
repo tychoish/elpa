@@ -2,8 +2,8 @@
 
 ;; Author: Tycho Garen <tycho@tychoish.com>
 ;; Maintainer: Tycho Garen <tycho@tychoish.com>
-;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (delight "1.7") (nerd-icons "0.1.0") (annotated-completing-read "0.1.0"))
+;; Version: 0.2.0
+;; Package-Requires: ((emacs "29.1") (nerd-icons "0.1.0") (annotated-completing-read "0.1.0"))
 ;; Keywords: convenience, faces, mode-line
 ;; URL: https://github.com/tychoish/hud-modeline
 
@@ -26,6 +26,10 @@
 ;;   `hud-modeline-move-segment'        — move a segment between left and right blocks
 ;;   `hud-modeline-set-segment-action'  — attach a mouse-1 command to any segment
 ;;
+;; Public lighter management API:
+;;   `hud-modeline-set-lighter'        — configure custom lighter or major-mode rename
+;;   `hud-modeline-remove-lighter'     — restore default lighter/name for a mode
+;;
 ;; External packages and use-package blocks should use these functions rather
 ;; than modifying `hud-modeline-left-segments' / `hud-modeline-right-segments'
 ;; directly.
@@ -36,7 +40,6 @@
 (require 'map)
 (require 'seq)
 (require 'cl-lib)
-(require 'delight)
 
 (defvar anzu--current-position)
 (defvar anzu--total-matched)
@@ -101,7 +104,7 @@
   :type 'boolean
   :group 'hud-modeline)
 
-(defcustom hud-modeline-delight-specs
+(defcustom hud-modeline-lighter-specs
   '((fundamental-mode "fun" :major)
     (abbrev-mode " abb" abbrev)
     (emacs-lisp-mode ("el" (lexical-binding ":l" ":d")) :major)
@@ -151,7 +154,12 @@
     (agent-shell-notifications-mode nil agent-shell-notifications)
     (diff-review-file-mode nil diff-review)
     (terraform-mode "tf" :major))
-  "List of specifications passed to `delight' when `hud-modeline-mode' is active."
+  "List of specifications for mode names and lighters in `hud-modeline-mode'.
+Each element has the form (MODE VALUE [FILE-OR-TYPE]).
+For major modes, FILE-OR-TYPE is `:major'.
+For minor modes, FILE-OR-TYPE is the feature or file symbol defining the mode
+to wait for via `with-eval-after-load', or `t' if already loaded.  If omitted,
+it defaults to MODE.  VALUE is the replacement lighter (or nil to hide)."
   :type '(repeat sexp)
   :group 'hud-modeline)
 
@@ -287,17 +295,14 @@ any other non-nil value is the cached icon string.")
   (setq hud-modeline--icon-cache nil))
 
 (defun hud-modeline--major-mode ()
-  "Return the major mode name as a string.
-Handles delight's 3-element (INHIBIT-VAR ORIGINAL LIGHTER) form, which the
-C mode-line renderer resolves correctly but `format-mode-line' (Lisp) does
-not: `format-mode-line' silently drops the ELSE/LIGHTER branch, returning
-empty string.  This function reads the lighter directly.
-
-Must be called OUTSIDE any `format-mode-line' invocation: delight's advice
-around `format-mode-line' binds `delight-mode-name-inhibit' to a non-nil
-value to suppress lighters in non-mode-line contexts.  Calling here, before
-`format-mode-line', sees the variable as void and returns the lighter."
-  (let* ((raw mode-name)
+  "Return the major mode name as a string or mode-line construct.
+Handles configured names in `hud-modeline-lighter-specs' when `hud-modeline-mode'
+is active, as well as legacy 3-element (INHIBIT-VAR ORIGINAL LIGHTER) forms."
+  (let* ((spec (when (bound-and-true-p hud-modeline-mode)
+                 (assq major-mode hud-modeline-lighter-specs)))
+         (raw (if (and spec (eq (nth 2 spec) :major))
+                  (nth 1 spec)
+                mode-name))
          (name (cond
                 ((stringp raw) raw)
                 ((and (listp raw) (= (length raw) 3))
@@ -306,7 +311,7 @@ value to suppress lighters in non-mode-line contexts.  Calling here, before
                           (symbol-value (car raw)))
                      (nth 1 raw)
                    (nth 2 raw)))
-                (t (format-mode-line raw)))))
+                (t raw))))
     (if (and (stringp name) (> (length name) hud-modeline-mode-max-length))
         (concat (substring name 0 (1- hud-modeline-mode-max-length)) "…")
       (or name ""))))
@@ -377,6 +382,131 @@ Use `hud-modeline-enable-segment' to re-enable."
   "Enable segment KEY in VAR."
   (when-let* ((seg (map-elt (symbol-value var) key)))
     (setf (hud-modeline-segment-enabled seg) t)))
+
+;;;; Lighter management API
+
+(defvar hud-modeline-inhibit-major-mode nil
+  "When non-nil, the original `mode-name' is displayed instead of the lighter.")
+
+(defvar hud-modeline--saved-minor-lighters (make-hash-table :test #'eq)
+  "Hash table mapping minor mode symbols to their original lighters.")
+
+(defun hud-modeline--apply-major-mode-name (&optional buffer)
+  "Apply configured major mode name to `mode-name' in BUFFER (default current)."
+  (with-current-buffer (or buffer (current-buffer))
+    (when (bound-and-true-p hud-modeline-mode)
+      (when-let* ((spec (assq major-mode hud-modeline-lighter-specs)))
+        (when (eq (nth 2 spec) :major)
+          (let ((lighter (nth 1 spec)))
+            (unless (and (consp mode-name)
+                         (symbolp (car mode-name))
+                         (eq (car mode-name) 'hud-modeline-inhibit-major-mode))
+              (setq-local mode-name `(hud-modeline-inhibit-major-mode ,mode-name ,lighter)))))))))
+
+(defun hud-modeline--apply-minor-lighter (mode value)
+  "Apply VALUE as the lighter for minor MODE in `minor-mode-alist'."
+  (when-let* ((cell (assq mode minor-mode-alist)))
+    (unless (map-contains-key hud-modeline--saved-minor-lighters mode)
+      (setf (map-elt hud-modeline--saved-minor-lighters mode) (cadr cell)))
+    (setcar (cdr cell) value)))
+
+(defun hud-modeline--register-lighter (mode value &optional file)
+  "Register and apply a lighter specification for MODE.
+MODE is the mode symbol.  VALUE is the replacement lighter (or nil to hide).
+FILE is `:major' for major modes, or the feature symbol/file string for
+minor modes (or `t' if already loaded).  If omitted, FILE defaults to MODE."
+  (setq hud-modeline-lighter-specs
+        (cons (list mode value file)
+              (assq-delete-all mode hud-modeline-lighter-specs)))
+  (unless (eq file :major)
+    (let ((target (if (memq file '(t emacs nil))
+                      (if (memq file '(t emacs)) 'emacs (or file mode))
+                    file)))
+      (if (or (eq target 'emacs)
+              (assq mode minor-mode-alist)
+              (and (symbolp target) (featurep target)))
+          (hud-modeline--apply-minor-lighter mode value)
+        (eval-after-load target
+          `(when (bound-and-true-p hud-modeline-mode)
+             (hud-modeline--apply-minor-lighter ',mode ',value))))))
+  (when (bound-and-true-p hud-modeline-mode)
+    (force-mode-line-update t)))
+
+;;;###autoload
+(defun hud-modeline-set-lighter (spec &optional value file)
+  "Set the mode line lighter or display name for a mode.
+SPEC can be:
+- A mode symbol: (hud-modeline-set-lighter \\='abbrev-mode \" abb\" \\='abbrev)
+- A single specification list: (hud-modeline-set-lighter \\='(abbrev-mode \" abb\" abbrev))
+- A list of specifications: (hud-modeline-set-lighter \\='((abbrev-mode \" abb\" abbrev) ...))
+
+When SPEC is a mode symbol:
+VALUE is the replacement string or mode-line construct, or nil to hide.
+FILE is `:major' for major modes, or the feature symbol/file string for
+minor modes (or `t' if already loaded).  If omitted, FILE defaults to SPEC.
+
+When SPEC is a list of specifications, VALUE and FILE are ignored."
+  (let ((specs (cond
+                ((null spec) nil)
+                ((and (consp spec) (consp (car spec)))
+                 spec)
+                ((consp spec)
+                 (list spec))
+                (t
+                 (list (list spec value file))))))
+    (dolist (s specs)
+      (hud-modeline--register-lighter (nth 0 s) (nth 1 s) (nth 2 s)))))
+
+;;;###autoload
+(defun hud-modeline-remove-lighter (mode)
+  "Remove any custom lighter or major-mode rename for MODE."
+  (interactive
+   (list (intern (completing-read "Remove lighter for mode: "
+                                  (seq-map (lambda (s) (symbol-name (car s)))
+                                           hud-modeline-lighter-specs)
+                                  nil t))))
+  (setq hud-modeline-lighter-specs
+        (assq-delete-all mode hud-modeline-lighter-specs))
+  (when (map-contains-key hud-modeline--saved-minor-lighters mode)
+    (when-let* ((cell (assq mode minor-mode-alist)))
+      (setcar (cdr cell) (map-elt hud-modeline--saved-minor-lighters mode)))
+    (remhash mode hud-modeline--saved-minor-lighters))
+  (force-mode-line-update t))
+
+(defun hud-modeline--init-lighters ()
+  "Apply all `hud-modeline-lighter-specs' when `hud-modeline-mode' is active."
+  (when (and (bound-and-true-p hud-modeline-mode) hud-modeline-lighter-specs)
+    (dolist (spec hud-modeline-lighter-specs)
+      (let ((mode (nth 0 spec))
+            (value (nth 1 spec))
+            (file (nth 2 spec)))
+        (unless (eq file :major)
+          (let ((target (if (memq file '(t emacs nil))
+                            (if (memq file '(t emacs)) 'emacs (or file mode))
+                          file)))
+            (if (or (eq target 'emacs)
+                    (assq mode minor-mode-alist)
+                    (and (symbolp target) (featurep target)))
+                (hud-modeline--apply-minor-lighter mode value)
+              (eval-after-load target
+                `(when (bound-and-true-p hud-modeline-mode)
+                   (hud-modeline--apply-minor-lighter ',mode ',value))))))))
+    (dolist (buf (buffer-list))
+      (hud-modeline--apply-major-mode-name buf))))
+
+(defun hud-modeline--restore-lighters ()
+  "Restore original minor mode lighters and mode-name when `hud-modeline-mode' is disabled."
+  (map-do (lambda (mode orig-val)
+            (when-let* ((cell (assq mode minor-mode-alist)))
+              (setcar (cdr cell) orig-val)))
+          hud-modeline--saved-minor-lighters)
+  (clrhash hud-modeline--saved-minor-lighters)
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (and (consp mode-name)
+                 (symbolp (car mode-name))
+                 (eq (car mode-name) 'hud-modeline-inhibit-major-mode))
+        (setq-local mode-name (cadr mode-name))))))
 
 ;;;; Segment actions
 
@@ -1119,12 +1249,6 @@ annotations show [on]/[off], name, and description."
       (when hud-modeline-box-style
         (hud-modeline--apply-box)))))
 
-(defun hud-modeline--init-delight ()
-  "Apply `hud-modeline-delight-specs' using `delight' when active."
-  (when (and (bound-and-true-p hud-modeline-mode) hud-modeline-delight-specs)
-    (require 'delight)
-    (delight hud-modeline-delight-specs)))
-
 ;;;###autoload
 (define-minor-mode hud-modeline-mode
   "Lightweight global modeline."
@@ -1137,19 +1261,22 @@ annotations show [on]/[off], name, and description."
           (setq hud-modeline--saved-format (default-value 'mode-line-format))
           (setq-default mode-line-format hud-modeline-format))
         (hud-modeline--suppress-underlines)
-        (hud-modeline--init-delight)
+        (hud-modeline--init-lighters)
         (when hud-modeline-box-style
           (hud-modeline--apply-box))
         (add-hook 'enable-theme-functions #'hud-modeline--on-theme-enable)
         (add-hook 'after-make-frame-functions #'hud-modeline--on-make-frame)
         (add-hook 'after-change-major-mode-hook #'hud-modeline--invalidate-icon)
+        (add-hook 'after-change-major-mode-hook #'hud-modeline--apply-major-mode-name)
         (add-hook 'compilation-start-hook #'hud-modeline--on-compilation-start)
         (add-hook 'compilation-finish-functions #'hud-modeline--on-compilation-finish))
     (remove-hook 'enable-theme-functions #'hud-modeline--on-theme-enable)
     (remove-hook 'after-make-frame-functions #'hud-modeline--on-make-frame)
     (remove-hook 'after-change-major-mode-hook #'hud-modeline--invalidate-icon)
+    (remove-hook 'after-change-major-mode-hook #'hud-modeline--apply-major-mode-name)
     (remove-hook 'compilation-start-hook #'hud-modeline--on-compilation-start)
     (remove-hook 'compilation-finish-functions #'hud-modeline--on-compilation-finish)
+    (hud-modeline--restore-lighters)
     (when hud-modeline--saved-boxes
       (hud-modeline--restore-boxes))
     (hud-modeline--restore-underlines)

@@ -25,6 +25,25 @@
 "Toggle `hud-modeline-show-buffer-size'." t)
 (autoload 'hud-modeline-clear-compilation-status "hud-modeline"
 "Clear the compilation status indicator in the mode-line." t)
+(autoload 'hud-modeline-set-lighter "hud-modeline"
+"Set the mode line lighter or display name for a mode.
+SPEC can be:
+- A mode symbol: (hud-modeline-set-lighter \\='abbrev-mode \" abb\" \\='abbrev)
+- A single specification list: (hud-modeline-set-lighter \\='(abbrev-mode \" abb\" abbrev))
+- A list of specifications: (hud-modeline-set-lighter \\='((abbrev-mode \" abb\" abbrev) ...))
+
+When SPEC is a mode symbol:
+VALUE is the replacement string or mode-line construct, or nil to hide.
+FILE is `:major' for major modes, or the feature symbol/file string for
+minor modes (or `t' if already loaded).  If omitted, FILE defaults to SPEC.
+
+When SPEC is a list of specifications, VALUE and FILE are ignored.
+
+(fn SPEC &optional VALUE FILE)")
+(autoload 'hud-modeline-remove-lighter "hud-modeline"
+"Remove any custom lighter or major-mode rename for MODE.
+
+(fn MODE)" t)
 (autoload 'hud-modeline-set-segment-action "hud-modeline"
 "Attach COMMAND to mouse-1 clicks on segment KEY.
 Creates and caches a sparse keymap; segment bodies that call
@@ -75,7 +94,6 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "hud-modeline" '("hud-modeline-"))
-
 
 ;;; End of scraped data
 
