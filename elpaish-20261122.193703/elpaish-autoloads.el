@@ -343,27 +343,34 @@ argument \\[universal-argument]).
 STREAM is the release mode stream to build (defaults to \\='snapshot).
 SYNC forces synchronous execution; ASYNC forces asynchronous execution.
 DELAY overrides `elpaish-install-yield-delay'; CONFIRM enables intermediate
-confirmation prompts before each work item.  CALLBACK is invoked with the list
-of installed `package-desc' objects on completion.
+confirmation prompts before each work item.  CLEANUP enables cleaning stale
+duplicate versions.  CALLBACK is invoked with the list of installed
+`package-desc' objects on completion.
 Returns list of installed `package-desc' objects when synchronous, or a
 cancellation handle function when asynchronous.
 
-(fn &optional SCOPE &key STREAM SYNC ASYNC DELAY CONFIRM CALLBACK)" t)
+(fn &optional SCOPE &key STREAM SYNC ASYNC DELAY CONFIRM CLEANUP CALLBACK)" t)
 (autoload 'elpaish-install-repository-package "elpaish-install"
 "Build and install a PACKAGE from the local ELPAish repository into Emacs.
 PACKAGE can be a package symbol, string name, recipe, or a list of packages.
 When called interactively, prompts with an ACR (`annotated-completing-read')
 interface allowing selection of a package from repository definitions (or
-multiple packages when called with a prefix argument).
+multiple packages when called with a prefix argument) and runs asynchronously
+with cooperative yielding in `*ELPAish Upgrade Progress*'.  With a prefix
+argument, runs synchronously.
 
 STREAM is the release mode stream to build (defaults to \\='snapshot).
+SYNC forces synchronous execution; ASYNC forces asynchronous execution.
+DELAY overrides `elpaish-install-yield-delay'; CONFIRM enables intermediate
+confirmation prompts.  CLEANUP enables removing older duplicate versions.
 CALLBACK is an optional function invoked with the installed `package-desc'
-object upon completion.
+object (or list of objects) upon completion.
 
 Returns the installed `package-desc' object (or list of `package-desc' objects
-if multiple packages were selected or passed).
+if multiple packages were selected or passed) when synchronous, or a
+cancellation handle function when asynchronous.
 
-(fn &optional PACKAGE &key STREAM CALLBACK)" t)
+(fn &optional PACKAGE &key STREAM SYNC ASYNC DELAY CONFIRM CLEANUP CALLBACK)" t)
 (autoload 'elpaish-install-cancel "elpaish-install"
 "Cancel any in-flight asynchronous package installation or bootstrap operations." t)
 (autoload 'elpaish-install-packages "elpaish-install"
@@ -402,6 +409,8 @@ ARGS can contain package symbols, lists of package symbols, or keyword options:
   :confirm BOOL     - When non-nil, ask for intermediate confirmation before
                       each package work item (default
                       `elpaish-install-confirm-intermediate').
+  :cleanup BOOL     - When non-nil, clean up legacy package directories on
+                      completion (default `elpaish-install-cleanup-legacy').
   :paused BOOL      - When non-nil, start in paused state.
   :callback FN      - Function called with result list on completion.
   :pool-size N      - Accepted for compatibility; upgrades run in this Emacs.

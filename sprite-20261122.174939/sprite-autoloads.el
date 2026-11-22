@@ -21,7 +21,9 @@ Each entry is a function or (:mode SYMBOL), which enables a global mode.
 Mode entries are also audited by `sprite-state-reload'.")
 (custom-autoload 'sprite-startup-operations "sprite" t)
 (defvar sprite-first-frame-operations nil
-"List of operations run after the first frame is created.")
+"Legacy list of operations previously run after the first frame.
+This option does not schedule operations; callers decide how to run it.
+New configurations should use `sprite-startup-operations'.")
 (custom-autoload 'sprite-first-frame-operations "sprite" t)
 (defvar sprite-slow-op-reporting (and (bound-and-true-p init-file-debug) t)
 "When non-nil, log timing statistics for startup operations.")

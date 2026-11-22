@@ -139,7 +139,7 @@ List of operations run in sequence during startup.
 :CUSTOM_ID: sprite-first-frame-operations
 :END:
 
-List of operations run after the first frame is created.
+Legacy operations list.  New configurations should use =sprite-startup-operations=.  Callers decide how to schedule this list.
 
 *** [[file:../sprite.el::202][sprite-slow-op-reporting]] :option:
 :PROPERTIES:

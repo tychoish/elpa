@@ -196,6 +196,7 @@ YEARS defaults to `mailx-compose-complete-years'."
   "Enable advice managed by `mailx-global-mode'."
   (advice-add 'basic-save-buffer :before #'mailx--ad-guard-save)
   (advice-add 'mu4e--draft :before #'mailx-global--enable-mu4e-draft)
+  (advice-add 'mu4e--delimit-headers :before #'mailx-global--enable-mu4e-draft)
   (advice-add 'mu4e--draft :around #'mailx--ad-draft)
   (advice-add 'mu4e--draft :before #'mailx--ad-start-for-draft '((depth . -50))))
 
@@ -203,6 +204,7 @@ YEARS defaults to `mailx-compose-complete-years'."
   "Disable advice managed by `mailx-global-mode'."
   (advice-remove 'basic-save-buffer #'mailx--ad-guard-save)
   (advice-remove 'mu4e--draft #'mailx-global--enable-mu4e-draft)
+  (advice-remove 'mu4e--delimit-headers #'mailx-global--enable-mu4e-draft)
   (advice-remove 'mu4e--draft #'mailx--ad-draft)
   (advice-remove 'mu4e--draft #'mailx--ad-start-for-draft))
 

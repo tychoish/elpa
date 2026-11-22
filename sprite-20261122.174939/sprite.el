@@ -187,7 +187,9 @@ Mode entries are also audited by `sprite-state-reload'."
 
 ;;;###autoload
 (defcustom sprite-first-frame-operations nil
-  "List of operations run after the first frame is created."
+  "Legacy list of operations previously run after the first frame.
+This option does not schedule operations; callers decide how to run it.
+New configurations should use `sprite-startup-operations'."
   :type '(repeat function)
   :group 'sprite)
 

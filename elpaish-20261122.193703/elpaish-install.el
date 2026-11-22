@@ -108,8 +108,15 @@ Defaults to nil (off).  Can also be toggled interactively in
   :group 'elpaish-install)
 
 (defface elpaish-install-up-to-date-face
-  '((t :strike-through t :inherit shadow))
-  "Face used in the progress buffer to strike through up-to-date packages."
+  '((t :inherit shadow))
+  "Face used in the progress buffer to gray out up-to-date packages."
+  :group 'elpaish-install)
+
+(defcustom elpaish-install-cleanup-legacy nil
+  "When non-nil, clean up older, duplicate versions of upgraded packages.
+Defaults to nil (off).  Can also be toggled interactively in
+`elpaish-install-progress-mode' with `elpaish-install-progress-toggle-cleanup'."
+  :type 'boolean
   :group 'elpaish-install)
 
 (defcustom elpaish-install-package-updated-functions nil
@@ -467,7 +474,7 @@ selection across installed, upgrade, or all), see
         (delete-directory temp-dir t))))))
 
 ;;;###autoload
-(cl-defun elpaish-install-repository-packages (&optional scope &key stream sync async delay confirm callback)
+(cl-defun elpaish-install-repository-packages (&optional scope &key stream sync async delay confirm cleanup callback)
   "Build and install packages from the local ELPAish repository into Emacs.
 Unlike `elpaish-install-packages' (which installs pre-built archives from
 `package-archives') and `elpaish-install-repository' (which builds a single
@@ -497,8 +504,9 @@ argument \\[universal-argument]).
 STREAM is the release mode stream to build (defaults to \\='snapshot).
 SYNC forces synchronous execution; ASYNC forces asynchronous execution.
 DELAY overrides `elpaish-install-yield-delay'; CONFIRM enables intermediate
-confirmation prompts before each work item.  CALLBACK is invoked with the list
-of installed `package-desc' objects on completion.
+confirmation prompts before each work item.  CLEANUP enables cleaning stale
+duplicate versions.  CALLBACK is invoked with the list of installed
+`package-desc' objects on completion.
 Returns list of installed `package-desc' objects when synchronous, or a
 cancellation handle function when asynchronous."
   (interactive
@@ -596,25 +604,32 @@ cancellation handle function when asynchronous."
               (elpaish-install--upgrade-run
                target-pkgs nil is-sync delay wrapped-cb 'repo-install
                :stream effective-stream
-               :confirm confirm)))
+               :confirm confirm
+               :cleanup cleanup)))
         (if is-sync
             (funcall extract-descs run-res)
           run-res)))))
 
 ;;;###autoload
-(cl-defun elpaish-install-repository-package (&optional package &key stream callback)
+(cl-defun elpaish-install-repository-package (&optional package &key stream sync async delay confirm cleanup callback)
   "Build and install a PACKAGE from the local ELPAish repository into Emacs.
 PACKAGE can be a package symbol, string name, recipe, or a list of packages.
 When called interactively, prompts with an ACR (`annotated-completing-read')
 interface allowing selection of a package from repository definitions (or
-multiple packages when called with a prefix argument).
+multiple packages when called with a prefix argument) and runs asynchronously
+with cooperative yielding in `*ELPAish Upgrade Progress*'.  With a prefix
+argument, runs synchronously.
 
 STREAM is the release mode stream to build (defaults to \\='snapshot).
+SYNC forces synchronous execution; ASYNC forces asynchronous execution.
+DELAY overrides `elpaish-install-yield-delay'; CONFIRM enables intermediate
+confirmation prompts.  CLEANUP enables removing older duplicate versions.
 CALLBACK is an optional function invoked with the installed `package-desc'
-object upon completion.
+object (or list of objects) upon completion.
 
 Returns the installed `package-desc' object (or list of `package-desc' objects
-if multiple packages were selected or passed)."
+if multiple packages were selected or passed) when synchronous, or a
+cancellation handle function when asynchronous."
   (interactive
    (list
     (progn
@@ -642,16 +657,35 @@ if multiple packages were selected or passed)."
                          (completing-read prompt table nil t)))))
         (if (listp choice)
             (seq-map (lambda (c) (intern (string-trim c))) choice)
-          (intern (string-trim choice)))))))
+          (intern (string-trim choice)))))
+    :sync (not (null current-prefix-arg))
+    :async (null current-prefix-arg)))
   (unless package
     (user-error "No package specified"))
   (let* ((is-list (listp package))
          (targets (if is-list package (list package)))
-         (descs (elpaish-install-repository-packages targets :stream stream :sync t :callback callback)))
-    (if is-list
-        descs
-      (or (car descs)
-          (error "Failed to install repository package: %s" package)))))
+         (is-sync (cond
+                   (sync t)
+                   (async nil)
+                   (t (and noninteractive t))))
+         (wrapped-cb (when callback
+                       (lambda (descs)
+                         (funcall callback (if is-list descs (car descs))))))
+         (res (elpaish-install-repository-packages
+               targets
+               :stream stream
+               :sync is-sync
+               :async (not is-sync)
+               :delay delay
+               :confirm confirm
+               :cleanup cleanup
+               :callback wrapped-cb)))
+    (if is-sync
+        (if is-list
+            res
+          (or (car res)
+              (error "Failed to install repository package: %s" package)))
+      res)))
 
 ;;;; Core Single Package Operation
 
@@ -1317,8 +1351,12 @@ Preserves underlying string text so ERT string matching remains intact."
         (propertize marker 'display icon)
       marker)))
 
-(defun elpaish-install--archives-summary ()
-  "Format string summarizing package archives and last updated timestamps."
+(defun elpaish-install--archives-summary (&optional initial-times refresh-state active-archive)
+  "Format string summarizing package archives.
+Include status icons and old -> new timestamps.
+INITIAL-TIMES is an alist mapping archive names to timestamps before refresh.
+REFRESH-STATE indicates refresh stage ([ ], [...], [x], [-]).  ACTIVE-ARCHIVE
+indicates which archive is actively downloading."
   (if (and (boundp 'package-archives) package-archives)
       (let ((lines nil))
         (seq-do
@@ -1327,14 +1365,45 @@ Preserves underlying string text so ERT string matching remains intact."
                   (archive-dir (and (boundp 'package-user-dir)
                                     (expand-file-name (format "archives/%s" name) package-user-dir)))
                   (content-file (and archive-dir (expand-file-name "archive-contents" archive-dir)))
-                  (mtime (when (and content-file (file-exists-p content-file))
-                           (format-time-string "%Y-%m-%d %H:%M"
-                                               (file-attribute-modification-time
-                                                (file-attributes content-file))))))
-             (push (format "  • %-10s %s" name (or mtime "not updated")) lines)))
+                  (cur-mtime (when (and content-file (file-exists-p content-file))
+                               (format-time-string "%Y-%m-%d %H:%M"
+                                                   (file-attribute-modification-time
+                                                    (file-attributes content-file)))))
+                  (old-mtime (or (cdr (assoc name initial-times)) cur-mtime "not updated"))
+                  (new-mtime (or cur-mtime "not updated"))
+                  (is-active (equal active-archive name))
+                  (marker (cond
+                           (is-active "[...]")
+                           ((string= refresh-state "[-]") "[-]")
+                           ((member refresh-state '("[x]" "[-]")) "[x]")
+                           ((string= refresh-state "[...]") "[ ]")
+                           (t "[ ]")))
+                  (icon (elpaish-install--icon-string marker))
+                  (text (cond
+                         (is-active
+                          (format "  %s %-10s Downloading archive: %s" icon name name))
+                         ((string= refresh-state "[-]")
+                          (format "  %s %-10s %s" icon name old-mtime))
+                         ((or (not initial-times) (equal old-mtime new-mtime))
+                          (format "  %s %-10s %s -> %s" icon name old-mtime new-mtime))
+                         (t
+                          (format "  %s %-10s %s -> %s" icon name old-mtime new-mtime)))))
+             (push text lines)))
          package-archives)
         (concat "Package Archives:\n" (mapconcat #'identity (nreverse lines) "\n") "\n"))
     ""))
+
+(defun elpaish-install--insert-version-link (pkg ver)
+  "Insert VER as a Dired button for PKG if installed directory exists.
+Otherwise, insert VER as plain text."
+  (if (and ver (stringp ver) (not (string= ver "not installed")))
+      (if-let* ((dir (elpaish-install--package-install-dir pkg ver)))
+          (insert-button ver
+                         'action (lambda (_) (dired dir))
+                         'help-echo (format "Open %s in Dired" dir)
+                         'follow-link t)
+        (insert ver))
+    (insert (or ver ""))))
 
 (defun elpaish-install--package-source (pkg)
   "Return repository source archive string for PKG if known."
@@ -1378,6 +1447,8 @@ Preserves underlying string text so ERT string matching remains intact."
     (define-key map (kbd "d") #'elpaish-install-progress-set-delay)
     (define-key map (kbd "i") #'elpaish-install-progress-toggle-confirm)
     (define-key map (kbd "C") #'elpaish-install-progress-toggle-confirm)
+    (define-key map (kbd "l") #'elpaish-install-progress-toggle-cleanup)
+    (define-key map (kbd "L") #'elpaish-install-progress-toggle-cleanup)
     (define-key map (kbd "C-g") #'elpaish-install-progress-soft-quit)
     (define-key map (kbd "q") #'elpaish-install-progress-quit)
     (define-key map (kbd "x") #'elpaish-install-progress-cancel)
@@ -1387,10 +1458,17 @@ Preserves underlying string text so ERT string matching remains intact."
     map)
   "Keymap for `elpaish-install-progress-mode'.")
 
-(define-derived-mode elpaish-install-progress-mode special-mode "ELPAish-Progress"
+(define-derived-mode elpaish-install-progress-mode special-mode "ELPAish"
   "Major mode for ELPAish package installation and upgrade progress."
   (setq buffer-undo-list t)
   (setq-local revert-buffer-function (lambda (_ignore-auto _noconfirm) (elpaish-install-progress-restart)))
+  (setq-local mode-line-format
+              '(" " mode-line-buffer-identification
+                "  [" (:eval (or (and (boundp 'elpaish-install--progress-context)
+                                      (plist-get elpaish-install--progress-context :global-state))
+                                 "ELPAish"))
+                "] "
+                mode-line-end-spaces))
   (visual-line-mode 1))
 
 (defun elpaish-install-progress-soft-quit ()
@@ -1440,12 +1518,13 @@ Preserves underlying string text so ERT string matching remains intact."
             (callback (plist-get ctx :callback))
             (action (plist-get ctx :action))
             (stream (plist-get ctx :stream))
-            (confirm (plist-get ctx :confirm)))
+            (confirm (plist-get ctx :confirm))
+            (cleanup (plist-get ctx :cleanup)))
         (when (and (bound-and-true-p elpaish-install--active-cancel-handle)
                    (plist-get ctx :running))
           (elpaish-install-cancel))
         (elpaish-install--upgrade-run pkgs refresh sync delay callback action
-                                      :stream stream :confirm confirm))
+                                      :stream stream :confirm confirm :cleanup cleanup))
     (user-error "No previous package operation context found to restart")))
 
 (defun elpaish-install-progress-pause ()
@@ -1534,6 +1613,19 @@ Optional FACTOR divides the current delay (defaults to 2.0)."
           :confirm new-val)
     new-val))
 
+(defun elpaish-install-progress-toggle-cleanup ()
+  "Toggle cleanup of legacy/stale package versions for the current operation."
+  (interactive)
+  (let ((new-val (not (plist-get elpaish-install--progress-context :cleanup))))
+    (when elpaish-install--progress-context
+      (setf (plist-get elpaish-install--progress-context :cleanup) new-val))
+    (when (functionp elpaish-install--progress-control-fn)
+      (funcall elpaish-install--progress-control-fn :set-cleanup new-val))
+    (logx 'info :msg (format "[elpaish] Cleanup legacy packages %s."
+                             (if new-val "enabled" "disabled"))
+          :cleanup new-val)
+    new-val))
+
 (defun elpaish-install-progress-menu ()
   "Action menu for ELPAish package progress buffer."
   (interactive)
@@ -1544,6 +1636,7 @@ Optional FACTOR divides the current delay (defaults to 2.0)."
                     ("Speed up execution" . elpaish-install-progress-speed-up)
                     ("Set yield delay" . elpaish-install-progress-set-delay)
                     ("Toggle intermediate confirmation" . elpaish-install-progress-toggle-confirm)
+                    ("Toggle cleanup legacy packages" . elpaish-install-progress-toggle-cleanup)
                     ("Restart operation" . elpaish-install-progress-restart)
                     ("Cancel operation" . elpaish-install-progress-cancel)
                     ("Install repository package" . elpaish-install-repository-package)
@@ -1557,12 +1650,12 @@ Optional FACTOR divides the current delay (defaults to 2.0)."
     (when-let* ((cmd (map-elt actions choice)))
       (call-interactively cmd))))
 
-(defun elpaish-install--upgrade-progress (buffer entries refresh-state quickstart-state &optional global-state active-pkg action stats)
+(defun elpaish-install--upgrade-progress (buffer entries refresh-state quickstart-state &optional global-state active-pkg action stats cleanup-state)
   "Render upgrade ENTRIES and stage states in BUFFER.
 GLOBAL-STATE indicates engine status (Working, Yielding, Paused, Completed,
 Canceled).  ACTIVE-PKG is the package currently being processed.  ACTION is
 \\='upgrade, \\='install, or \\='repo-install.  STATS is an optional timing
-and options plist."
+and options plist.  CLEANUP-STATE is the stale package cleanup status."
   (when (buffer-live-p buffer)
     (with-current-buffer buffer
       (let* ((inhibit-read-only t)
@@ -1603,7 +1696,10 @@ and options plist."
                             0.005))
              (cur-confirm (if (plist-member stats :confirm)
                               (plist-get stats :confirm)
-                            (plist-get ctx :confirm))))
+                            (plist-get ctx :confirm)))
+             (cur-cleanup (if (plist-member stats :cleanup)
+                              (plist-get stats :cleanup)
+                            (plist-get ctx :cleanup))))
         (setq-local header-line-format nil)
         (erase-buffer)
         (insert (propertize (format "ELPAish package %s [%s]\n" op-title status-lbl)
@@ -1612,26 +1708,29 @@ and options plist."
                         (elpaish-install--format-duration wall-time)
                         (elpaish-install--format-duration actual-time)
                         (elpaish-install--format-duration wait-time)))
-        (insert (format "Packages: %d total (%d up to date, %d work item%s: %d done, %d pending)\n"
+        (insert (format "Packages: %d total (%d current, %d work item%s: %d done, %d pending)\n"
                         total-count utd-count work-total (if (= work-total 1) "" "s")
                         work-done (max 0 (- work-total work-done))))
-        (insert (propertize (format "Controls: delay %ss | confirm %s  ([p/SPC] pause/resume, [c] continue, [+/-/d] delay, [i] confirm, [g] restart, [x] cancel, [?] menu)\n\n"
-                                    cur-delay (if cur-confirm "on" "off"))
+        (insert (propertize (format "Controls: delay %ss | confirm %s | cleanup %s  ([p/SPC] pause, [c] continue, [+/-/d] delay, [i] confirm, [l] cleanup, [g] restart, [x] cancel, [?] menu)\n\n"
+                                    cur-delay
+                                    (if cur-confirm "on" "off")
+                                    (if cur-cleanup "on" "off"))
                             'face 'shadow))
-        (let ((arch-summary (elpaish-install--archives-summary)))
-          (when (not (string-empty-p arch-summary))
-            (insert arch-summary "\n")))
-        (when-let* ((archive (plist-get ctx :active-archive)))
-          (let ((beg (point)))
-            (insert (format "  Downloading archive: %s\n" archive))
-            (setq active-pos beg)
-            (add-face-text-property beg (point) 'highlight)))
-        (let ((r-beg (point)))
-          (insert (format "%s Refresh package archives\n"
-                          (elpaish-install--icon-string refresh-state)))
-          (when (string= refresh-state "[...]")
-            (unless active-pos (setq active-pos r-beg))
-            (put-text-property r-beg (point) 'face 'highlight)))
+        (unless (eq action 'repo-install)
+          (let ((arch-start (point)))
+            (insert (elpaish-install--archives-summary
+                     (plist-get ctx :initial-archives)
+                     refresh-state
+                     (plist-get ctx :active-archive)))
+            (when-let* ((active-arch (plist-get ctx :active-archive)))
+              (save-excursion
+                (goto-char arch-start)
+                (when (search-forward (format "Downloading archive: %s" active-arch) nil t)
+                  (let ((line-beg (line-beginning-position))
+                        (line-end (line-end-position)))
+                    (setq active-pos line-beg)
+                    (add-face-text-property line-beg line-end 'highlight))))))
+          (insert "\n"))
         (seq-do
          (lambda (entry)
            (let* ((pkg (car entry))
@@ -1640,38 +1739,40 @@ and options plist."
                   (detail (nth 3 entry))
                   (meta (nth 4 entry))
                   (up-to-date-p (plist-get meta :up-to-date))
-                  (prev-gen (plist-get meta :prev-generated))
-                  (prev-local (plist-get meta :prev-local-update))
+                  (prev-ver (plist-get meta :prev-version))
+                  (to-ver (or (plist-get meta :to) (plist-get meta :target-version)))
                   (pkg-dur (plist-get meta :duration))
                   (src (elpaish-install--package-source pkg))
-                  (inst-dir (elpaish-install--package-install-dir pkg ver))
                   (line-beg (point)))
              (insert (format "%s %s: " (elpaish-install--icon-string marker) pkg))
-             (if inst-dir
-                 (insert-button ver
-                                'action (lambda (_) (dired inst-dir))
-                                'help-echo (format "Open %s in Dired" inst-dir)
-                                'follow-link t)
-               (insert ver))
+             (elpaish-install--insert-version-link pkg ver)
              (when src
                (insert (format " [%s]" src)))
-             (when detail
-               (insert (format " — %s" detail)))
-             (let ((meta-parts nil))
+             (if up-to-date-p
+                 (insert " — current")
+               (when detail
+                 (insert (format " — %s" detail))))
+             (let ((has-paren nil))
                (when pkg-dur
-                 (push (format "time: %s" (elpaish-install--format-duration pkg-dur))
-                       meta-parts))
-               (when prev-gen
-                 (push (format "prev gen: %s" prev-gen) meta-parts))
-               (when prev-local
-                 (push (format "local update: %s" prev-local) meta-parts))
-               (when meta-parts
-                 (insert (format " (%s)" (string-join (nreverse meta-parts) ", ")))))
+                 (insert (format " (time: %s" (elpaish-install--format-duration pkg-dur)))
+                 (setq has-paren t))
+               (unless up-to-date-p
+                 (when prev-ver
+                   (if has-paren (insert ", ") (insert " ("))
+                   (insert "prev: ")
+                   (elpaish-install--insert-version-link pkg prev-ver)
+                   (setq has-paren t))
+                 (when (and to-ver (not (equal to-ver prev-ver)))
+                   (if has-paren (insert ", ") (insert " ("))
+                   (insert "to: ")
+                   (elpaish-install--insert-version-link pkg to-ver)
+                   (setq has-paren t)))
+               (when has-paren
+                 (insert ")")))
              (let ((line-end (point)))
                (insert "\n")
                (when up-to-date-p
                  (add-face-text-property line-beg line-end 'elpaish-install-up-to-date-face)
-                 (add-face-text-property line-beg line-end '(:strike-through t))
                  (put-text-property line-beg line-end 'elpaish-up-to-date t))
                (when (or (string= marker "[...]") (eq pkg active-pkg))
                  (setq active-pos line-beg)
@@ -1683,6 +1784,14 @@ and options plist."
           (when (string= quickstart-state "[...]")
             (setq active-pos q-beg)
             (put-text-property q-beg (point) 'face 'highlight)))
+        (let* ((cl-marker (or (and (stringp cleanup-state) (car (split-string cleanup-state)))
+                              (if cur-cleanup "[x]" "[-]")))
+               (cl-label (if (and (stringp cleanup-state) (string-match-p "legacy package" cleanup-state))
+                             (format " (%s)" (string-trim (substring cleanup-state 3)))
+                           (if cur-cleanup " (enabled)" " (disabled)"))))
+          (insert (format "%s Clean up legacy packages%s\n"
+                          (elpaish-install--icon-string cl-marker)
+                          cl-label)))
         ;; Auto-scroll window to follow current activity
         (when win
           (if (and active-pos (not (equal active-key elpaish-install--progress-last-active)))
@@ -1694,7 +1803,7 @@ and options plist."
         (setq elpaish-install--progress-last-active active-key)))
     (redisplay)))
 
-(cl-defun elpaish-install--upgrade-run (pkgs refresh sync delay callback &optional action &key stream confirm paused)
+(cl-defun elpaish-install--upgrade-run (pkgs refresh sync delay callback &optional action &key stream confirm paused cleanup)
   "Upgrade or install PKGS, updating a progress buffer throughout the operation.
 REFRESH controls archive refresh, SYNC runs immediately, DELAY sets the
 pause between asynchronous steps, and CALLBACK receives the results.
@@ -1702,12 +1811,15 @@ ACTION is \\='upgrade (default), \\='install, or \\='repo-install.
 STREAM specifies the release stream for \\='repo-install.  CONFIRM enables
 intermediate confirmation prompts (default
 `elpaish-install-confirm-intermediate').
-PAUSED starts the operation in paused state when non-nil."
+PAUSED starts the operation in paused state when non-nil.
+CLEANUP enables removing older duplicate package versions after changes."
   (let* ((buffer (get-buffer-create "*ELPAish Upgrade Progress*"))
          (act (or action 'upgrade))
          (cur-delay (or delay elpaish-install-yield-delay))
          (cur-confirm (if confirm t elpaish-install-confirm-intermediate))
          (cur-paused paused)
+         (cur-cleanup (if (not (null cleanup)) cleanup elpaish-install-cleanup-legacy))
+         (cleanup-state "[ ]")
          (entries (seq-map (lambda (pkg)
                              (let* ((ver (elpaish-install--installed-version pkg))
                                     (ts (elpaish-install--package-previous-timestamps pkg ver)))
@@ -1732,6 +1844,20 @@ PAUSED starts the operation in paused state when non-nil."
          (captured-archives (copy-alist package-archives))
          (captured-priorities (and (boundp 'package-archive-priorities)
                                    (copy-alist package-archive-priorities)))
+         (initial-archives
+          (when (and (boundp 'package-archives) package-archives)
+            (seq-map
+             (lambda (archive)
+               (let* ((name (car archive))
+                      (archive-dir (and (boundp 'package-user-dir)
+                                        (expand-file-name (format "archives/%s" name) package-user-dir)))
+                      (content-file (and archive-dir (expand-file-name "archive-contents" archive-dir)))
+                      (mtime (when (and content-file (file-exists-p content-file))
+                               (format-time-string "%Y-%m-%d %H:%M"
+                                                   (file-attribute-modification-time
+                                                    (file-attributes content-file))))))
+                 (cons name (or mtime "not updated"))))
+             package-archives)))
          (compute-stats
           (lambda ()
             (let* ((now (or end-time (float-time)))
@@ -1745,23 +1871,26 @@ PAUSED starts the operation in paused state when non-nil."
                   (setf (plist-get elpaish-install--progress-context :wait-time) wait)
                   (setf (plist-get elpaish-install--progress-context :delay) cur-delay)
                   (setf (plist-get elpaish-install--progress-context :confirm) cur-confirm)
-                  (setf (plist-get elpaish-install--progress-context :paused) cur-paused)))
+                  (setf (plist-get elpaish-install--progress-context :paused) cur-paused)
+                  (setf (plist-get elpaish-install--progress-context :cleanup) cur-cleanup)))
               (list :wall-time wall
                     :actual-time live-actual
                     :wait-time wait
                     :delay cur-delay
                     :confirm cur-confirm
-                    :paused cur-paused))))
+                    :paused cur-paused
+                    :cleanup cur-cleanup))))
          (render (lambda (&optional cur-pkg)
                    (elpaish-install--upgrade-progress
                     buffer entries refresh-state quickstart-state
-                    global-state cur-pkg act (funcall compute-stats)))))
+                    global-state cur-pkg act (funcall compute-stats) cleanup-state))))
     (with-current-buffer buffer
       (elpaish-install-progress-mode)
       (setq-local elpaish-install--progress-context
                   (list :pkgs pkgs :refresh refresh :sync sync :delay cur-delay
                         :callback callback :action act :stream stream
-                        :confirm cur-confirm :paused cur-paused
+                        :confirm cur-confirm :paused cur-paused :cleanup cur-cleanup
+                        :initial-archives initial-archives
                         :start-time start-time :wall-time 0.0
                         :actual-time 0.0 :wait-time 0.0 :running t))
       (add-hook 'kill-buffer-query-functions #'elpaish-install--progress-query-kill nil t))
@@ -1819,7 +1948,7 @@ PAUSED starts the operation in paused state when non-nil."
                             (when utd
                               (let ((st (if (eq act 'install) :already-installed :up-to-date)))
                                 (setf (nth 1 entry) "[x]")
-                                (setf (nth 3 entry) (substring (symbol-name st) 1))
+                                (setf (nth 3 entry) "current")
                                 (push (append (list :status st :pkg pkg) ts) results)))))
                         entries)
                        (setq entries (elpaish-install--reorder-entries entries))
@@ -1887,7 +2016,7 @@ PAUSED starts the operation in paused state when non-nil."
                                          (setf (nth 2 entry) version)
                                          (setf (nth 3 entry) (if (eq status :failed)
                                                                  (plist-get res :error)
-                                                               (substring (symbol-name status) 1)))
+                                                               (if utd-status "current" (substring (symbol-name status) 1))))
                                          (setf (nth 4 entry) meta)
                                          (when utd-status
                                            (setq entries (elpaish-install--reorder-entries entries)))
@@ -2019,6 +2148,16 @@ PAUSED starts the operation in paused state when non-nil."
                                      elpaish-install-bootstrap-finished-functions)))
                        (when (and changed quickstart-enabled)
                          (elpaish-install-flush-package-quickstart t))
+                       (if cur-cleanup
+                           (if changed
+                               (condition-case clean-err
+                                   (let ((deleted (elpaish-install-clean-stale-packages t)))
+                                     (setq cleanup-state (format "[x] %d legacy package%s cleaned"
+                                                                 deleted (if (= deleted 1) "" "s"))))
+                                 (error
+                                  (setq cleanup-state (format "[!] %s" (error-message-string clean-err)))))
+                             (setq cleanup-state "[x] 0 legacy packages cleaned"))
+                         (setq cleanup-state "[-]"))
                        (setq actual-time (+ actual-time (- (float-time) t0)))
                        (setq end-time (float-time))
                        (when (timerp heartbeat) (cancel-timer heartbeat))
@@ -2086,6 +2225,9 @@ PAUSED starts the operation in paused state when non-nil."
                       (:set-confirm
                        (setq cur-confirm (and arg t))
                        (funcall render))
+                      (:set-cleanup
+                       (setq cur-cleanup (and arg t))
+                       (funcall render))
                       (:render
                        (funcall render))))))
     (if sync
@@ -2142,6 +2284,8 @@ ARGS can contain package symbols, lists of package symbols, or keyword options:
   :confirm BOOL     - When non-nil, ask for intermediate confirmation before
                       each package work item (default
                       `elpaish-install-confirm-intermediate').
+  :cleanup BOOL     - When non-nil, clean up legacy package directories on
+                      completion (default `elpaish-install-cleanup-legacy').
   :paused BOOL      - When non-nil, start in paused state.
   :callback FN      - Function called with result list on completion.
   :pool-size N      - Accepted for compatibility; upgrades run in this Emacs.
@@ -2160,6 +2304,7 @@ When no packages are specified in ARGS, defaults to
          (concurrency nil)
          (delay nil)
          (confirm elpaish-install-confirm-intermediate)
+         (cleanup elpaish-install-cleanup-legacy)
          (paused nil)
          (pool-size nil)
          (callback nil))
@@ -2176,6 +2321,8 @@ When no packages are specified in ARGS, defaults to
          ((eq arg :delay) (setq delay (pop remaining)))
          ((or (eq arg :confirm) (eq arg :confirm-intermediate))
           (setq confirm (pop remaining)))
+         ((eq arg :cleanup)
+          (setq cleanup (pop remaining)))
          ((eq arg :paused) (setq paused (pop remaining)))
          ((eq arg :pool-size) (setq pool-size (pop remaining)))
          ((or (eq arg :callback) (eq arg :on-done))
@@ -2207,7 +2354,7 @@ When no packages are specified in ARGS, defaults to
        (t
         (ignore concurrency pool-size)
         (elpaish-install--upgrade-run target-pkgs refresh is-sync delay callback
-                                      'upgrade :confirm confirm :paused paused))))))
+                                      'upgrade :confirm confirm :paused paused :cleanup cleanup))))))
 
 ;;;###autoload
 (defun elpaish-install-upgrade-group (group &optional sync)
