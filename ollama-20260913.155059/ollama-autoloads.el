@@ -63,7 +63,11 @@ Displays a list of all available models with their details." t)
 
 ;;; Generated autoloads from ollama-transient.el
 
-(autoload 'ollama-transient-menu "ollama-transient" nil t)
+(autoload 'ollama-transient-menu "ollama-transient"
+"Ollama model management interface.
+
+Note: Model operations are asynchronous. If an operation fails,
+check the server status with 'k' and ensure the Ollama server is running." t)
 (autoload 'ollama-transient-setup "ollama-transient"
 "Setup and display the Ollama transient menu.
 This is the main entry point for the Ollama model management interface.
@@ -73,6 +77,7 @@ It provides access to all Ollama operations through a convenient menu." t)
 ;;; Generated autoloads from ollama-utils.el
 
 (register-definition-prefixes "ollama-utils" '("ollama-"))
+
 
 ;;; End of scraped data
 

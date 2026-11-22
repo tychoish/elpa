@@ -130,6 +130,7 @@ Recognized PROPS:
 (autoload 'ollama-tailnet-setup-laptop-presets "ollama-tailnet-vars"
 "Register standard profiles from `ollama-tailnet-preset-profiles'." t)
 (register-definition-prefixes "ollama-tailnet-vars" '("ollama-tailnet-"))
+
 
 ;;; End of scraped data
 

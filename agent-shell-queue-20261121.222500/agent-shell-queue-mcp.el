@@ -1,0 +1,380 @@
+;;; agent-shell-queue-mcp.el --- Agent Shell Queue (asq) MCP service integration for mcpkit -*- lexical-binding: t; -*-
+
+;; Author: tycho garen
+;; Maintainer: tychoish
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "29.1") (mcpkit "0.1.0"))
+;; Keywords: tools, mcp, agent-shell, queue
+;; URL: https://github.com/tychoish/agent-shell-queue
+
+;; This file is not part of GNU Emacs.
+
+;;; Commentary:
+;;
+;; Provides Model Context Protocol (MCP) tools for interacting with the
+;; Agent Shell Queue (asq) via mcpkit.
+;;
+;; Exposes queue inspection, item fetch, enqueue, reenqueue, interject,
+;; status mutations (cancel, defer, finish, unblock), editing, ordering,
+;; the background flag, and global or per-session pause and resume.
+;;
+;; Tools are registered at top-level on the `asq' service upon loading.
+;; Services are started only when explicitly requested via `mcpkit-start-service'.
+
+;;; Code:
+
+(require 'cl-lib)
+(require 'subr-x)
+(require 'seq)
+(require 'mcpkit)
+
+(defgroup agent-shell-queue-mcp nil
+  "Agent Shell Queue (asq) MCP service integration."
+  :group 'mcpkit
+  :prefix "agent-shell-queue-mcp-")
+
+;;; Service Definition & Top-Level Tool Registration
+
+(defvar agent-shell-queue-mcp-service
+  (or (mcpkit-get-service 'asq)
+      (mcpkit-define-service 'asq
+        :description "Agent Shell Queue (asq) Management and Inspection"))
+  "The asq `mcpkit-service' instance.")
+
+
+(defun agent-shell-queue-mcp--ensure-queue ()
+  "Ensure `agent-shell-queue' is loaded."
+  (unless (fboundp 'agent-shell-queue-get-item-by-id)
+    (require 'agent-shell-queue))
+  (when (fboundp 'agent-shell-queue--ensure-loaded)
+    (agent-shell-queue--ensure-loaded)))
+
+(defun agent-shell-queue-mcp--abort (buf-name item)
+  "Interrupt running ITEM in BUF-NAME, mark it aborted, and pause that session."
+  (when-let* ((buf (get-buffer buf-name))
+              (_ (buffer-live-p buf)))
+    (with-current-buffer buf
+      (when (fboundp 'agent-shell-interrupt)
+        (agent-shell-interrupt))))
+  (setf (agent-shell-queue-item-status item) 'aborted)
+  (setf (agent-shell-queue-item-outcome item) 'canceled)
+  (agent-shell-queue--insert-resume-task buf-name item)
+  (agent-shell-queue--pause-and-save buf-name))
+
+(defmacro agent-shell-queue-mcp--with-item (id pair &rest body)
+  "Run BODY with PAIR bound to the (BUFFER . ITEM) for ID.
+Return an error plist when ID is unknown, or when BODY signals an error."
+  (declare (indent 2))
+  `(let ((,pair (agent-shell-queue-get-item-by-id ,id)))
+     (if (not ,pair)
+         (list :status "error" :error (format "No item found with id %s" ,id))
+       (condition-case err
+           (progn ,@body)
+         (error (list :status "error" :error (error-message-string err)))))))
+
+;; 1. asq_list_items
+(mcpkit-register-tool 'asq_list_items 'asq
+  :description "List queue items across all buffers or for a specific buffer, optionally filtered by status."
+  :input-schema '(:type "object"
+                  :properties (:buffer (:type "string" :description "Optional buffer name filter")
+                               :status (:type "string" :description "Optional status filter (e.g. active, running, done, blocked.skip, blocked.task, aborted)"))
+                  :required [])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((target-buf (plist-get args :buffer))
+         (status-str (plist-get args :status))
+         (status-sym (when (and status-str (not (string-empty-p status-str)))
+                       (intern status-str)))
+         (results nil))
+    (seq-do (lambda (bucket)
+              (let ((buf-name (car bucket)))
+                (when (or (null target-buf) (equal target-buf buf-name))
+                  (seq-do (lambda (item)
+                            (let ((item-status (agent-shell-queue-item-status item)))
+                              (when (or (null status-sym) (eq item-status status-sym))
+                                (push (list :id (agent-shell-queue-item-id item)
+                                            :buffer buf-name
+                                            :status (symbol-name item-status)
+                                            :kind (symbol-name (or (agent-shell-queue-item-kind item) 'prompt))
+                                            :prompt (agent-shell-queue-item-args item)
+                                            :background (if (agent-shell-queue-item-background item) t :json-false)
+                                            :reenqueued_from (or (agent-shell-queue-item-reenqueued-from item) "")
+                                            :has_children (if (agent-shell-queue-item-reenqueued-as item) t :json-false))
+                                      results))))
+                          (cdr bucket)))))
+            (agent-shell-queue-store-items agent-shell-queue--store))
+    (list :count (length results)
+          :items (vconcat (nreverse results)))))
+
+;; 2. asq_get_item
+(mcpkit-register-tool 'asq_get_item 'asq
+  :description "Retrieve details of a specific queue item by ID, including prompt, response, lineage, and interjection data."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "Queue item identifier"))
+                  :required ["id"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((id (plist-get args :id))
+         (pair (agent-shell-queue-get-item-by-id id)))
+    (if (not pair)
+        (list :found :json-false :id id :error (format "No item found with id %s" id))
+      (let* ((buf-name (car pair))
+             (item (cdr pair)))
+        (list :found t
+              :id id
+              :buffer buf-name
+              :status (symbol-name (agent-shell-queue-item-status item))
+              :kind (symbol-name (or (agent-shell-queue-item-kind item) 'prompt))
+              :background (if (agent-shell-queue-item-background item) t :json-false)
+              :prompt (or (agent-shell-queue-item-args item) "")
+              :response (or (agent-shell-queue-item-response item) "")
+              :reenqueued_from (or (agent-shell-queue-item-reenqueued-from item) "")
+              :reenqueued_as (vconcat (or (agent-shell-queue-item-reenqueued-as item) []))
+              :interjection_prompt (or (agent-shell-queue-item-interjection-prompt item) "")
+              :interjection_result (or (agent-shell-queue-item-interjection-result item) ""))))))
+
+;; 3. asq_enqueue
+(mcpkit-register-tool 'asq_enqueue 'asq
+  :description "Enqueue a prompt in an agent-shell buffer, optionally linking as a follow-up to an existing item."
+  :input-schema '(:type "object"
+                  :properties (:prompt (:type "string" :description "Task prompt text to execute")
+                               :buffer (:type "string" :description "Target agent-shell buffer name")
+                               :from_id (:type "string" :description "Optional parent item ID this follows up on")
+                               :background (:type "boolean" :description "Run in background when non-nil"))
+                  :required ["prompt" "buffer"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((prompt (plist-get args :prompt))
+         (buf-name (plist-get args :buffer))
+         (from-id (plist-get args :from_id))
+         (background (plist-get args :background))
+         (buf (or (get-buffer buf-name)
+                  (user-error "No buffer named %s" buf-name)))
+         (item (agent-shell-queue-add prompt buf))
+         (new-id (agent-shell-queue-item-id item)))
+    (when background
+      (setf (agent-shell-queue-item-background item) t))
+    (when (and from-id (not (string-empty-p from-id)))
+      (setf (agent-shell-queue-item-reenqueued-from item) from-id)
+      (when-let* ((old-pair (agent-shell-queue-get-item-by-id from-id))
+                  (old-item (cdr old-pair)))
+        (setf (agent-shell-queue-item-reenqueued-as old-item)
+              (append (agent-shell-queue-item-reenqueued-as old-item) (list new-id)))))
+    (agent-shell-queue--save)
+    (list :status "ok"
+          :id new-id
+          :buffer buf-name
+          :from_id (or from-id ""))))
+
+;; 4. asq_reenqueue
+(mcpkit-register-tool 'asq_reenqueue 'asq
+  :description "Re-enqueue a done or aborted item as a new active item in the same buffer."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "ID of the completed or aborted item to re-enqueue"))
+                  :required ["id"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((id (plist-get args :id))
+         (pair (agent-shell-queue-get-item-by-id id)))
+    (if (not pair)
+        (list :status "error" :error (format "No item found with id %s" id))
+      (condition-case err
+          (let ((new-id (agent-shell-queue-reenqueue id)))
+            (list :status "ok" :original_id id :new_id new-id))
+        (error (list :status "error" :error (error-message-string err)))))))
+
+;; 5. asq_interject
+(mcpkit-register-tool 'asq_interject 'asq
+  :description "Interrupt the currently running queue task or specified item and inject an interjection prompt."
+  :input-schema '(:type "object"
+                  :properties (:prompt (:type "string" :description "Interjection guidance or instruction")
+                               :id (:type "string" :description "Optional running item ID (defaults to currently running item)"))
+                  :required ["prompt"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((prompt (plist-get args :prompt))
+         (id (plist-get args :id))
+         (running-pair (if (and id (not (string-empty-p id)))
+                           (agent-shell-queue-get-item-by-id id)
+                         (let ((found nil))
+                           (catch 'done
+                             (seq-do (lambda (bucket)
+                                       (seq-do (lambda (item)
+                                                 (when (memq (agent-shell-queue-item-status item) '(running interjecting))
+                                                   (setq found (cons (car bucket) item))
+                                                   (throw 'done nil)))
+                                               (cdr bucket)))
+                                     (agent-shell-queue-store-items agent-shell-queue--store)))
+                           found))))
+    (if (not running-pair)
+        (list :status "error" :error "No running queue item to interject")
+      (let* ((buf-name (car running-pair))
+             (item (cdr running-pair)))
+        (setf (agent-shell-queue-item-interjection-prompt item) prompt)
+        (when-let* ((buf (get-buffer buf-name)))
+          (with-current-buffer buf
+            (when (fboundp 'agent-shell-interrupt)
+              (ignore-errors (agent-shell-interrupt)))
+            (when (fboundp 'comint-send-input)
+              (insert prompt)
+              (comint-send-input))))
+        (agent-shell-queue--save)
+        (list :status "ok"
+              :id (agent-shell-queue-item-id item)
+              :buffer buf-name
+              :interjected_prompt prompt)))))
+
+;; 6. asq_cancel
+(mcpkit-register-tool 'asq_cancel 'asq
+  :description "Cancel an item by ID: aborts if running, or removes from queue if pending."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "ID of item to cancel or abort"))
+                  :required ["id"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((id (plist-get args :id))
+         (pair (agent-shell-queue-get-item-by-id id)))
+    (if (not pair)
+        (list :status "error" :error (format "No item found with id %s" id))
+      (let* ((buf-name (car pair))
+             (item (cdr pair))
+             (status (agent-shell-queue-item-status item)))
+        (if (eq status 'running)
+            (progn
+              (agent-shell-queue-mcp--abort buf-name item)
+              (list :status "ok" :id id :action "aborted" :buffer buf-name))
+          (agent-shell-queue-remove id)
+          (list :status "ok" :id id :action "removed" :buffer buf-name))))))
+
+;; 7. asq_defer
+(mcpkit-register-tool 'asq_defer 'asq
+  :description "Toggle queue item between active and blocked/skip."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "Queue item identifier"))
+                  :required ["id"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((id (plist-get args :id))
+         (pair (agent-shell-queue-get-item-by-id id)))
+    (if (not pair)
+        (list :status "error" :error (format "No item found with id %s" id))
+      (progn
+        (agent-shell-queue-defer id)
+        (let* ((updated (agent-shell-queue-get-item-by-id id))
+               (new-status (when updated (agent-shell-queue-item-status (cdr updated)))))
+          (list :status "ok" :id id :new_status (symbol-name (or new-status 'unknown))))))))
+
+;; 8. asq_finish
+(mcpkit-register-tool 'asq_finish 'asq
+  :description "Mark queue item as done without dispatching through LLM, optionally recording response text."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "Queue item identifier")
+                               :response (:type "string" :description "Optional final response or resolution text"))
+                  :required ["id"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let* ((id (plist-get args :id))
+         (resp (plist-get args :response))
+         (pair (agent-shell-queue-get-item-by-id id)))
+    (if (not pair)
+        (list :status "error" :error (format "No item found with id %s" id))
+      (let ((item (cdr pair)))
+        (when (and resp (not (string-empty-p resp)))
+          (setf (agent-shell-queue-item-response item) resp))
+        (condition-case err
+            (progn
+              (agent-shell-queue-mark-done id)
+              (list :status "ok" :id id :status "done"))
+          (error
+           (list :status "error" :error (error-message-string err))))))))
+
+;; 9. asq_edit
+(mcpkit-register-tool 'asq_edit 'asq
+  :description "Replace a queued item's prompt text. Refuses if the item is running."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "Queue item identifier")
+                               :prompt (:type "string" :description "New prompt text"))
+                  :required ["id" "prompt"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let ((id (plist-get args :id)))
+    (agent-shell-queue-mcp--with-item id pair
+      (when (eq (agent-shell-queue-item-status (cdr pair)) 'running)
+        (user-error "Item %s is running (cancel it first)" id))
+      (agent-shell-queue-edit id (plist-get args :prompt))
+      (list :status "ok" :id id))))
+
+;; 10. asq_unblock
+(mcpkit-register-tool 'asq_unblock 'asq
+  :description "Unblock an item (blocked.task or blocked.skip becomes active)."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "Queue item identifier"))
+                  :required ["id"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let ((id (plist-get args :id)))
+    (agent-shell-queue-mcp--with-item id _pair
+      (agent-shell-queue-unblock id)
+      (list :status "ok" :id id))))
+
+;; 11. asq_move
+(mcpkit-register-tool 'asq_move 'asq
+  :description "Move an item one slot up or down in its buffer's queue."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "Queue item identifier")
+                               :direction (:type "string" :enum ["up" "down"]
+                                                 :description "Direction to move"))
+                  :required ["id" "direction"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let ((id (plist-get args :id))
+        (direction (plist-get args :direction)))
+    (agent-shell-queue-mcp--with-item id _pair
+      (pcase direction
+        ("up" (agent-shell-queue-move-up id))
+        ("down" (agent-shell-queue-move-down id))
+        (_ (user-error "Direction must be \"up\" or \"down\"")))
+      (list :status "ok" :id id :direction direction))))
+
+;; 12. asq_set_background
+(mcpkit-register-tool 'asq_set_background 'asq
+  :description "Set or clear an item's background flag."
+  :input-schema '(:type "object"
+                  :properties (:id (:type "string" :description "Queue item identifier")
+                               :background (:type "boolean" :description "New flag value"))
+                  :required ["id" "background"])
+  (agent-shell-queue-mcp--ensure-queue)
+  (let ((id (plist-get args :id))
+        (flag (eq (plist-get args :background) t)))
+    (agent-shell-queue-mcp--with-item id _pair
+      (agent-shell-queue-set-background-task id flag)
+      (list :status "ok" :id id :background (if flag t :json-false)))))
+
+;; 13. asq_pause / 14. asq_resume
+(defun agent-shell-queue-mcp--pause-resume (args pause)
+  "Pause (PAUSE non-nil) or resume dispatch: one session if ARGS has :buffer."
+  (agent-shell-queue-mcp--ensure-queue)
+  (let ((buf-name (plist-get args :buffer)))
+    (if (or (null buf-name) (string-empty-p buf-name))
+        (progn (if pause (agent-shell-queue-pause) (agent-shell-queue-resume))
+               (list :status "ok" :scope "global"))
+      (if-let* ((buf (get-buffer buf-name)))
+          (progn (if pause
+                     (agent-shell-queue-session-pause buf)
+                   (agent-shell-queue-session-resume buf))
+                 (list :status "ok" :scope "session" :buffer buf-name))
+        (list :status "error" :error (format "No buffer named %s" buf-name))))))
+
+(mcpkit-register-tool 'asq_pause 'asq
+  :description "Pause dispatch globally, or for one buffer's session when `buffer' is given."
+  :input-schema '(:type "object"
+                  :properties (:buffer (:type "string" :description "Optional agent-shell buffer name"))
+                  :required [])
+  (agent-shell-queue-mcp--pause-resume args t))
+
+(mcpkit-register-tool 'asq_resume 'asq
+  :description "Resume dispatch globally, or for one buffer's session when `buffer' is given."
+  :input-schema '(:type "object"
+                  :properties (:buffer (:type "string" :description "Optional agent-shell buffer name"))
+                  :required [])
+  (agent-shell-queue-mcp--pause-resume args nil))
+
+;;;###autoload
+(defun agent-shell-queue-mcp-register ()
+  "Register `agent-shell-queue-mcp-service' in `mcpkit-registry' and return it."
+  (interactive)
+  (unless (mcpkit-get-service 'asq)
+    (mcpkit-register-service agent-shell-queue-mcp-service))
+  agent-shell-queue-mcp-service)
+
+(provide 'agent-shell-queue-mcp)
+;;; agent-shell-queue-mcp.el ends here

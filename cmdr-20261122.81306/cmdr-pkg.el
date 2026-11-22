@@ -1,0 +1,4 @@
+;; -*- no-byte-compile: t -*-
+(define-package "cmdr" "20261122.81306" "Command registry with Transient and ACR frontends"
+  '((emacs "29.4") (transient "0.9.3") (annotated-completing-read "0.1") (which-key "3.6.0"))
+  :url "https://github.com/tychoish/cmdr.el" :keywords "convenience" "tools")
