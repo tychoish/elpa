@@ -481,16 +481,6 @@ When FORCE is non-nil, force refresh even if no debounce timer was pending.
 (register-definition-prefixes "elpaish-install" '("elpaish-install-"))
 
 
-;;; Generated autoloads from elpaish-keyring.el
-
-(autoload 'elpaish-keyring-setup "elpaish-keyring"
-"Configure `package-archives' to include ELPAish repository for STREAM.
-STREAM defaults to \\='snapshot.  BASE-URL defaults to `elpaish-base-url'.
-
-(fn &optional STREAM BASE-URL)" t)
-(register-definition-prefixes "elpaish-keyring" '("elpaish-keyring--canonical-stream"))
-
-
 ;;; Generated autoloads from elpaish-ops.el
 
 (autoload 'elpaish-ops-status "elpaish-ops"

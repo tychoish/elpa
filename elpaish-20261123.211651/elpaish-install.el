@@ -126,12 +126,28 @@ Each function is called with three arguments: PKG (symbol), STATUS
   :type 'hook
   :group 'elpaish-install)
 
+(defcustom elpaish-install-after-package-install-hook nil
+  "Normal hook run after each package is installed or upgraded.
+Unlike `elpaish-install-package-updated-functions', functions take no
+arguments.  Use it for work that only needs to know that something changed;
+use the `-functions' hook when the package name or status matters."
+  :type 'hook
+  :group 'elpaish-install)
+
 (defcustom elpaish-install-bootstrap-finished-functions nil
   "Hook run when package bootstrap or installation completes.
 Each function is called with two arguments: RES-LIST (the list of package
 result plists) and ACTION (symbol, \\='upgrade or \\='install)."
   :type 'hook
   :group 'elpaish-install)
+
+(defun elpaish-install--run-package-updated-hooks (pkg status res)
+  "Run the hooks signalling that PKG was installed or upgraded.
+STATUS is `installed' or `upgraded' and RES is the result plist; they go to
+`elpaish-install-package-updated-functions'.  Then run
+`elpaish-install-after-package-install-hook' with no arguments."
+  (run-hook-with-args 'elpaish-install-package-updated-functions pkg status res)
+  (run-hooks 'elpaish-install-after-package-install-hook))
 
 (defvar elpaish-install--active-cancel-handle nil
   "Cancellation handle function for active async package installation.")
@@ -384,10 +400,10 @@ or `:error' on failure."
                       (logx 'info :msg (format "[elpaish] Installed %s (%s)"
                                                pkg-name (or new-ver ""))
                             :pkg pkg-name :version new-ver)
-                      (run-hook-with-args 'elpaish-install-package-updated-functions
-                                          pkg-sym
-                                          (if prev-ver 'upgraded 'installed)
-                                          res)
+                      (elpaish-install--run-package-updated-hooks
+                       pkg-sym
+                       (if prev-ver 'upgraded 'installed)
+                       res)
                       res)))
               (error
                (logx 'error :msg (format "[elpaish] Failed %s: %s"
@@ -731,8 +747,8 @@ if an update is available.  If REFRESH is non-nil, refresh archive contents."
                      (package--reload-previously-loaded desc)
                    (error nil))))
              (let ((res (list :status :installed :pkg pkg)))
-               (run-hook-with-args 'elpaish-install-package-updated-functions
-                                   pkg 'installed res)
+               (elpaish-install--run-package-updated-hooks
+                pkg 'installed res)
                res))))
           (_
            (cond
@@ -744,8 +760,8 @@ if an update is available.  If REFRESH is non-nil, refresh archive contents."
                      (package--reload-previously-loaded desc)
                    (error nil))))
              (let ((res (list :status :installed :pkg pkg)))
-               (run-hook-with-args 'elpaish-install-package-updated-functions
-                                   pkg 'installed res)
+               (elpaish-install--run-package-updated-hooks
+                pkg 'installed res)
                res))
             ((fboundp 'package-upgrade)
              (let* ((installed-desc (cadr (assq pkg package-alist)))
@@ -758,8 +774,8 @@ if an update is available.  If REFRESH is non-nil, refresh archive contents."
                             (from-str (and inst-ver (package-version-join inst-ver)))
                             (to-str (and new-ver (package-version-join new-ver)))
                             (res (list :status :upgraded :pkg pkg :from from-str :to to-str)))
-                       (run-hook-with-args 'elpaish-install-package-updated-functions
-                                           pkg 'upgraded res)
+                       (elpaish-install--run-package-updated-hooks
+                        pkg 'upgraded res)
                        res))
                  (user-error
                   (list :status :up-to-date :pkg pkg))
@@ -781,8 +797,8 @@ if an update is available.  If REFRESH is non-nil, refresh archive contents."
                  (let* ((from-str (package-version-join inst-ver))
                         (to-str (package-version-join arch-ver))
                         (res (list :status :upgraded :pkg pkg :from from-str :to to-str)))
-                   (run-hook-with-args 'elpaish-install-package-updated-functions
-                                       pkg 'upgraded res)
+                   (elpaish-install--run-package-updated-hooks
+                    pkg 'upgraded res)
                    res))
                 (t
                  (list :status :up-to-date :pkg pkg))))))))
@@ -910,10 +926,10 @@ and invokes CALLBACK."
           (:upgraded
            (logx 'info :msg (format "[elpaish] Upgraded and reloaded %s" pkg)
                  :pkg pkg :action 'upgrade)))
-        (run-hook-with-args 'elpaish-install-package-updated-functions
-                            pkg
-                            (if (eq (plist-get res :status) :installed) 'installed 'upgraded)
-                            res))))
+        (elpaish-install--run-package-updated-hooks
+         pkg
+         (if (eq (plist-get res :status) :installed) 'installed 'upgraded)
+         res))))
   (elpaish-install--report-summary res-list action)
   (run-hook-with-args 'elpaish-install-bootstrap-finished-functions res-list action)
   (when callback (funcall callback res-list)))
@@ -2111,10 +2127,10 @@ CLEANUP enables removing older duplicate package versions after changes."
                                                                                (logx 'info :msg (format "[elpaish] Installed %s (%s)"
                                                                                                         pkg-name (or new-ver ""))
                                                                                      :pkg pkg-name :version new-ver)
-                                                                               (run-hook-with-args 'elpaish-install-package-updated-functions
-                                                                                                   pkg-sym
-                                                                                                   (if prev-ver 'upgraded 'installed)
-                                                                                                   res)
+                                                                               (elpaish-install--run-package-updated-hooks
+                                                                                pkg-sym
+                                                                                (if prev-ver 'upgraded 'installed)
+                                                                                res)
                                                                                res)
                                                                            (when (and artifact (file-exists-p artifact))
                                                                              (let ((parent-dir (file-name-directory artifact)))
