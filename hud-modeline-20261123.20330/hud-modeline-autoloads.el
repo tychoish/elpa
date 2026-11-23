@@ -28,9 +28,12 @@
 (autoload 'hud-modeline-set-lighter "hud-modeline"
 "Set the mode line lighter or display name for a mode.
 SPEC can be:
-- A mode symbol: (hud-modeline-set-lighter \\='abbrev-mode \" abb\" \\='abbrev)
-- A single specification list: (hud-modeline-set-lighter \\='(abbrev-mode \" abb\" abbrev))
-- A list of specifications: (hud-modeline-set-lighter \\='((abbrev-mode \" abb\" abbrev) ...))
+- A mode symbol:
+  (hud-modeline-set-lighter \\='abbrev-mode \" abb\" \\='abbrev)
+- A single specification list:
+  (hud-modeline-set-lighter \\='(abbrev-mode \" abb\" abbrev))
+- A list of specifications:
+  (hud-modeline-set-lighter \\='((abbrev-mode \" abb\" abbrev) ...))
 
 When SPEC is a mode symbol:
 VALUE is the replacement string or mode-line construct, or nil to hide.
@@ -48,9 +51,10 @@ When SPEC is a list of specifications, VALUE and FILE are ignored.
 "Attach COMMAND to mouse-1 clicks on segment KEY.
 Creates and caches a sparse keymap; segment bodies that call
 `hud-modeline--action-map' pick it up automatically.
+Optional HELP-ECHO sets the tooltip string or function for KEY.
 Replaces any previously registered action for KEY.
 
-(fn KEY COMMAND)")
+(fn KEY COMMAND &optional HELP-ECHO)")
 (autoload 'hud-modeline-add-segment "hud-modeline"
 "Register segment KEY in SEGMENT-BLOCK with optional positional placement.
 Supply :fn SYMBOL for a pre-defined function, or :body FORM to generate
