@@ -617,7 +617,18 @@ cancellation handle function when asynchronous."
             (funcall extract-descs run-res)
           run-res)))))
 
-;;;###autoload
+(defun elpaish-install--rejection-message (reject-val)
+  "Return a message string for a sprite future's REJECT-VAL.
+REJECT-VAL may be a string (for example \"No available sprites\"), an
+error object, another list, or any other value; none of these may signal."
+  (cond
+   ((stringp reject-val) reject-val)
+   ((and (consp reject-val) (symbolp (car reject-val))
+         (get (car reject-val) 'error-conditions))
+    (error-message-string reject-val))
+   ((consp reject-val) (format "%s" (cdr reject-val)))
+   (t (format "%S" reject-val))))
+
 (cl-defun elpaish-install-repository-package (&optional package &key stream sync async delay confirm cleanup callback)
   "Build and install a PACKAGE from the local ELPAish repository into Emacs.
 PACKAGE can be a package symbol, string name, recipe, or a list of packages.
@@ -2124,9 +2135,7 @@ CLEANUP enables removing older duplicate package versions after changes."
                                                   (lambda (reject-val)
                                                     (setq current-future nil)
                                                     (unless (eq stage 'done)
-                                                      (let* ((err-msg (if (consp reject-val)
-                                                                          (format "%s" (cdr reject-val))
-                                                                        (error-message-string reject-val)))
+                                                      (let* ((err-msg (elpaish-install--rejection-message reject-val))
                                                              (raw-res (list :status :failed :pkg pkg :error err-msg :stage :sprite-dispatch)))
                                                         (logx 'error :msg (format "[elpaish] Sprite build rejected for %s: %s" pkg err-msg)
                                                               :pkg pkg :error err-msg)

@@ -17,7 +17,14 @@
 (fn NAME)")
 (defvar sprite-startup-operations nil
 "Operations run during startup, in order.
-Each entry is a function or (:mode SYMBOL), which enables a global mode.
+Each entry is one of:
+  FUNCTION                      called with no arguments if nilary,
+                                otherwise with the startup argument (1)
+  (:mode SYMBOL)                enable a global mode
+  (:op FN [:args LIST] [:name STRING])
+                                call FN with only :args (none by default)
+  (:form FORM :name STRING)     evaluate FORM with lexical binding;
+                                :name is required for error reports
 Mode entries are also audited by `sprite-state-reload'.")
 (custom-autoload 'sprite-startup-operations "sprite" t)
 (defvar sprite-first-frame-operations nil

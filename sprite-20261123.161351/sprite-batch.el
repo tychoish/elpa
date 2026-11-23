@@ -14,6 +14,8 @@
 
 (require 'cl-lib)
 (require 'seq)
+(require 'map)
+(require 'pcase)
 (require 'subr-x)
 (require 'sprite)
 
@@ -77,21 +79,69 @@ If FRAME is non-nil and live, BODY executes with FRAME selected."
     (user-error "Startup mode entry must contain exactly one mode symbol: %S" entry))
   (cadr entry))
 
+(defconst sprite-batch--entry-keys
+  '((:op :args :name) (:form :name))
+  "Keys each keyword-headed operation entry may use, by its leading keyword.")
+
+(defun sprite-batch--validate-entry (entry)
+  "Signal a user error unless keyword-headed ENTRY is a well-formed plist."
+  (let ((allowed (cons (car entry) (map-elt sprite-batch--entry-keys (car entry)))))
+    (unless (and (proper-list-p entry) (cl-evenp (length entry))
+                 (plist-get entry (car entry))
+                 (or (not (eq (car entry) :form))
+                     (and (stringp (plist-get entry :name))
+                          (not (string-empty-p (plist-get entry :name)))))
+                 (seq-every-p (lambda (pair) (memq (car pair) allowed))
+                              (seq-partition entry 2)))
+      (user-error "Malformed %s operation entry (allowed keys %S%s): %S"
+                  (car entry) allowed
+                  (if (eq (car entry) :form) "; :name string required" "")
+                  entry))))
+
+(defun sprite-batch--function-thunk (fn args)
+  "Return a thunk running FN: without arguments when nilary, else with ARGS."
+  (lambda ()
+    (when (and (symbolp fn) (fboundp fn) (autoloadp (symbol-function fn)))
+      (autoload-do-load (symbol-function fn) fn))
+    (if (equal (cdr (func-arity fn)) 0)
+        (funcall fn)
+      (apply fn (ensure-list args)))))
+
+(defun sprite-batch--resolve-entry (entry args)
+  "Return (LABEL . THUNK) for operation ENTRY, with batch ARGS.
+ENTRY is a function, (:mode MODE), (:op FN [:args ARGS] [:name LABEL]) or
+(:form FORM :name LABEL), where a `:form' entry must be named.  `:op'
+passes only its own `:args' (none by default), never the batch ARGS;
+`:form' is evaluated with lexical binding."
+  (cond
+   ((and (consp entry) (eq (car entry) :mode))
+    (let ((mode (sprite-batch--startup-mode entry)))
+      (cons mode (sprite-batch--function-thunk mode args))))
+   ((and (consp entry) (memq (car entry) '(:op :form)))
+    (sprite-batch--validate-entry entry)
+    (let ((label (plist-get entry :name)))
+      (pcase (car entry)
+        (:op (let ((fn (plist-get entry :op))
+                   (own-args (plist-get entry :args)))
+               (cons (or label fn) (sprite-batch--function-thunk fn own-args))))
+        (:form (let ((form (plist-get entry :form)))
+                 (cons label (lambda () (eval form t))))))))
+   (t (cons entry (sprite-batch--function-thunk entry args)))))
+
 (defun sprite-batch--execute-operation (fn &optional args frame buffer log-prefix)
   "Run operation FN with ARGS in FRAME and BUFFER context, reporting errors.
+FN is anything `sprite-batch--resolve-entry' accepts.
 When `sprite-slow-op-reporting' or `init-file-debug' is non-nil,
 log operation duration with LOG-PREFIX if it exceeds `sprite-slow-op-threshold'."
-  (condition-case err
-      (sprite-batch--with-context frame buffer
-        (when (and (consp fn) (eq (car fn) :mode))
-          (setq fn (sprite-batch--startup-mode fn)))
-        (with-sprite-slow-op-timer (format "%s %s" (or log-prefix "[run]") fn)
-          (when (and (symbolp fn) (fboundp fn) (autoloadp (symbol-function fn)))
-            (autoload-do-load (symbol-function fn) fn))
-          (if (equal (cdr (func-arity fn)) 0)
-              (funcall fn)
-            (apply fn (ensure-list args)))))
-    (error (message "[sprite] %s failed: %s" fn (error-message-string err)))))
+  (let ((label fn))
+    (condition-case err
+        (sprite-batch--with-context frame buffer
+          (let ((resolved (sprite-batch--resolve-entry fn args)))
+            (setq label (car resolved))
+            (with-sprite-slow-op-timer (format "%s %s" (or log-prefix "[run]") label)
+              (funcall (cdr resolved)))))
+      (error (message "[sprite] sprite-run-batch operation %S failed: %s"
+                      label (error-message-string err))))))
 
 ;;;###autoload
 (cl-defun sprite-run-batch (&key operations ops (delay 0.1) run-after initial-delay

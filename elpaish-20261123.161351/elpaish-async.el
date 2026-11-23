@@ -42,6 +42,16 @@
   :type 'integer
   :group 'elpaish-async)
 
+(defcustom elpaish-async-local-fallback 'ask
+  "Whether to build in this Emacs when no sprite is available.
+`ask' prompts (and fails the build when running non-interactively),
+`always' builds locally without asking, and `never' fails the build.
+Choosing \"always\" at the prompt sets this to `always' for the session."
+  :type '(choice (const :tag "Ask first" ask)
+                 (const :tag "Always build locally" always)
+                 (const :tag "Never build locally" never))
+  :group 'elpaish-async)
+
 (defun elpaish-async-error-p (result)
   "Return non-nil if RESULT represents an error from `elpaish-async-mapcar'."
   (and (consp result) (plist-get result :error)))
@@ -153,7 +163,10 @@ or on failure:
 
 STREAM specifies the release stream (defaults to \\='snapshot).
 STAGING-DIR specifies the target directory for the built package artifact.
-TIMEOUT overrides `elpaish-build-timeout'."
+TIMEOUT overrides `elpaish-build-timeout'.
+When no sprite is available the fleet rejects the dispatch; per
+`elpaish-async-local-fallback' the build then runs in this Emacs, blocking
+until it finishes, or fails."
   (let* ((effective-stream (or stream 'snapshot))
          (effective-timeout (or timeout elpaish-build-timeout))
          (target-dir (or staging-dir (make-temp-file "elpaish-sprite-build-" t)))
@@ -201,7 +214,38 @@ TIMEOUT overrides `elpaish-build-timeout'."
                            (t (intern (format "%s" recipe))))
                      :stage :unknown
                      :error "Invalid response from sprite worker"
-                     :log (format "%S" res)))))))))
+                     :log (format "%S" res))))))
+         (lambda (reject-val)
+           (let ((pkg (cond
+                       ((elpaish-recipe-p recipe) (intern (elpaish-recipe-name recipe)))
+                       ((symbolp recipe) recipe)
+                       (t (intern (format "%s" recipe)))))
+                 (reason (if (stringp reject-val) reject-val (format "%S" reject-val))))
+             (if (pcase elpaish-async-local-fallback
+                   ('always t)
+                   ('never nil)
+                   (_ (and (not noninteractive)
+                           (pcase (car (read-multiple-choice
+                                        (format "No sprite available to build %s (%s).  Build in this Emacs (blocks until done)? "
+                                                pkg reason)
+                                        '((?y "yes" "build in this Emacs")
+                                          (?n "no" "fail this build")
+                                          (?a "always" "build locally without asking this session"))))
+                             (?y t)
+                             (?a (setq elpaish-async-local-fallback 'always) t)
+                             (_ nil)))))
+                 (progn
+                   (message "[elpaish] No sprite available for %s (%s); building in this Emacs" pkg reason)
+                   (condition-case err
+                       (eval form t)
+                     (error
+                      (list :status :failed :pkg pkg :stage :local-fallback
+                            :error (error-message-string err)
+                            :log (format "Local build fallback failure: %s"
+                                         (error-message-string err))))))
+               (list :status :failed :pkg pkg :stage :sprite-dispatch
+                     :error (format "No sprite available (%s); local build not permitted" reason)
+                     :log (format "Sprite dispatch failure: %s" reason))))))))
      ((and (fboundp 'sprite-future--make)
            (fboundp 'sprite-future--settle))
       (let* ((res (eval form t))

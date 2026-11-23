@@ -180,6 +180,9 @@ or on failure:
 STREAM specifies the release stream (defaults to \\='snapshot).
 STAGING-DIR specifies the target directory for the built package artifact.
 TIMEOUT overrides `elpaish-build-timeout'.
+When no sprite is available the fleet rejects the dispatch; per
+`elpaish-async-local-fallback' the build then runs in this Emacs, blocking
+until it finishes, or fails.
 
 (fn RECIPE &key STREAM STAGING-DIR TIMEOUT)")
 (register-definition-prefixes "elpaish-async" '("elpaish-"))
@@ -350,27 +353,6 @@ Returns list of installed `package-desc' objects when synchronous, or a
 cancellation handle function when asynchronous.
 
 (fn &optional SCOPE &key STREAM SYNC ASYNC DELAY CONFIRM CLEANUP CALLBACK)" t)
-(autoload 'elpaish-install-repository-package "elpaish-install"
-"Build and install a PACKAGE from the local ELPAish repository into Emacs.
-PACKAGE can be a package symbol, string name, recipe, or a list of packages.
-When called interactively, prompts with an ACR (`annotated-completing-read')
-interface allowing selection of a package from repository definitions (or
-multiple packages when called with a prefix argument) and runs asynchronously
-with cooperative yielding in `*ELPAish Upgrade Progress*'.  With a prefix
-argument, runs synchronously.
-
-STREAM is the release mode stream to build (defaults to \\='snapshot).
-SYNC forces synchronous execution; ASYNC forces asynchronous execution.
-DELAY overrides `elpaish-install-yield-delay'; CONFIRM enables intermediate
-confirmation prompts.  CLEANUP enables removing older duplicate versions.
-CALLBACK is an optional function invoked with the installed `package-desc'
-object (or list of objects) upon completion.
-
-Returns the installed `package-desc' object (or list of `package-desc' objects
-if multiple packages were selected or passed) when synchronous, or a
-cancellation handle function when asynchronous.
-
-(fn &optional PACKAGE &key STREAM SYNC ASYNC DELAY CONFIRM CLEANUP CALLBACK)" t)
 (autoload 'elpaish-install-cancel "elpaish-install"
 "Cancel any in-flight asynchronous package installation or bootstrap operations." t)
 (autoload 'elpaish-install-packages "elpaish-install"

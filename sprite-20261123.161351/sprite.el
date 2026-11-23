@@ -180,9 +180,18 @@ If FULL-NAME is nil, returns path under the sprite root."
 ;;;###autoload
 (defcustom sprite-startup-operations nil
   "Operations run during startup, in order.
-Each entry is a function or (:mode SYMBOL), which enables a global mode.
+Each entry is one of:
+  FUNCTION                      called with no arguments if nilary,
+                                otherwise with the startup argument (1)
+  (:mode SYMBOL)                enable a global mode
+  (:op FN [:args LIST] [:name STRING])
+                                call FN with only :args (none by default)
+  (:form FORM :name STRING)     evaluate FORM with lexical binding;
+                                :name is required for error reports
 Mode entries are also audited by `sprite-state-reload'."
-  :type '(repeat (choice function (list (const :mode) symbol)))
+  :type '(repeat (choice function
+                         (list (const :mode) symbol)
+                         (plist :tag "Operation" :key-type symbol :value-type sexp)))
   :group 'sprite)
 
 ;;;###autoload

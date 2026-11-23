@@ -407,7 +407,9 @@ Returns the sprite struct with `start-time' set.  Updates the registry."
 (defun sprite--running-p (full-name)
   "Return t if the sprite FULL-NAME appears to be live.
 Checks whether the log buffer's associated process is still alive with a
-matching PID first; falls back to an emacsclient ping."
+matching PID first; falls back to an emacsclient ping.  The ping is not
+real work, so it does not update `last-contact' (which would mark every
+checked sprite busy)."
   (or (when-let* ((buf (get-buffer (sprite--log-buffer-name full-name)))
                   (proc (get-buffer-process buf))
                   ((process-live-p proc))
@@ -415,7 +417,9 @@ matching PID first; falls back to an emacsclient ping."
                   (pid (sprite-pid s))
                   ((= pid (process-id proc))))
         t)
-      (not (null (with-sprite full-name t)))))
+      (not (null (condition-case nil
+                     (sprite--call-and-read full-name t)
+                   (error nil))))))
 
 (cl-defun sprite--wait-for-server (full-name &key timeout-secs)
   "Poll until sprite FULL-NAME's server is accepting connections.
@@ -615,9 +619,11 @@ also includes sibling sprite from the same parent."
          sprite-active-threshold)))
 
 (defun sprite--usable-p (s)
-  "Return non-nil if sprite struct S is running and available."
-  (and (sprite--running-p (sprite-name s))
-       (sprite--available-p s)))
+  "Return non-nil if sprite struct S is running and available.
+Check availability first: `sprite--running-p' may ping S, which refreshes
+`last-contact' and would make every pinged sprite look busy."
+  (and (sprite--available-p s)
+       (sprite--running-p (sprite-name s))))
 
 (defun sprite--running-list ()
   "Return the subset of `sprite-resolve-list' that are actually running.
