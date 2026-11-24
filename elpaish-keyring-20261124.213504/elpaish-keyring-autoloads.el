@@ -7,6 +7,16 @@
 
 (add-to-list 'load-path (or (and load-file-name (directory-file-name (file-name-directory load-file-name))) (car load-path)))
 
+
+
+;;; Generated autoloads from elpaish-keyring.el
+
+(autoload 'elpaish-keyring-setup "elpaish-keyring"
+"Configure `package-archives' to include ELPAish repository for STREAM.
+STREAM defaults to \\='snapshot.  BASE-URL defaults to `elpaish-base-url'.
+
+(fn &optional STREAM BASE-URL)" t)
+(register-definition-prefixes "elpaish-keyring" '("elpaish-keyring--canonical-stream"))
 
 ;;; End of scraped data
 

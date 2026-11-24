@@ -732,6 +732,25 @@ if an update is available.  If REFRESH is non-nil, refresh archive contents."
   (let ((act (or action 'upgrade)))
     (condition-case err
         (pcase act
+          ('reinstall
+           (unless (assq pkg package-archive-contents)
+             (user-error "Package `%s' is not available in any configured archive" pkg))
+           (let* ((prev-desc (cadr (assq pkg package-alist)))
+                  (prev-ver (and prev-desc
+                                 (package-version-join (package-desc-version prev-desc)))))
+             (if (and prev-desc (fboundp 'package-reinstall))
+                 (package-reinstall pkg)
+               (package-install pkg))
+             (let* ((new-desc (cadr (assq pkg package-alist)))
+                    (new-ver (and new-desc
+                                  (package-version-join (package-desc-version new-desc))))
+                    (res (list :status :upgraded :pkg pkg :from prev-ver :to new-ver)))
+               (when (and new-desc (fboundp 'package--reload-previously-loaded))
+                 (condition-case nil
+                     (package--reload-previously-loaded new-desc)
+                   (error nil)))
+               (elpaish-install--run-package-updated-hooks pkg 'upgraded res)
+               res)))
           ('install
            (cond
             ((package-installed-p pkg)
@@ -820,6 +839,7 @@ if an update is available.  If REFRESH is non-nil, refresh archive contents."
         (op-label (pcase action
                     ('install "Installation")
                     ('repo-install "Repository installation")
+                    ('reinstall "Reinstallation")
                     (_ "Bootstrap")))
         (timing-suffix
          (if (and stats (plist-get stats :wall-time))
@@ -1320,7 +1340,7 @@ Inspects `package-alist' and `package-user-dir' using VERSION-STR if given."
     (cond
      ((eq act 'install)
       (package-installed-p pkg))
-     ((eq act 'repo-install)
+     ((memq act '(repo-install reinstall))
       nil)
      (t
       (when (package-installed-p pkg)
@@ -1688,6 +1708,7 @@ and options plist.  CLEANUP-STATE is the stale package cleanup status."
              (op-title (pcase action
                          ('install "installation")
                          ('repo-install "repository installation")
+                         ('reinstall "reinstallation")
                          (_ "upgrade")))
              (status-lbl (or global-state "Working"))
              (ctx elpaish-install--progress-context)
@@ -2017,6 +2038,7 @@ CLEANUP is obsolete and ignored: stale package versions are always removed."
                                               (pcase act
                                                 ('install "installation")
                                                 ('repo-install "repository installation")
+                                                ('reinstall "reinstallation")
                                                 (_ "upgrade"))
                                               next-pkg
                                               (length remaining))))
@@ -2309,12 +2331,18 @@ Upgrades packages configured in `elpaish-install-upgrade-packages-list',
 which must be a strict subset of `elpaish-install-packages-list'.
 The upgrade operation is lazy and runs in the background asynchronously
 with cooperative yielding.  When called interactively with a prefix argument
-\(e.g. \\[universal-argument]), execution is synchronous.
+\(e.g. \\[universal-argument]), execution is synchronous; with a double prefix
+\(\\[universal-argument] \\[universal-argument]) every target package is
+force-reinstalled from the configured archives even when already up to date
+\(including replacing a newer locally built version with the archive's).
 
 ARGS can contain package symbols, lists of package symbols, or keyword options:
   :sync BOOL        - When non-nil, execute synchronously.
   :async BOOL       - When non-nil (default t), execute asynchronously.
   :refresh BOOL     - When non-nil (default t), refresh package archives.
+  :force BOOL       - When non-nil, reinstall each target package from the
+                      archive even if it is already up to date (alias
+                      :reinstall).
   :concurrency N    - Accepted for compatibility; upgrades run sequentially.
   :delay SECS       - Yield delay in seconds
                       (default `elpaish-install-yield-delay').
@@ -2332,11 +2360,12 @@ When no packages are specified in ARGS, defaults to
   (interactive "P")
   (let* ((interactive-p (called-interactively-p 'any))
          (prefix-arg-val (when interactive-p (car args)))
+         (force (equal prefix-arg-val '(16)))
          (remaining (if interactive-p nil args))
          (pkgs nil)
          (group nil)
          (refresh t)
-         (sync (not (null prefix-arg-val)))
+         (sync (and prefix-arg-val (not force)))
          (async :default)
          (concurrency nil)
          (delay nil)
@@ -2352,6 +2381,7 @@ When no packages are specified in ARGS, defaults to
          ((eq arg :sync) (setq sync (pop remaining)))
          ((eq arg :async) (setq async (pop remaining)))
          ((eq arg :refresh) (setq refresh (pop remaining)))
+         ((memq arg '(:force :reinstall)) (setq force (pop remaining)))
          ((memq arg '(:action :status))
           (pop remaining))
          ((eq arg :concurrency) (setq concurrency (pop remaining)))
@@ -2391,7 +2421,8 @@ When no packages are specified in ARGS, defaults to
        (t
         (ignore concurrency pool-size)
         (elpaish-install--upgrade-run target-pkgs refresh is-sync delay callback
-                                      'upgrade :confirm confirm :paused paused :cleanup cleanup))))))
+                                      (if force 'reinstall 'upgrade)
+                                      :confirm confirm :paused paused :cleanup cleanup))))))
 
 ;;;###autoload
 (defun elpaish-install-upgrade-group (group &optional sync)

@@ -9,6 +9,165 @@
 
 
 
+;;; Generated autoloads from elpaish.el
+
+(autoload 'elpaish-register-package "elpaish"
+"Register package NAME with REPOSITORY-PATH (local directory or Git URL).
+BRANCH defaults to `elpaish-default-branch' and FILES to \\='(\"*.el\").
+SOURCE-DIRECTORY-PATH (or SOURCE-DIR) is the subdirectory within
+REPOSITORY-PATH holding the package (default \".\"), for monorepos or
+nested folders.
+TEST-DIRECTORY-PATH (or TEST-DIR) is an optional custom test directory path.
+EXCLUDE-FILES (or EXCLUDE) is an optional list of file patterns to exclude.
+PREFLIGHT-SKIP is t (or \\='t) to skip all checks, or a list of check
+symbols to bypass during preflight.
+INFO-FILES (or INFO-DOC, INFO-DOCS, INFO-MANUAL, INFO-MANUALS) opts into
+Info manual generation; specify a file string, list of file strings, or t.
+INFO-SKIP is a boolean; when non-nil, suppresses Info manual generation
+for this package.
+DISABLED-STREAMS (or SUPPRESS-STREAMS) is a list of suppressed stream
+symbols.
+HIDDEN omits the package from website catalogs without disabling publication.
+DOC (or DOCS-URL) is an optional URL or path to documentation.
+ORG-FILES (or INCLUDE-ORG) controls org docs inclusion
+(t, nil, or list of patterns).
+ORG-EXCLUDE adds patterns to exclude from org documentation.
+MIRROR (or MIRROR-P, EXTERNAL, EXTERNAL-P, THIRD-PARTY) tags the package
+as an upstream mirror.
+FORK (or FORK-P) tags the package as a maintained fork.
+ORIGIN explicitly specifies origin symbol: \\='mirror, \\='fork, or \\='tychoish.
+SUMMARY, URL, KEYWORDS, and REQUIRES provide package metadata.
+
+(fn NAME REPOSITORY-PATH &key BRANCH (FILES \\='(\"*.el\")) EXCLUDE-FILES EXCLUDE SOURCE-DIRECTORY-PATH TEST-DIRECTORY-PATH SOURCE-DIR TEST-DIR PREFLIGHT-SKIP INFO-SKIP INFO-FILES INFO-DOC INFO-DOCS INFO-MANUAL INFO-MANUALS HIDDEN EXTERNAL EXTERNAL-P THIRD-PARTY MIRROR MIRROR-P FORK FORK-P ORIGIN SUMMARY URL DOC KEYWORDS REQUIRES DISABLED-STREAMS SUPPRESS-STREAMS DOCS-URL (ORG-FILES :default) (INCLUDE-ORG :default) ORG-EXCLUDE &allow-other-keys)")
+(autoload 'elpaish-dependency-valid-p "elpaish"
+"Return non-nil if dependency DEP is builtin, in MELPA, or in `elpaish-registry'.
+
+(fn DEP)")
+(autoload 'elpaish-check-recipe-dependencies "elpaish"
+"Check that RECIPE dependencies are builtin, in MELPA, ELPAish, or self-provided.
+Returns a list of invalid dependency symbols, or nil if all are valid.
+
+(fn RECIPE)")
+(autoload 'elpaish-validate-all-dependencies "elpaish"
+"Validate that all dependencies of packages are builtin, MELPA, or ELPAish.
+Returns an alist of (package . invalid-deps) for any packages with invalid
+dependencies." t)
+(autoload 'elpaish-sign-file-headless "elpaish"
+"Sign FILE headlessly generating detached signature for KEY-ID.
+Passphrase is provided non-interactively via PASSPHRASE argument,
+`elpaish-gpg-passphrase', or `ELPAISH_GPG_PASSPHRASE' environment variable.
+Never triggers interactive terminal or GUI pinentry dialogs.
+OUTPUT-FILE defaults to FILE.sig.  Return the signature path, or nil.
+
+(fn FILE &key KEY-ID PASSPHRASE OUTPUT-FILE)")
+(autoload 'elpaish-rotate-keys "elpaish"
+"Rotate GPG signing subkey [S] for MASTER-KEY-ID and export to OUTPUT-DIR.
+Syncs with GitHub secrets on REPO-SLUG.
+
+(fn &key MASTER-KEY-ID REPO-SLUG (OUTPUT-DIR elpaish-output-dir))")
+(autoload 'elpaish-revoke-key "elpaish"
+"Publish revocation certificate for KEY-ID to `elpaish.rev.asc' in OUTPUT-DIR.
+
+(fn KEY-ID &optional OUTPUT-DIR)" t)
+(autoload 'elpaish-build-recompile "elpaish"
+"Re-run `elpaish-build-all' from the build compilation buffer.
+
+(fn &optional IGNORE-AUTO NOCONFIRM)" t)
+(autoload 'elpaish-build-mode "elpaish"
+"Major mode for ELPAish package build and compilation logs.
+\\{elpaish-build-mode-map}
+
+In addition to any hooks its parent mode `compilation-mode' might have
+run, this mode runs the hook `elpaish-build-mode-hook', as the final
+or penultimate step during initialization." t)
+(autoload 'elpaish-build-all "elpaish"
+"Build registered packages, generate indexes, and sign archives.
+MODE can be `all', `snapshot', `stable', or `staging'.
+Defaults to `elpaish-release-mode'.  OUTPUT-DIRECTORY-PATH defaults to
+`elpaish-output-dir'.  Every registered package is rebuilt unconditionally
+on every call; see `elpaish-build-package'.
+
+When called interactively (or when ASYNC is non-nil), building runs
+asynchronously in a background thread so interactive Emacs is not blocked.
+CALLBACK is an optional function invoked with target-root upon completion.
+
+(fn &rest ARGS)" t)
+(defalias 'elpaish-build-repository #'elpaish-build-all)
+(autoload 'elpaish-build-single "elpaish"
+"Interactively build and sign a single package RECIPE-OR-NAME for STREAM.
+OUTPUT-DIRECTORY-PATH overrides destination directory.
+
+(fn RECIPE-OR-NAME &optional STREAM OUTPUT-DIRECTORY-PATH)" t)
+(autoload 'elpaish-preflight-single "elpaish"
+"Run preflight quality gates on a single package RECIPE-OR-NAME.
+
+(fn RECIPE-OR-NAME)" t)
+(autoload 'elpaish-view-build-log "elpaish"
+"Switch to the ELPAish build compilation log buffer." t)
+(autoload 'elpaish-serve-local "elpaish"
+"Start local HTTP server serving OUTPUT-DIR (defaults to public/) at PORT.
+PORT defaults to `elpaish-preview-server-port'.
+
+(fn &optional PORT OUTPUT-DIR)" t)
+(autoload 'elpaish-stop-server "elpaish"
+"Stop local preview HTTP server if active." t)
+(autoload 'elpaish-test-server-url "elpaish"
+"Return the localhost archive URL for STREAM on the local test server.
+STREAM defaults to `snapshot'.
+
+(fn &optional STREAM)")
+(autoload 'elpaish-test-server "elpaish"
+"Rebuild configured packages and run a local ELPAish `web-server'.
+PORT defaults to `elpaish-preview-server-port'.  OUTPUT-DIR defaults to
+`elpaish-output-dir'.  MODE defaults to `elpaish-release-mode'.
+SIGN controls GPG signing: `auto' (default) signs if a GPG key is
+available, t requires signing, and nil builds unsigned packages.
+When SPRITE is non-nil (default) and SYNC is nil, the full package
+rebuild is delegated to a background `sprite' worker via `sprite-fleet'.
+CALLBACK, if non-nil, is invoked with the result plist once ready.
+
+(fn &key PORT OUTPUT-DIR MODE (SIGN \\='auto) SYNC (SPRITE t) PACKAGES-FILES CALLBACK)" t)
+(autoload 'elpaish-test-server-upgrade "elpaish"
+"Upgrade configured packages against the local ELPAish test server.
+Temporarily prepends the local test server archive to `package-archives'
+with highest priority and delegates to `elpaish-install-upgrade-packages'.
+
+When called interactively, a prefix argument forces synchronous execution.
+ARGS accepts all arguments supported by `elpaish-install-upgrade-packages',
+plus `:stream' (default `snapshot'), `:archive-name' (default
+\"elpaish-local\"), and `:url' to override the local archive URL.
+
+(fn &rest ARGS)" t)
+(autoload 'elpaish-start-auto-build "elpaish"
+"Start scheduled background rebuilds of the ELPA repository.
+INTERVAL can be seconds or a time string (e.g. \"1 hour\").
+If IDLE is non-nil, run rebuilds when Emacs is idle for INTERVAL.
+
+(fn INTERVAL &optional IDLE)" t)
+(autoload 'elpaish-stop-auto-build "elpaish"
+"Stop the periodic background rebuild timer if active." t)
+(autoload 'elpaish-status-refresh "elpaish"
+"Refresh the package registry status table." t)
+(autoload 'elpaish-status-build-at-point "elpaish"
+"Build the package at point across all release streams." t)
+(autoload 'elpaish-status-preflight-at-point "elpaish"
+"Execute preflight check for package at point." t)
+(autoload 'elpaish-status-preflight-all "elpaish"
+"Execute preflight check suite for all registered packages." t)
+(autoload 'elpaish-status "elpaish"
+"Open the ELPAish Builder management buffer." t)
+(autoload 'elpaish-run-checks "elpaish"
+"Execute package quality check suite for current repository or DIR.
+
+(fn &optional DIR)" t)
+(autoload 'elpaish-view-check-log "elpaish"
+"Switch to the ELPAish check compilation log buffer for DIR.
+
+(fn &optional DIR)" t)
+ (autoload 'elpaish-menu "elpaish" nil t)
+(register-definition-prefixes "elpaish" '("elpaish-"))
+
+
 ;;; Generated autoloads from elpaish-async.el
 
 (autoload 'elpaish-async-build-package-in-sprite "elpaish-async"
@@ -220,12 +379,18 @@ Upgrades packages configured in `elpaish-install-upgrade-packages-list',
 which must be a strict subset of `elpaish-install-packages-list'.
 The upgrade operation is lazy and runs in the background asynchronously
 with cooperative yielding.  When called interactively with a prefix argument
-(e.g. \\[universal-argument]), execution is synchronous.
+(e.g. \\[universal-argument]), execution is synchronous; with a double prefix
+(\\[universal-argument] \\[universal-argument]) every target package is
+force-reinstalled from the configured archives even when already up to date
+(including replacing a newer locally built version with the archive's).
 
 ARGS can contain package symbols, lists of package symbols, or keyword options:
   :sync BOOL        - When non-nil, execute synchronously.
   :async BOOL       - When non-nil (default t), execute asynchronously.
   :refresh BOOL     - When non-nil (default t), refresh package archives.
+  :force BOOL       - When non-nil, reinstall each target package from the
+                      archive even if it is already up to date (alias
+                      :reinstall).
   :concurrency N    - Accepted for compatibility; upgrades run sequentially.
   :delay SECS       - Yield delay in seconds
                       (default `elpaish-install-yield-delay').
@@ -320,6 +485,16 @@ When FORCE is non-nil, force refresh even if no debounce timer was pending.
 
 (fn &rest _)")
 (register-definition-prefixes "elpaish-install" '("elpaish-install-"))
+
+
+;;; Generated autoloads from elpaish-keyring.el
+
+(autoload 'elpaish-keyring-setup "elpaish-keyring"
+"Configure `package-archives' to include ELPAish repository for STREAM.
+STREAM defaults to \\='snapshot.  BASE-URL defaults to `elpaish-base-url'.
+
+(fn &optional STREAM BASE-URL)" t)
+(register-definition-prefixes "elpaish-keyring" '("elpaish-keyring--canonical-stream"))
 
 
 ;;; Generated autoloads from elpaish-ops.el
@@ -507,6 +682,7 @@ OUTPUT-DIRECTORY-PATH defaults to `elpaish-output-dir'.
 
 (fn &optional OUTPUT-DIRECTORY-PATH)" t)
 (register-definition-prefixes "elpaish-website" '("elpaish-website-"))
+
 
 ;;; End of scraped data
 
