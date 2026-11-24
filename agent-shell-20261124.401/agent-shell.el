@@ -4,11 +4,11 @@
 
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/agent-shell
-;; Package-Version: 20261124.201
-;; Package-Revision: 7bf5a6e07d7a
+;; Package-Version: 20261124.401
+;; Package-Revision: a4f5ae4466e9
 ;; Package-Requires: ((emacs "29.1") (shell-maker "0.98.3") (acp "0.20.1"))
 
-(defconst agent-shell--version "0.99.2")
+(defconst agent-shell--version "0.99.3")
 
 ;; Minimum dependency versions, as declared in the `Package-Requires'
 ;; header above.  Package managers that resolve versions enforce the
@@ -9761,7 +9761,9 @@ reads the buffer's prompt capabilities."
                         :state (agent-shell--state)
                         :block-id (format "%s-usage" (map-elt (agent-shell--state) :request-count))
                         :label-left (propertize "Usage" 'font-lock-face 'agent-shell-section-heading)
-                        :body (agent-shell--format-usage (map-elt (agent-shell--state) :usage) t)
+                        :body (funcall agent-shell-usage-format-function
+                                       (map-elt (agent-shell--state) :usage))
+                        :expanded agent-shell-usage-expand-by-default
                         :create-new t))
                      (unless success
                        (agent-shell--update-fragment

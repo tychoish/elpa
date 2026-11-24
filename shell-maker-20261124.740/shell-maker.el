@@ -4,8 +4,8 @@
 
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/shell-maker
-;; Package-Version: 20261118.1212
-;; Package-Revision: cba42efd503b
+;; Package-Version: 20261124.740
+;; Package-Revision: 20133f90d857
 ;; Package-Requires: ((emacs "27.1"))
 
 ;; This package is free software; you can redistribute it and/or modify
@@ -33,7 +33,7 @@
 
 ;;; Code:
 
-(defconst shell-maker-version "0.98.3")
+(defconst shell-maker-version "0.98.5")
 
 (require 'cl-lib)
 (require 'comint)
@@ -136,8 +136,6 @@ or an absolute path like \"/usr/local/bin/curl\"."
 
 (defvar-local shell-maker--request-process nil)
 
-(defvar-local shell-maker--buffer-name-override nil)
-
 (defmacro shell-maker--with-buffer-if (wrap buffer &rest body)
   "If WRAP, wrap BODY `with-current-buffer' BUFFER."
   `(if ,wrap
@@ -155,7 +153,6 @@ or an absolute path like \"/usr/local/bin/curl\"."
   :parent comint-mode-map
   :doc "Base keymap for `shell-maker' based modes."
   "S-<return>" #'newline
-  "<remap> <rename-buffer>" #'shell-maker-rename-buffer
   "<remap> <save-buffer>" #'shell-maker-save-session-transcript
   "C-M-h" #'shell-maker-mark-output)
 
@@ -219,9 +216,6 @@ names without them being clobbered on every shell start."
         (with-current-buffer (get-buffer-create buffer-name)
           (funcall (shell-maker-major-mode config))
           (setq-local shell-maker--busy nil)
-          (unless (equal (shell-maker-buffer-name config)
-                         buffer-name)
-            (setq-local shell-maker--buffer-name-override buffer-name))
           (unless (zerop (buffer-size))
             (setq old-point (point)))
           (when welcome-function
@@ -2017,9 +2011,16 @@ should ever reach."
   (get-buffer-create (shell-maker-buffer-name config)))
 
 (defun shell-maker-buffer-name (config)
-  "Get buffer name from CONFIG."
-  (if shell-maker--buffer-name-override
-      shell-maker--buffer-name-override
+  "Return the shell buffer name for CONFIG.
+
+In a CONFIG shell, return its current name, however it was renamed.
+Elsewhere, return the default name.  For example, with CONFIG named
+\"ChatGPT\":
+
+  In shell renamed to \"work\" => \"work\"
+  Elsewhere                    => \"*chatgpt*\""
+  (if (and config (eq major-mode (shell-maker-major-mode config)))
+      (buffer-name)
     (shell-maker-buffer-default-name (shell-maker-config-name config))))
 
 (defun shell-maker-buffer-default-name (name)
@@ -2074,8 +2075,7 @@ should ever reach."
   (with-current-buffer buffer
     (when (string-empty-p new-name)
       (user-error "Name shouldn't be empty"))
-    (rename-buffer new-name t)
-    (setq shell-maker--buffer-name-override (buffer-name (current-buffer)))))
+    (rename-buffer new-name t)))
 
 (defun shell-maker-set-prompt (prompt prompt-regexp)
   "Set internal config's PROMPT and PROMPT-REGEXP."
