@@ -56,7 +56,7 @@ disabled.
 "Toggle notifications hooks for an agent-shell viewport view buffer.
 
 Add to `agent-shell-viewport-view-mode-hook' to cancel idle timers and
-close notifications when viewport window is selected or reply sent.
+close notifications when the viewport view window is selected or a reply is sent.
 
 This is a minor mode.  If called interactively, toggle the
 `Agent-Shell-Notifications-Viewport-View mode' mode.  If the prefix
@@ -86,19 +86,9 @@ Interactively, reads a provider symbol from the minibuffer.
 (register-definition-prefixes "agent-shell-notifications" '("agent-shell-notifications-"))
 
 
-;;; Generated autoloads from agent-shell-notifications-alert.el
-
-(autoload 'agent-shell-notifications-alert-setup "agent-shell-notifications-alert"
-"Configure `agent-shell-notifications' to use `alert.el'.")
-(register-definition-prefixes "agent-shell-notifications-alert" '("agent-shell-notifications-alert-"))
-
-
 ;;; Generated autoloads from agent-shell-notifications-libnotify.el
 
-(autoload 'agent-shell-notifications-libnotify-setup "agent-shell-notifications-libnotify"
-"Configure `agent-shell-notifications' to use libnotify.")
 (register-definition-prefixes "agent-shell-notifications-libnotify" '("agent-shell-notifications--"))
-
 
 ;;; End of scraped data
 

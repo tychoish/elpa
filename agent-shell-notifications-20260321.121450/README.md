@@ -31,11 +31,11 @@ Desktop notifications for [agent-shell](https://github.com/xenodium/agent-shell)
   ;; (agent-shell-viewport-view-mode . agent-shell-notifications-viewport-view-mode)
 
   :config
-  ;; Notification display timeout in seconds (default: 30, 0 = never expire, -1 = backend default)
-  ;; (setq agent-shell-notifications-timeout 30)
+  ;; Notification display timeout in seconds (0 = never expire (the default), -1 = backend default)
+  ;; (setq agent-shell-notifications-timeout 5)
 
   ;; Seconds to wait before notifying when the shell is already visible (default: 10)
-  ;; (setq agent-shell-notifications-idle-timeout 10)
+  ;; (setq agent-shell-notifications-idle-timeout 30)
 
   ;; Advanced filtering: suppress notifications during certain hours
   ;; (add-hook 'agent-shell-notifications-inhibit-functions
@@ -43,35 +43,40 @@ Desktop notifications for [agent-shell](https://github.com/xenodium/agent-shell)
   ;;             (let ((hour (decoded-time-hour (decode-time))))
   ;;               (and (>= hour 9) (< hour 17)))))
 
-  ;; Use libnotify instead of default alert.el
-  ;; (setq agent-shell-notifications-provider 'agent-shell-notifications-libnotify)
+  ;; Use the knockknock backend instead of the default libnotify
+  ;; (setq agent-shell-notifications-provider 'agent-shell-notifications-knockknock)
   )
 ```
 
 ## Backends
 
-### alert.el (default)
-
-Uses [alert.el](https://github.com/jwiegley/alert) as the default backend to
-display desktop notifications. Alert supports a [wide range of alert
-backends](https://github.com/jwiegley/alert#builtin-alert-styles)
-including libnotify, macOS notifications ((terminal) `notifier` and AppleScript
-as `osx-notifier`), Windows `toast` notifier, and Emacs mode-line/message alerts.
-
-Originating shell buffer names are automatically formatted into the notification title
-(e.g., `Agent-shell: Ready <*agent-shell*>`).
-
-### libnotify
+### libnotify (default)
 
 Uses Emacs' built-in [`notifications.el`](https://www.gnu.org/software/emacs/manual/html_node/elisp/Desktop-Notifications.html) via D-Bus. Works out of the box on Linux with a
 running notification daemon. (Tested with KDE Plasma 6)
+
+### knockknock (experimental)
+
+Displays notifications as an in-Emacs overlay using the
+[knockknock](https://github.com/konrad1977/knockknock) package. (Requires [PR #4](https://github.com/konrad1977/knockknock/pull/4)) Useful if you prefer
+notifications inside Emacs or are on a system where D-Bus is unavailable.
+
+> **Note:** This backend is experimental. It is included primarily as a working example of
+> a custom backend. The author does not use knockknock personally, so it may have rough
+> edges. Bug reports and improvements are welcome.
+
+Requires `knockknock` to be installed. Enable it with:
+
+```elisp
+(setq agent-shell-notifications-provider 'agent-shell-notifications-knockknock)
+```
 
 ## Configuration
 
 ### Backend
 
 **`agent-shell-notifications-provider`** — symbol naming the backend feature to load.
-Defaults to `agent-shell-notifications-alert`. Set to `nil` to skip auto-loading and
+Defaults to `agent-shell-notifications-libnotify`. Set to `nil` to skip auto-loading and
 configure `agent-shell-notifications-send-function` and
 `agent-shell-notifications-close-function` manually.
 
@@ -161,16 +166,14 @@ backend. Defaults to `identity`.
 
 ### Standard notification plist
 
-| Key                  | Type          | Description                                                              |
-|----------------------|---------------|--------------------------------------------------------------------------|
-| `:title`             | string        | Notification title                                                       |
-| `:body`              | string or nil | Notification body text                                                   |
-| `:app-icon`          | string or nil | Path to icon file                                                        |
-| `:timeout`           | number        | Display duration in seconds (`0` = never expire, `-1` = backend default) |
-| `:actions`           | list          | Action labels, e.g. `'("default" "Switch to shell")`                     |
-| `:on-action`         | function      | Called with `(id key)` when an action is invoked                         |
-| `:shell-buffer-name` | string        | Name of agent-shell-buffer where the notification originates             |
-
+| Key | Type | Description |
+|---|---|---|
+| `:title` | string | Notification title |
+| `:body` | string or nil | Notification body text |
+| `:app-icon` | string or nil | Path to icon file |
+| `:timeout` | number | Display duration in seconds (`0` = never expire, `-1` = backend default) |
+| `:actions` | list | Action labels, e.g. `'("default" "Switch to shell")` |
+| `:on-action` | function | Called with `(id key)` when an action is invoked |
 
 To load your backend, set `agent-shell-notifications-provider` to the feature symbol and
 call `agent-shell-notifications-set-provider`:

@@ -62,7 +62,6 @@ Cancels any existing timer first.")
 ;;; Generated autoloads from sprite-mcp-tools.el
 
 (register-definition-prefixes "sprite-mcp-tools" '("sprite-mcp-tools-"))
-
 
 ;;; End of scraped data
 

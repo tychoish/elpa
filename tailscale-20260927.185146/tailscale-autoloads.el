@@ -32,7 +32,6 @@ penultimate step during initialization.
 
 \\{tailscale-mode-map}" t)
 (register-definition-prefixes "tailscale" '("tailscale-"))
-
 
 ;;; End of scraped data
 

@@ -11,8 +11,8 @@
 
 ;;; Generated autoloads from tempel.el
 
-(autoload 'tempel-expand "tempel" "\
-Expand exactly matching template name at point.
+(autoload 'tempel-expand "tempel"
+"Expand exactly matching template name at point.
 This completion-at-point-function (Capf) returns only the single
 exactly matching template name.  As a consequence the completion
 UI (e.g. Corfu) does not present the candidates for selection.
@@ -22,8 +22,8 @@ acts like a Capf, otherwise like an interactive completion
 command.
 
 (fn &optional INTERACTIVE)" t)
-(autoload 'tempel-complete "tempel" "\
-Complete template name at point and expand.
+(autoload 'tempel-complete "tempel"
+"Complete template name at point and expand.
 This completion-at-point-function (Capf) returns a list of all
 possible template names, which are then displayed in the
 completion UI (e.g. Corfu) for selection.  See also
@@ -31,17 +31,17 @@ completion UI (e.g. Corfu) for selection.  See also
 Capf, otherwise like an interactive completion command.
 
 (fn &optional INTERACTIVE)" t)
-(autoload 'tempel-insert "tempel" "\
-Insert TEMPLATE-OR-NAME.
+(autoload 'tempel-insert "tempel"
+"Insert TEMPLATE-OR-NAME.
 If called interactively, select a template with `completing-read'.
 
 (fn TEMPLATE-OR-NAME)" t)
-(autoload 'tempel-key "tempel" "\
-Bind KEY to TEMPLATE-OR-NAME in MAP.
+(autoload 'tempel-key "tempel"
+"Bind KEY to TEMPLATE-OR-NAME in MAP.
 
 (fn KEY TEMPLATE-OR-NAME &optional MAP)" nil t)
-(autoload 'tempel-abbrev-mode "tempel" "\
-Install Tempel templates as abbrevs.
+(autoload 'tempel-abbrev-mode "tempel"
+"Install Tempel templates as abbrevs.
 
 This is a minor mode.  If called interactively, toggle the
 `Tempel-Abbrev mode' mode.  If the prefix argument is positive, enable
@@ -59,25 +59,25 @@ disabled.
 
 (fn &optional ARG)" t)
 (put 'global-tempel-abbrev-mode 'globalized-minor-mode t)
-(defvar global-tempel-abbrev-mode nil "\
-Non-nil if Global Tempel-Abbrev mode is enabled.
+(defvar global-tempel-abbrev-mode nil
+"Non-nil if Global Tempel-Abbrev mode is enabled.
 See the `global-tempel-abbrev-mode' command
 for a description of this minor mode.
 Setting this variable directly does not take effect;
 either customize it (see the info node `Easy Customization')
 or call the function `global-tempel-abbrev-mode'.")
 (custom-autoload 'global-tempel-abbrev-mode "tempel" nil)
-(autoload 'global-tempel-abbrev-mode "tempel" "\
-Toggle Tempel-Abbrev mode in all buffers.
+(autoload 'global-tempel-abbrev-mode "tempel"
+"Toggle Tempel-Abbrev mode in many buffers.
+Specifically, Tempel-Abbrev mode is enabled in all buffers where
+`tempel--abbrev-on' would do it.
+
 With prefix ARG, enable Global Tempel-Abbrev mode if ARG is positive;
 otherwise, disable it.
 
 If called from Lisp, toggle the mode if ARG is `toggle'.
 Enable the mode if ARG is nil, omitted, or is a positive number.
 Disable the mode if ARG is a negative number.
-
-Tempel-Abbrev mode is enabled in all buffers where `tempel--abbrev-on'
-would do it.
 
 See `tempel-abbrev-mode' for more information on Tempel-Abbrev mode.
 

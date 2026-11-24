@@ -682,7 +682,6 @@ OUTPUT-DIRECTORY-PATH defaults to `elpaish-output-dir'.
 
 (fn &optional OUTPUT-DIRECTORY-PATH)" t)
 (register-definition-prefixes "elpaish-website" '("elpaish-website-"))
-
 
 ;;; End of scraped data
 

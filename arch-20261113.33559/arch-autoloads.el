@@ -159,7 +159,6 @@ Never installs anything on its own; use `arch-sets-install-at-point' or
 
 (fn FILE)" t)
 (register-definition-prefixes "arch-sets" '("arch-sets-"))
-
 
 ;;; End of scraped data
 

@@ -11,12 +11,12 @@
 
 ;;; Generated autoloads from flycheck-vale.el
 
-(autoload 'flycheck-vale-setup "flycheck-vale" "\
-Convenience function to setup the vale flycheck checker.
+(autoload 'flycheck-vale-setup "flycheck-vale"
+"Convenience function to setup the vale flycheck checker.
 
 This adds the vale checker to the list of flycheck checkers.")
-(autoload 'flycheck-vale-toggle-enabled "flycheck-vale" "\
-Toggle `flycheck-vale-enabled'." t)
+(autoload 'flycheck-vale-toggle-enabled "flycheck-vale"
+"Toggle `flycheck-vale-enabled'." t)
 (register-definition-prefixes "flycheck-vale" '("flycheck-vale-"))
 
 ;;; End of scraped data

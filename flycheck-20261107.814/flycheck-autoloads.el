@@ -481,6 +481,12 @@ See `flycheck-eglot-mode' for more information on Flycheck-Eglot
 mode.
 
 (fn &optional ARG)" t)
+(register-definition-prefixes "flycheck" '("flycheck-" "help-flycheck-checker-d" "list-flycheck-errors"))
+
+
+;;; Generated autoloads from flycheck-buttercup.el
+
+(register-definition-prefixes "flycheck-buttercup" '("flycheck-buttercup-"))
 
 ;;; End of scraped data
 

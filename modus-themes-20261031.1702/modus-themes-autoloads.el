@@ -9,6 +9,26 @@
 
 
 
+;;; Generated autoloads from modus-operandi-deuteranopia-theme.el
+
+(register-definition-prefixes "modus-operandi-deuteranopia-theme" '("modus-operandi-deuteranopia-palette-"))
+
+
+;;; Generated autoloads from modus-operandi-theme.el
+
+(register-definition-prefixes "modus-operandi-theme" '("modus-operandi-palette-"))
+
+
+;;; Generated autoloads from modus-operandi-tinted-theme.el
+
+(register-definition-prefixes "modus-operandi-tinted-theme" '("modus-operandi-tinted-palette-"))
+
+
+;;; Generated autoloads from modus-operandi-tritanopia-theme.el
+
+(register-definition-prefixes "modus-operandi-tritanopia-theme" '("modus-operandi-tritanopia-palette-"))
+
+
 ;;; Generated autoloads from modus-themes.el
 
 (autoload 'modus-themes-contrast "modus-themes"
@@ -174,6 +194,27 @@ rest come from CORE-PALETTE.
 
 (fn BASE-COLORS &optional COOL-OR-WARM-PREFERENCE CORE-PALETTE MAPPINGS)")
 (when load-file-name (let ((dir (file-name-directory load-file-name))) (unless (equal dir (expand-file-name "themes/" data-directory)) (add-to-list 'custom-theme-load-path dir))))
+(register-definition-prefixes "modus-themes" '("modus-themes-"))
+
+
+;;; Generated autoloads from modus-vivendi-deuteranopia-theme.el
+
+(register-definition-prefixes "modus-vivendi-deuteranopia-theme" '("modus-vivendi-deuteranopia-palette-"))
+
+
+;;; Generated autoloads from modus-vivendi-theme.el
+
+(register-definition-prefixes "modus-vivendi-theme" '("modus-vivendi-palette-"))
+
+
+;;; Generated autoloads from modus-vivendi-tinted-theme.el
+
+(register-definition-prefixes "modus-vivendi-tinted-theme" '("modus-vivendi-tinted-palette-"))
+
+
+;;; Generated autoloads from modus-vivendi-tritanopia-theme.el
+
+(register-definition-prefixes "modus-vivendi-tritanopia-theme" '("modus-vivendi-tritanopia-palette-"))
 
 ;;; End of scraped data
 

@@ -43,8 +43,6 @@ evaluate `(default-value \\='telegax-global-mode)'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
-\\{telegax-global-mode-map}
-
 (fn &optional ARG)" t)
 (defvar telegax-mode nil
 "Non-nil if Telegax mode is enabled.
@@ -73,7 +71,6 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "telegax" '("telegax-"))
-
 
 ;;; End of scraped data
 

@@ -41,7 +41,6 @@
 
 (fn MESSAGE &key TITLE SEVERITY CATEGORY TARGETS)")
 (register-definition-prefixes "telega-bot-alert" '("telega-bot-alert-"))
-
 
 ;;; End of scraped data
 

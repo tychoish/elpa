@@ -252,7 +252,6 @@ only the first step and stop, ready to resume with `hitl-plan-resume'.
 
 (fn FILE-A FILE-B &optional STEP)" t)
 (register-definition-prefixes "denote-tree-swap" '("denote-tree-swap--"))
-
 
 ;;; End of scraped data
 

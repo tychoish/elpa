@@ -58,7 +58,6 @@ disabled.
 
 (autoload 'chex--initialize-flycheck "chex-flycheck"
 "Initialize Chex checkers and Flycheck bindings.")
-
 
 ;;; End of scraped data
 

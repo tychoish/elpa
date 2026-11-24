@@ -2,7 +2,8 @@
 ;; Copyright (c) 2017 Austin Bingham
 ;;
 ;; Author: Austin Bingham <austin.bingham@gmail.com>
-;; Version: 0.1
+;; Package-Version: 20220929.608
+;; Package-Revision: 7c7ebc3de058
 ;; URL: https://github.com/abingham/flycheck-vale
 ;; Package-Requires: ((emacs "24.4") (flycheck "0.22") (let-alist "1.0.4"))
 ;;

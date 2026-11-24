@@ -11,8 +11,8 @@
 
 ;;; Generated autoloads from gptel-aibo.el
 
-(autoload 'gptel-aibo-mode "gptel-aibo" "\
-Minor mode for `gptel-aibo' interacting with LLMs.
+(autoload 'gptel-aibo-mode "gptel-aibo"
+"Minor mode for `gptel-aibo' interacting with LLMs.
 
 This is a minor mode.  If called interactively, toggle the `GPTel-Aibo
 mode' mode.  If the prefix argument is positive, enable the mode, and if
@@ -29,8 +29,8 @@ The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
 (fn &optional ARG)" t)
-(autoload 'gptel-aibo "gptel-aibo" "\
-Open or initialize a GPTEL-AIBO console buffer.
+(autoload 'gptel-aibo "gptel-aibo"
+"Open or initialize a GPTEL-AIBO console buffer.
 
 If called interactively with a prefix argument, prompt for a project-specific
 console buffer or create a new one. Sets up the buffer to use `gptel-aibo-mode`
@@ -40,16 +40,16 @@ buffer after initialization.
 Optional argument BUFFER specifies the name of the buffer to manage.
 
 (fn &optional BUFFER)" t)
-(autoload 'gptel-aibo-send "gptel-aibo" "\
-Send the current context and request to GPT for processing." t)
-(autoload 'gptel-aibo-complete-at-point "gptel-aibo" "\
-Complete text at point using LLM suggestions.
+(autoload 'gptel-aibo-send "gptel-aibo"
+"Send the current context and request to GPT for processing." t)
+(autoload 'gptel-aibo-complete-at-point "gptel-aibo"
+"Complete text at point using LLM suggestions.
 
 The response is inserted as an overlay with these keybindings:
 - TAB or RET: Accept and move to the end of the overlay.
 - Any other key: Reject and execute its normal action." t)
-(autoload 'gptel-aibo-complete-mode "gptel-aibo" "\
-Minor mode `gptel-aibo' llm completions.
+(autoload 'gptel-aibo-complete-mode "gptel-aibo"
+"Minor mode `gptel-aibo' llm completions.
 
 This is a minor mode.  If called interactively, toggle the
 `GPTel-Aibo-Complete mode' mode.  If the prefix argument is positive,
@@ -106,8 +106,8 @@ disabled.
 
 ;;; Generated autoloads from gptel-aibo-summon.el
 
-(autoload 'gptel-aibo-summon "gptel-aibo-summon" "\
-Summon AIBO to assist with code completion at point.
+(autoload 'gptel-aibo-summon "gptel-aibo-summon"
+"Summon AIBO to assist with code completion at point.
 This function initiates an asynchronous completion request using
 the current buffer's content and position." t)
 (register-definition-prefixes "gptel-aibo-summon" '("gptel-aibo-"))

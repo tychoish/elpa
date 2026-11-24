@@ -9,6 +9,64 @@
 
 
 
+;;; Generated autoloads from hitl.el
+
+(autoload 'hitl-generate-id "hitl"
+"Generate a unique question ID string.")
+(autoload 'hitl--normalize-kind "hitl"
+"Normalize KIND string, symbol or keyword to keyword symbol.
+
+(fn KIND)")
+(autoload 'hitl-ask "hitl"
+"Register a new `hitl-question'.
+PROMPT is the prompt string displayed to the user.
+KIND specifies the input widget: `:boolean', `:confirm', `:single-choice',
+`:multi-choice', `:text', `:file', or `:number'.
+OPTIONS is a list of candidate strings or alist.
+DEFAULT-VALUE is the preselected fallback value.
+TARGET is an optional target identifier (buffer, shell name, or agent id).
+DIRECTORY is an optional working directory string.
+TIMEOUT is an optional lifespan in seconds.
+CALLBACK is an optional function invoked with (RESPONSE QUESTION) upon answer.
+METADATA is an optional plist of extra context.
+ID optionally overrides the generated question ID.
+Returns the created `hitl-question' struct.
+
+(fn &key PROMPT (KIND :single-choice) OPTIONS DEFAULT-VALUE TARGET DIRECTORY TIMEOUT CALLBACK METADATA ID)")
+(autoload 'hitl-get "hitl"
+"Retrieve `hitl-question' by ID, or nil if not found.
+
+(fn ID)")
+(autoload 'hitl-list-pending "hitl"
+"List all pending `hitl-question' structs in chronological order.
+When TARGET-FILTER is non-nil, only questions matching TARGET-FILTER
+are returned.
+
+(fn &optional TARGET-FILTER)")
+(autoload 'hitl-list-all "hitl"
+"List all registered `hitl-question' structs in chronological order.")
+(autoload 'hitl-answer "hitl"
+"Mark question ID as answered with RESPONSE and invoke callback.
+Returns the updated `hitl-question' struct.
+
+(fn ID RESPONSE)")
+(autoload 'hitl-cancel "hitl"
+"Mark question ID as cancelled with optional REASON string.
+Returns the updated `hitl-question' struct.
+
+(fn ID &optional REASON)")
+(autoload 'hitl-expire "hitl"
+"Mark question ID as expired.
+Returns the updated `hitl-question' struct.
+
+(fn ID)")
+(autoload 'hitl-check-expirations "hitl"
+"Check and expire questions that have exceeded their timeout.")
+(autoload 'hitl-clear-store "hitl"
+"Clear all questions from the in-memory store.")
+(register-definition-prefixes "hitl" '("hitl-"))
+
+
 ;;; Generated autoloads from hitl-cursor.el
 
 (autoload 'hitl-cursor-next "hitl-cursor"
@@ -139,7 +197,6 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "hitl-ui" '("hitl-"))
-
 
 ;;; End of scraped data
 

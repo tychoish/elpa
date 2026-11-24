@@ -25,7 +25,6 @@ exits Emacs with status zero.  An error in ACTION prevents the exit.
 (autoload 'clix-help "clix"
 "Print registered clix options and subcommands.")
 (register-definition-prefixes "clix" '("clix--entries"))
-
 
 ;;; End of scraped data
 

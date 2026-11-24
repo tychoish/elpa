@@ -111,7 +111,6 @@ candidates to annotations.
 (autoload 'annotated-completing-read-setup-history "annotated-completing-read"
 "Enable savehist and desktop history integration for `annotated-completing-read'.")
 (register-definition-prefixes "annotated-completing-read" '("annotated-completing-read-"))
-
 
 ;;; End of scraped data
 
