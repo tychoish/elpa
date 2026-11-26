@@ -4,11 +4,11 @@
 
 ;; Author: Alvaro Ramirez https://xenodium.com
 ;; URL: https://github.com/xenodium/agent-shell
-;; Package-Version: 20261125.507
-;; Package-Revision: 7c107f28293b
+;; Package-Version: 20261126.1123
+;; Package-Revision: 3f86a162dbb2
 ;; Package-Requires: ((emacs "29.1") (shell-maker "0.98.3") (acp "0.20.1"))
 
-(defconst agent-shell--version "0.99.3")
+(defconst agent-shell--version "0.99.4")
 
 ;; Minimum dependency versions, as declared in the `Package-Requires'
 ;; header above.  Package managers that resolve versions enforce the
@@ -8627,6 +8627,27 @@ out.  Returns nil when nothing was buffered."
   (dolist (notification turn)
     (agent-shell--on-notification :state state :acp-notification notification)))
 
+(defun agent-shell--session-turns-keep (turns update-types)
+  "Return TURNS' notifications whose `sessionUpdate' is in UPDATE-TYPES.
+
+Notifications come back as one list, in arrival order.  For TURNS
+holding notifications of these `sessionUpdate' kinds (each NAME below
+stands for the full notification):
+
+  ((user_message_chunk available_commands_update)
+   (agent_message_chunk usage_update))
+
+and UPDATE-TYPES \='(\"available_commands_update\" \"usage_update\"),
+returns:
+
+  (available_commands_update usage_update)"
+  (seq-filter (lambda (notification)
+                (member (map-nested-elt notification '(params update sessionUpdate))
+                        update-types))
+              ;; Flatten TURNS
+              ;;   ((n1 n2) (n3) (n4 n5)) -> (n1 n2 n3 n4 n5)
+              (apply #'append turns)))
+
 (defun agent-shell--render-pending-restore (state)
   "Replay buffered prompt turns in STATE's pending-restore.
 
@@ -8640,6 +8661,9 @@ Honors `agent-shell-session-restore-verbosity':
           distinct from the first).
 
   `full': replays every buffered turn in chronological order.
+
+Turns `last' and `first-last' leave out still apply their session
+state (commands, mode, config options, usage and title).
 
 Notifications are dispatched through `agent-shell--on-notification'
 so they render as they would during a live turn.  Clears the
@@ -8684,9 +8708,24 @@ pending-restore state once replay completes."
                           :block-id "restore_truncated_history"
                           :body (agent-shell--make-boxed-message
                                  :text "Note: truncated history (last only)")))
+                       ;; Turns left out may still carry session state (say the
+                       ;; slash commands of an `available_commands_update').
+                       ;; Apply only those known state updates, so nothing with
+                       ;; wider side effects runs for a turn left out.
+                       (agent-shell--replay-turn
+                        state (agent-shell--session-turns-keep
+                               (butlast prompt-turns)
+                               '("available_commands_update" "current_mode_update"
+                                 "config_option_update" "usage_update" "session_info_update")))
                        (agent-shell--replay-turn state (car (last prompt-turns))))
                       ('first-last
                        (agent-shell--replay-turn state (car prompt-turns))
+                       ;; As with `last', apply the middle turns' session state.
+                       (agent-shell--replay-turn
+                        state (agent-shell--session-turns-keep
+                               (butlast (cdr prompt-turns))
+                               '("available_commands_update" "current_mode_update"
+                                 "config_option_update" "usage_update" "session_info_update")))
                        (when (> count 2)
                          (agent-shell--update-bootstrapping-fragment
                           :state state
