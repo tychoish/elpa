@@ -261,6 +261,7 @@ notes and the last tracker this session created.
 
 (fn &optional IDENTIFIER)")
 (register-definition-prefixes "denote-mcp-tracker" '("denote-mcp-tracker-"))
+
 
 ;;; End of scraped data
 

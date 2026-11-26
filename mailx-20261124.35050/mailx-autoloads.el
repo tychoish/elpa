@@ -264,6 +264,7 @@ The server remains stopped until mu4e is next started.
 (autoload 'mailx-views-teardown "mailx-views"
 "Remove attention bookmarks, tier column, and tier marker.")
 (register-definition-prefixes "mailx-views" '("mailx-views-" "mu4e-"))
+
 
 ;;; End of scraped data
 

@@ -365,6 +365,7 @@ Return non-nil if a file was merged.
 (autoload 'mcpkit-stats "mcpkit-stats"
 "Open the MCPKit tool usage statistics monitor." t)
 (register-definition-prefixes "mcpkit-stats" '("mcpkit-stats-"))
+
 
 ;;; End of scraped data
 

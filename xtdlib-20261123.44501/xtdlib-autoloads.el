@@ -59,6 +59,7 @@ Searches across all buffers, not just the current project.
 ;;; Generated autoloads from xtd-s.el
 
 (register-definition-prefixes "xtd-s" '("resolve-plural-form" "s-" "xtdlib--symbol-name-punctuation"))
+
 
 ;;; End of scraped data
 
