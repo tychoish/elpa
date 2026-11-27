@@ -1,0 +1,217 @@
+#+TITLE: agent-shell-workflow — Dynamic Workflow Composition & Template Library
+#+AUTHOR: tycho garen
+#+LANGUAGE: en
+
+* Overview
+
+~agent-shell-workflow~ provides dynamic workflow composition, template expansion,
+and dispatching for ~agent-shell~ sessions. It enables structured workflow
+authoring, file-based prompt templates, pre/post evaluation hooks, and ACR/Transient
+interactive selection menus.
+
+* Features
+
+- *Workflow Templates*: Configurable variable substitutions with regex extraction.
+- *Workflow Library*: Discoverable library of reusable workflow definitions (~agent-shell-workflow-library~).
+- *Interactive Menus*: Completing-read workflow picker (~agent-shell-workflow-menu~).
+- *Pluggable Dispatch*: Extensible target buffer resolution via ~agent-shell-workflow-dispatch-target-functions~ hook.
+- *Zero Queue Coupling*: Works independently or alongside ~agent-shell-queue~.
+
+* Installation
+
+** ELPAish
+#+BEGIN_SRC elisp
+(use-package agent-shell-workflow
+  :ensure t)
+#+END_SRC
+
+* Usage
+
+#+BEGIN_SRC elisp
+(require 'agent-shell-workflow)
+
+;; Select and insert/dispatch a workflow from library
+(agent-shell-workflow-select)
+#+END_SRC
+
+* Org task dispatch
+
+Run ~agent-shell-workflow-dispatch-org-task~ at an Org heading or its
+agenda entry, or select the ~implement-org-task~ workflow. The prompt
+includes the source file, absolute subtree line range, and stable Org ID.
+Preflight creates a missing ID and saves changed file-backed tasks before
+dispatch. Read-only headings need an existing ID. Unsaved buffers keep
+their IDs in memory until saved.
+
+Instructions ask agents to record progress and verification under the
+original heading, resolve its ID when lines move, and delegate independent
+work to sub-agents where useful. Source locations survive narrowing and
+foreground shell selection.
+
+For editable raw subtree capture without implementation instructions, use
+~agent-shell-queue-org-capture-from-heading~ instead.
+
+* Display behavior
+
+Each workflow controls how its shell buffer is presented, via =:display= (or
+=:buffer-display=) in =agent-shell-workflow-define= or as a keyword to
+=agent-shell-workflow-dispatch= (the dispatch argument wins; =:buffer-display= wins over =:display= when
+both are given).  An unrecognized value is ignored.  When neither is given, ~agent-shell-workflow-default-display~ applies.
+
+| Value                         | Alias    | Behavior                                      |
+|-------------------------------+----------+-----------------------------------------------|
+| =:foreground=                 | =focus=  | show and select the shell                     |
+| =:display=                    | =show=   | show without selecting                        |
+| =:background=                 | =bury=   | do not display; bury a newly created shell    |
+| =display-buffer= action alist |          | passed to =display-buffer=                    |
+| function                      |          | called with the shell buffer                  |
+
+A =Workflow `ID' dispatched to DIR= message is shown in the echo area
+when the prompt is delivered to a shell.  In the =agent-shell-workflow-define=
+macro, quote an action alist (=:display '((display-buffer-pop-up-window))=).  Set ~agent-shell-workflow-notify~ to also send an =alert=
+notification (skipped, with a message, when =alert= is unavailable).
+
+=fix-ci= and =executor-pipeline-run= default to =:background=.
+~agent-shell-workflow-dispatch-group~ shows at most the first repository's
+shell (=:foreground= is downgraded to =:display=) and backgrounds the rest.
+
+* Multi-repository workflows
+
+A workflow can work across several repositories in two ways:
+
+- *Together:* =(agent-shell-workflow-dispatch ID :repos '("/a" "/b"))= runs one
+  session.  The first directory is the context directory (shell, debounce);
+  every directory is in =:repos= for pre-ops and in the ={{repos}}= template
+  variable, one per line.  Without =:repos=, =:repos= is the single context
+  directory.  The =group-exec-all= library workflow uses this.
+- *Iterate:* =agent-shell-workflow-dispatch-group= dispatches once per
+  repository of a group (a symbol in ~agent-shell-workflow-repo-groups~ or a
+  list of directories), each with its own context directory.  =group-exec= and
+  =group-git-status= use this.  Pass =:together t= to dispatch-group to
+  dispatch once with all of the group's repositories instead.
+
+* Workspace resources and exact worktrees
+
+Workspace policies are opt-in. Existing repository groups and dispatches
+keep their original behavior. Magit-dash remains the owner of repository
+membership, marks and tags; pass its selected checkout paths to the
+workspace API. Two PR worktrees of one repository remain distinct targets.
+
+#+BEGIN_SRC elisp
+(require 'agent-shell-workflow-library)
+(agent-shell-workflow-register-repo-group
+ 'elisp '("~/src/agent-shell-queue/" "~/src/hitl/"))
+(agent-shell-workflow-register-workspace-policy
+ 'elisp :shell-directory "~/.emacs.d/" :resource 'local)
+(agent-shell-workflow-dispatch-group
+ 'workspace-inspect 'elisp :workspace 'elisp :together t)
+#+END_SRC
+
+Shell startup and reuse use =:shell-dir=. Git inspection, preflight and
+verification use each frozen target's =:worktree-dir=, exposed as
+=:context-dir=. Every member receives the complete =:repos= list and
+manifest. An explicitly selected shell must match the resource directory
+exactly. The public =:shell-dir= override also works without a workspace.
+
+Policies accept exact =:worktree-rules= and =:repository-rules= alists,
+whose values are =(:resource local :shell-directory DIR)= plists. Worktree
+rules take precedence over repository rules, then the selected workspace
+policy. Paths are frozen at registration; conflicting equally specific
+rules signal user errors. Remote resources need a transport adapter and
+currently remain visible preflight failures. No project-language inference
+or automatic remote provisioning occurs.
+
+** Read-only pilot and status
+
+The preview command inspects Git without creating any agent shell or
+changing a checkout. It writes a durable operation record. Use this before
+enabling mutation workflows:
+
+#+BEGIN_SRC elisp
+(let ((operation
+       (agent-shell-workflow-workspace-preview
+        '("~/src/agent-shell-queue/" "~/src/hitl/") 'elisp)))
+  (agent-shell-workflow-workspace-status
+   (plist-get operation :operation-id)))
+#+END_SRC
+
+=M-x agent-shell-workflow-select-worktrees= previews an exact directory
+selection before dispatch. Programmatic callers can supply several paths,
+including worktrees selected in Magit-dash. The status buffer shows each
+checkout, branch, state and recorded commits independently; refresh with =g=.
+
+** Coordinated mutations
+
+Commit preparation needs explicit files, a verification argv list and a
+commit message. The agent prepares changes; the coordinator checks the
+frozen branch/HEAD, runs verification in the checkout, stages the named
+files only when the index is empty, and records the resulting commit.
+There is no cross-repository atomic commit. Earlier successful commits
+remain visible when another member fails. Push is a separate requested
+operation and is never inferred.
+
+#+BEGIN_SRC elisp
+(agent-shell-workflow-dispatch-worktrees
+ 'commit-group '("~/src/hitl/.wt/topic/" "~/src/agent-shell-queue/.wt/topic/")
+ :workspace 'elisp :together t
+ :args '(:verify-command ("git" "diff" "--check")
+         :commit-message "fix: coordinate workspace changes"
+         :files ("README.org")))
+#+END_SRC
+
+Choose verification appropriate to the package; =git diff --check= above
+checks whitespace only. =:dependencies= is a list of
+=(:target-id ID :requires (ID ...))= entries over snapshot target IDs.
+Dependencies must form an acyclic graph; successful prerequisites unblock
+successors and failed prerequisites remain visible. Together dispatch
+requires a shared shell resource and verifies/commits members separately.
+
+=repair-conflicts= requires =:merge-ref=, =:verify-command= and
+=:commit-message=. It inspects the selected checkout and performs the
+requested =git merge --no-commit --no-ff= before asking the agent to repair
+conflicts. Remaining conflicts block the member. It never rebases or
+pushes. Mutation workflows use dedicated new shells for owned cancellation.
+
+Other workflows default to mutating and therefore require a verification
+command and a checkout lease. Explicitly read-only workflows can pass
+=:mutating nil=. =workspace-inspect= and =group-git-status= are classified
+as read-only. Turn completion alone never proves a successful commit.
+
+** Durability, cancellation and recovery
+
+Versioned JSON records live under =sprite-state-path=; tests or callers may
+bind =agent-shell-workflow-operation-directory=. Atomic writes and expected
+generations reject late updates. Checkout writer leases live under Git's
+common directory so different groups and Emacs instances cannot mutate
+one checkout concurrently. Queue persistence remains owned by ASQ.
+
+=agent-shell-workflow-operation-list= with non-nil INCOMPLETE-ONLY lists
+recoverable operations. =agent-shell-workflow-workspace-resume= refreshes
+observed identities and HEADs without dispatching. It retains the original
+manifest and blocks drift rather than retargeting by basename. Supply
+=:retry-targets= with frozen target IDs and fresh =:args= to retry selected
+never-started or completed failed turns. Successful commits, uncertain
+commit intents and potentially active turns are never replayed. Repair
+retries must still match the originally recorded merge.
+
+=agent-shell-workflow-operation-cancel= preserves checkouts and commits,
+cancels matching queued successors, and interrupts only active dedicated
+turns belonging to the operation. Dispatched mutation leases remain held
+until quiescence is established; a turn-complete notification is not proof
+that unrelated background processes stopped. Inspect ownership before
+explicitly recovering any retained or orphan lease. Recover abandoned
+checkout leases with =agent-shell-workflow-operation-inspect-checkout-lease=
+and =agent-shell-workflow-operation-release-checkout-lease=, passing the
+inspected owner ID and explicit quiescence confirmation. Missing-owner
+orphans require a nil expected owner. Live recorded operations and foreign
+hosts are refused. A crash leaving a short-lived lease =.guard= directory
+requires operator inspection; guards never expire automatically.
+
+Recover abandoned
+operation write locks with
+=agent-shell-workflow-operation-recover-write-lock= and the expected
+generation; live or foreign-host ownership is refused.
+
+* License
+
+GPL-3.0-or-later
