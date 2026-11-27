@@ -1,0 +1,203 @@
+#+title: diff-review/1 interchange contract
+
+The review JSON file is the interchange format between =diff-review= (the review front end), magit-dash, and code-review. Core fields are defined by [[https://github.com/xiaoxinghu/diff-review][diff-review]] and never change here. Extension keys are optional additions; consumers must ignore keys they do not know, and writers must preserve keys they do not understand.
+
+Fixtures: =test/fixtures/review-plain.json=, =review-remote-threads.json=, =review-draft.json=, =review-mixed.json=. Round-trip tests: =test/test-magit-dash-review-contract.el=.
+
+* Core fields (=diff-review/1=)
+
+| Key        | Type   | Meaning                                                                                  |
+|------------+--------+------------------------------------------------------------------------------------------|
+| =format=   | string | Always ="diff-review/1"=.                                                                |
+| =root=     | string | Worktree directory, with trailing slash.                                                 |
+| =base=     | string | Base ref.                                                                                |
+| =head=     | string | Branch followed, or a commit for a fixed range. Omitted means review the live worktree.  |
+| =viewed=   | object | Path to blob hash at which the file was viewed. A mark clears when the blob changes.     |
+| =comments= | array  | Comment threads (below).                                                                 |
+| =verdict=  | object | Optional. =state= (=changes=, =approved= or =comment=), =head= (full hash), =by=, =at=. Submit adds =submitted_state=, =submitted_head=, =submitted_at= (see Submit). |
+
+Each comment is a thread:
+
+| Key        | Type            | Meaning                                                                    |
+|------------+-----------------+----------------------------------------------------------------------------|
+| =id=       | string          | Local id.                                                                  |
+| =path=     | string          | Optional; absent means a comment on the whole review.                      |
+| =lines=    | array of 2 ints | Optional. First and last line, inclusive, counted in the content =blob= names.       |
+| =blob=     | string          | Blob hash of =path= when the comment was written.                          |
+| =author=   | string          |                                                                            |
+| =at=       | string          | ISO 8601 timestamp.                                                        |
+| =body=     | string          |                                                                            |
+| =replies=  | array           | Optional. Flat list of =author=, =at=, =body= (plus =id=, =gh_comment_id= from magit-dash). |
+| =resolved= | boolean         | Optional. JSON =true= or =false=. Parsed with =:false-object :false=.                |
+| =outdated= | boolean         | Optional; set when GitHub reports the thread outdated.                     |
+
+* magit-dash keys (already in use)
+
+Written by =magit-dash-review-json-transcode-thread= and =magit-dash-review-json-merge=.
+
+- Top level =magit_dash=: =provider= (="github"=), =repo=, =number=, =url=, =worktree=, =head_oid=, =base_oid=, =synced_at=. Rebuilt on every merge.
+- Per comment: =gh_thread_id=, =gh_comment_id=, =gh_resolved=, =origin=. =gh_comment_id= is a string and may be ="" when the first comment has no id; replies carry it once published.
+- =origin= values written by the code: =github= (transcoded or submitted threads), =agent= (agent-created comments), =code-review= (comments imported from code-review). =local= is only /read/ by =--merge-json= (to retain a thread); the code does not currently write it, so treat it as reserved for locally authored threads.
+
+* Extension keys
+
+All optional.
+
+| Where                    | Key                   | Type / meaning                                                       |
+|--------------------------+-----------------------+----------------------------------------------------------------------|
+| top level                | =code_review=         | Object: =pullreq_id= (string), =account=, =analysis=.                |
+| top level                | =submit_pending=      | Written by the code-review submit before sending, under a lock file (=FILE.submit-lock=): =at=, =head=, =baseline= (review and comment ids GitHub already had), =verdict= and =items= (per item =id=, =kind=, =body= text and =hash=, =path=, =line=, =start_line=, =reply_to=, =event=; the review item's body is the summary). An item leaves it only when stamped from a response or definitely failed. While any item is unresolved (not found, not checkable, edited or deleted since, or already imported by a sync) the whole submit refuses and sends nothing, and the legacy path refuses too: an uncertain item is never resent automatically. Items found on GitHub by an exact per-item match are stamped. =M-x magit-dash-review-clear-submit-pending= shows what GitHub has for each item and offers mark sent, discard (resend next submit) or keep. |
+| =magit_dash=             | =viewed_synced=       | Path to blob of the viewed marks known to be on GitHub; a path here that =viewed= lacks was un-viewed locally. Changes only after GitHub confirmed. |
+| =code_review.analysis=   | by path, then by hunk | =rank= (integer), =tags= (strings such as =NO-TEST=), =criteria= (ids). |
+| each comment             | =cr_id=               | Integer; code-review's comment id.                                   |
+| each comment             | =remote_id=           | String; GitHub node id once sent. May differ from =gh_comment_id=.   |
+| each comment             | =status=              | =draft=, =pending= or =sent=.                                        |
+
+=pullreq_id= is the chosen spelling (snake_case, like every other JSON key). =cr_id= is an integer while =remote_id= and =pullreq_id= are strings.
+
+Hunk key convention (confirmed against code-review): the key under =code_review.analysis.<path>= is the raw =@@= ranges text of the hunk header, for example ="-1,3 +1,4"=, not an index. It matches code-review's own hunk keys for ordinary =@@= headers; combined =@@@= hunks are omitted. Each value is ={"rank": N, "tags": [...], "criteria": [...]}=.
+
+Distinct from the core =resolved= flag, =gh_resolved= records GitHub's state and =resolved= may be changed locally, so they can differ.
+
+Further per-comment keys written by magit-dash (all optional, preserved by writers that do not know them):
+
+| Key              | Type    | Meaning                                                                                  |
+|------------------+---------+------------------------------------------------------------------------------------------|
+| =diff_side=      | string  | =LEFT= or =RIGHT=, from the thread's =diffSide=. Submit sends it as =side= (and =startSide= for a range). GitHub-owned: overwritten on merge. |
+| =local_resolved= | boolean | Set by a local resolve action (=magit-dash-review-append-reply= with resolve). Cleared when submit resolves the thread, or when GitHub reports it resolved or reopened. |
+| =gh_reopened=    | boolean | Set by merge when the last known GitHub state was resolved and GitHub now reports the thread open; cleared when GitHub resolves it again or a local resolve action runs. |
+| =gh_missing=     | boolean | Set by merge on a thread with a =gh_thread_id= that a fresh, complete (not truncated: fewer than 50 threads came back) remote fetch did not return, i.e. deleted on GitHub. Cleared when the thread matches again. Submit skips replies and resolution for it (with a message). |
+| =status=         | string  | Submit sets =sent= on every thread it posted; a =sent= or =draft= thread is never posted again. |
+
+Replies: submit sets =gh_comment_id= and =status= =sent= on each reply it posted. Reply ids hash in a counter and a random number, so two replies made in the same second differ.
+
+* Merge behaviour
+
+** Implemented (=magit-dash-review-json-merge=, aliased as =magit-dash-review--merge-json=)
+
+Implemented by the json-adapter task in =magit-dash-review-json.el=. =magit-dash-review.el= keeps the old function names as aliases.
+
+- Matching, first hit wins, each local thread used at most once: (1) GitHub node id (=remote_id= or =gh_comment_id= of either side), (2) =cr_id=, (3) =gh_thread_id=, (4) SHA-1 of path, /all/ line numbers (start and end) and body (empty bodies never match). So a local thread that already carries the remote's =gh_thread_id= wins over an identical-looking one without it. A candidate whose =gh_thread_id= differs from the remote thread's is never matched, so two identical comments on different GitHub threads stay apart. The hash tier skips candidates with =origin= =local= or =agent= unless the comment being matched has that same origin, so locally authored comments stay whole.
+- The result starts as a copy of the existing file, so unknown top-level keys (=code_review=, =x_foo=), unknown =magit_dash= keys, =viewed= and =verdict= survive. =format=, =root=, =base=, =head= and =magit_dash= (provider, repo, number, url, refs, =synced_at=) are rewritten from the new metadata when given.
+- A matched thread starts as a copy of the /local/ thread. These GitHub-owned keys take the remote value: =gh_thread_id=, =gh_comment_id=, =gh_resolved=, =origin=, =path=, =lines=, =blob=, =author=, =at=, =body=, =outdated=. A key in that list that the remote thread omits (=outdated=, =blob=, =lines=, ...) is removed from the merged thread, so a thread that stops being outdated clears. Every other key (=id=, =cr_id=, =remote_id=, =status=, unknown keys such as =x_bar=) keeps the local value and falls back to the remote one only when local has none. The merge result shares no structure with its inputs (deep copies), so mutating it never changes the existing table or the remote threads.
+- Sticky-resolved: =resolved= is =true= if either side is resolved. Consequence: a thread that is resolved locally stays resolved after GitHub re-opens it (=gh_resolved= does record GitHub's state), until the local file is edited. A thread resolved only on GitHub becomes resolved locally. Submit does not treat that sticky state as an instruction: a thread whose last known GitHub state was resolved and which GitHub now reports open gets =gh_reopened= =true= (and loses =local_resolved=), and submit does not call =resolveReviewThread= for it. Intent to resolve is a =local_resolved= marker, or a locally resolved thread that GitHub never had resolved and that was not reopened.
+- Deleted threads: with =:threads-complete= in the remote metadata (sync passes it when fewer than 50 threads came back; review-pr only when it got some), an unmatched local thread carrying a =gh_thread_id= gets =gh_missing= =true=.
+- Replies: all remote replies, then local replies without a =gh_comment_id= (unpublished), then published local replies the remote list lacks, kept and flagged =gh_missing= =true= because the remote fetch may be truncated (a reply deleted on GitHub therefore also lingers, flagged). Published local replies the remote list has are replaced by the remote copies.
+- Order: comments keep their existing local order (a merged thread stays in place); unmatched remote threads are appended in remote order.
+- Different repo: if the existing table's =magit_dash.repo= differs from the incoming repo, the existing table is ignored (with a message) and a fresh one built. Review files are named =pr-N.json= for legacy files and =pr-OWNER_NAME-N.json= otherwise (=magit-dash-review-file= with a repo argument); a legacy =pr-N.json= is used only when its recorded repo matches; one with no =magit_dash.repo= cannot be verified for any repo, so it is ignored (message) and the repo-keyed name is used.
+- Timestamps: =at= is copied from GitHub's =createdAt= and omitted when GitHub gives none; the merge never invents a time, so merging the same input twice is idempotent (only =magit_dash.synced_at= changes).
+- Ids: =id= is the first 12 hex digits (48 bits) of the SHA-1 of the GitHub node id, stable across sessions; a comment with no node id gets a random 12-digit id.
+- Unmatched remote threads are added as they are; unmatched local threads are kept whole. A remote thread that arrives between two merges is matched by =gh_thread_id= on the next one and appears once.
+
+** Export and import
+
+- =magit-dash-review-json-export= =(REPO . NUMBER)= reads the review file (=magit-dash-review-json-source-function=), deep-copies it, and overlays code-review's =cr_id= and =remote_id= onto matching threads only where the file has none; =status= from the seam wins whenever it is non-empty and different, so a comment the seam reports =sent= is never left as =draft=. Code-review comments with no match are appended with =origin= =code-review=. Missing =code_review= keys (=pullreq_id=, =account=, =analysis=) are filled from code-review. Replies, resolved state, verdict and viewed always come from the file.
+- =magit-dash-review-json-import= TABLE mirrors comments and the verdict into code-review and returns =(:added N :updated N :skipped N :deleted N :verdict-failed N :assigned ALIST)=. Unchanged comments (same body and same unpublished reply bodies, see below) are skipped, so a second import is a no-op; status is ignored because code-review assigns it. A write that signals (transport failure, or no supported API) counts as skipped and never touches TABLE, so drafts stay drafts. An error from the seam's =comments= read is caught, messaged, and counts every comment as skipped (nothing is written, so nothing is duplicated). The verdict is read through the seam first and written only when it differs; a failed verdict write counts in =:verdict-failed=. TABLE needs =magit_dash.repo= and =number=.
+- =:assigned= is a list of =(INDEX . CR-ID)= for comments of TABLE that had no =cr_id= but are now stored under one. =magit-dash-review-json-apply-assigned= sets them on TABLE; the mirror (=magit-dash-review--maybe-mirror=) does that and rewrites the review file, so a later edit of an id-less draft updates the stored comment instead of adding a second copy. Import itself never mutates TABLE.
+- Export with no review file (nil source) fills =magit_dash.repo= and =number= from PR-KEY, so its result can be imported. The default source function returns nil, with a message, when the file's =magit_dash.repo= is not the PR-KEY repo, or when reading fails.
+- Seam values are JSON tables: hash tables, vectors, strings, numbers, =t=, =nil=, =:false=. Lists are tolerated in what the seam returns: export converts every non-empty list to a vector, so the exported table always serializes. =magit-dash-review-json-deep-copy= accepts both shapes.
+- Round trip: export, import, export yields identical JSON, including =cr_id=, even on the first export. code-review gives drafts stable ids in [2^44, 2^53) (so they are JSON-safe integers and cannot collide with forge ids) but only keeps a caller-chosen id when the adapter passes =:id=. So export gives every local draft without a =cr_id= the deterministic id =magit-dash-review-json-draft-id= (a hash of the comment =id=, stamping one from the content first when it has none; replies also hash their parent) and status =draft=, and import passes that id to code-review. Matching treats a derived id as a =cr_id= match in both directions, so a draft is never added twice. The old "first export lacks =cr_id=" caveat is gone; a comment that only code-review knows keeps the id code-review minted.
+- =magit-dash-review-json-export= takes an optional WITH-ANALYSIS argument: =code_review.analysis= is filled from the seam =analysis= op only then, because the call is synchronous and can run worktree-wide =git grep= and =git blame=. Never pass it on the UI thread or in the live daemon. Without a stored diff and an existing worktree the seam returns nil (with a message) rather than a partial result that would read as "no findings". The file's own =analysis= is never overwritten.
+- The verdict comes from the file. When the file has none, code-review's pending verdict (=state=, =head=, =at=) fills it. Import writes only =state= and =head= (=by=, =at= and the =submitted_*= stamps stay in the file) and only when state or head differ from the stored one.
+- Reply content compares the bodies of unpublished replies (no =gh_comment_id=) only: code-review stamps its own author and time on a draft, and a published reply is listed by code-review as its own comment, not as a reply. =resolved= is never compared (code-review cannot store it), so a resolved-only difference is unchanged. Import never clears code-review's verdict: a verdict with no =state= is not written.
+- A draft must carry an =id=: import refuses (skips with a message) a draft that has neither =cr_id= nor =id=, because nothing else identifies it across edits. Export stamps an =id= (from the comment's content) on such drafts, so this only affects hand-written JSON imported without export. Reply =cr_id= values are derived from the reply and parent ids and are not written back.
+- The file wins: import overwrites a draft's body with the file's, so an edit made to the same draft in code-review's UI is lost on the next import. When a comment in the JSON is already published (=status= =sent=, =origin= =github=, or has =remote_id=, =gh_comment_id=, or =gh_database_id=) and code-review still holds a matching =draft= comment (by =cr_id=, derived draft id, or content hash of path, lines, and body), import prunes the stale code-review draft via the =delete= seam op (=code-review-api-delete-comment=) and counts it in =:deleted=. Draft and pending JSON comments never trigger deletion.
+
+** Dry run
+
+=magit-dash-review-json-import-dry-run= (interactive, takes =owner/repo#N= or =(REPO . NUMBER)=, unbound) imports the review file read by =magit-dash-review-json-source-function= (from the main worktree of =default-directory=) with =magit-dash-review-json-dry-run= bound. That is the table the mirror imports, except that the mirror first merges GitHub state into it and the dry run does not. It signals =user-error= when there is no such file instead of reporting an empty import. The default seam then passes =:dry-run t= to =code-review-api-upsert-comment= and =code-review-api-set-verdict=, which write inside a transaction, validate by reading back, and roll back; stale published drafts are counted in =:deleted= without calling =code-review-api-delete-comment=. The command messages how many comments would be added, updated, skipped and deleted (a skip includes a write code-review would refuse, each with its own message: unknown PR, missing path, sent comment) and how many verdict writes would fail, and returns the result plist with =:dry-run t=. Nothing is persisted, so it is the way to check what turning on the mirror would do. A seam other than the default is refused unless its function symbol has a non-nil =magit-dash-review-json-dry-run-supported= property (and then must honour =magit-dash-review-json-dry-run=), since otherwise the "dry run" would write.
+
+** Submit (=magit-dash-review-submit=, legacy GraphQL path)
+
+- Requests: every GraphQL call sends query and variables as one JSON body in a temporary file (=gh api graphql --input FILE=), never as =-F key=value= fields. =-F= reads =@file= values from disk and coerces numbers, =true= and =null=, so review text (reply bodies, owner, repo, ids) could otherwise read local files or change type. A test asserts no =-F= reaches gh and that bodies such as =@/etc/hostname=, =123= and =null= arrive as literal strings. (=magit-dash-pr-fetch-threads-graphql= in =magit-dash-pr.el=, used by sync and review-pr, still passes owner and repo with =-F=; it is outside the review files.)
+- Persistence: the file is written after every successful mutation (each chunk of new threads, each reply, each resolution), so a failure part way leaves what was sent recorded and a repeated submit sends only the remainder. New threads are posted in chunks of 40 as separate reviews (all =COMMENT= except the last, which carries the verdict event and summary); each returned comment is matched to its local thread on path, line and body, never by position, then stamped (=gh_thread_id=, =gh_comment_id=, =origin= =github=, =status= =sent=). A posted thread GitHub returned no matching comment for is still marked =sent= (message) and is linked by the next sync. The one narrow window left is a crash between GitHub answering and the write.
+- Errors: a failing reply or resolution on one thread is collected; later replies on that thread are not tried (order), other threads still run, and the run ends with one error listing them. A failing review chunk aborts, since nothing after it would be coherent.
+- Verdict: =approved= sends =APPROVE=, =changes= =REQUEST_CHANGES=, =comment= =COMMENT=; any other state sends nothing (message). After sending, =verdict.submitted_state=, =submitted_head= and =submitted_at= are stamped; a verdict is sent again only when its state or =head= no longer match them. =commitOID= is =magit_dash.head_oid= (else the PR's current head). =APPROVE= and =REQUEST_CHANGES= are refused with a =user-error= when =magit_dash.head_oid= or =verdict.head= differs from the PR's current =headRefOid=; sync and re-review first. Nothing is posted in that case.
+- Replies and resolutions skip =gh_missing= threads.
+- Reading: submit reads the file with =magit-dash-review-json-read-for-write=; see Encoding for the backup fallback.
+
+** Which writers protect a modified buffer
+
+Every writer (=append-reply=, draft insertion, =promote-draft=, EARS projection, =submit=, the hitl batch flush, the code-review mirror, =magit-dash-review-pr=, =worktree-diff=, =sync= and worktree relocation) refreshes a visiting buffer through one helper, =magit-dash-review-json-refresh-visiting-buffer= (alias =magit-dash-review--refresh-visiting-buffer=): a clean buffer is reverted (=diff-review-refresh= in a =diff-review-mode= buffer), a modified one is never reverted or refreshed (message; the file on disk is still updated and saving the buffer later asks about the newer file). With =magit-dash-review-json-modified-buffer-action= =save= (default =skip=) the modified buffer is saved first instead; with =refuse=, writers signal a =user-error= before reading or writing when the visiting buffer has unsaved edits. =sync= and =review-pr= go further and do nothing to a file whose buffer is modified. Both re-read the file after their network calls, so edits made meanwhile are merged.
+
+** Flag
+
+=magit-dash-review-use-code-review-adapter= (default nil; whether it should default to on is an open question) makes =magit-dash-review-pr= and =magit-dash-review-sync= import the merged table into code-review and write the assigned =cr_id= values back to the file. The PR must already be in code-review's database. =magit-dash-review-submit= still uses its GraphQL mutations (see Submit); routing it through code-review is the route-submit task. Check the effect first with =magit-dash-review-json-import-dry-run=.
+
+=code-review-worktree-resolver= is not set by this package; set it in your config to =magit-dash-review-worktree-resolver=, called as =(REPO-DIR NUMBER)= with an integer. It returns the existing =pr-N= or =cr-N= worktree from =magit-dash-pr--find-existing-worktree=, or nil on any failure; it never creates a worktree and never prompts. code-review uses the result only when it is a worktree of the same repository whose HEAD is the PR head.
+
+* Encoding
+
+Files are UTF-8: written with =utf-8-unix= and read as =utf-8=, so non-ASCII text round-trips as itself. Writing is atomic: the JSON goes to a temporary file in the same directory which is renamed over the target. Before copying =FILE.bak= and renaming, =magit-dash-review-json-write-file= checks the target's mtime+size stamp (=magit-dash-review-json-file-stamp=, recorded by =magit-dash-review-json-read-for-write= or passed explicitly) and signals =magit-dash-review-json-conflict= if the file changed on disk since it was read; =magit-dash-review-sync=, =magit-dash-review-pr=, =magit-dash-review-append-reply=, and =magit-dash-review-analysis-write= retry up to 3 times on conflict to merge instead of clobbering. A symlinked file is resolved first (the link stays a link, the target is replaced and gets the =.bak=); the old file's modes are kept, a new file is 0600; =FILE.tmp-*= leftovers older than a day are removed. The previous file is copied to =FILE.bak= only when it parses as JSON, so =.bak= is always the last good file and a corrupt file never replaces it. Reading a file that does not parse falls back to a parseable =FILE.bak= with a loud message and sets =magit-dash-review-json-last-read-fallback=; if the backup is corrupt too the read signals. Writers read through =magit-dash-review-json-read-for-write=, which asks =yes-or-no-p= before building on a fallback and signals a =user-error= when declined. =magit-dash-review-sync= merges against a fresh read taken after its network calls and does nothing (with a message) when the review file is open in a modified buffer. The worktree recorded in a review file is only used when it belongs to the same repository (same git common directory); otherwise the main checkout is used. Moving a worktree (=magit-dash-pr--move-worktree=) rewrites =root= and =magit_dash.worktree= in the review files that named it.
+
+Parse with =:object-type 'hash-table :array-type 'array :null-object nil :false-object :false=; serialize with the matching =:null-object nil :false-object :false=. Empty =viewed= is ={}=, empty =replies= is =[]=.
+
+* code-review public API
+
+code-review gained a public data API (merged on main of =~/src/code-review=; the old audit found none). The adapter's default seam, =magit-dash-review-json-code-review-default=, calls only these functions. =REPO= is =owner/name= and =NUMBER= the PR number; the PR must already be in code-review's database (open it there once), since no function creates a pullreq record. Each call is guarded at the call site: every code-review function an op calls must be =fboundp= (an autoload counts and loads on first use; the seam never =require=s anything), otherwise the op is skipped with a message naming the missing function (reads return nil, writes signal =user-error=, which import counts as skipped). Declare or autoload the API in your config so it is found.
+
+| Function (library)                                                         | Seam op       | Notes |
+|----------------------------------------------------------------------------+---------------+-------|
+| =code-review-api-pullreq= REPO NUMBER (=code-review-api=)                  | =pullreq=     | Returns plist =:id :account :head-oid :url :state= (or nil). Export fills missing =code_review.pullreq_id= (=:id=) and =code_review.account= (=:account=) without overwriting existing values or writing nil. |
+| =code-review-api-comments= REPO NUMBER (=code-review-api=)                 | =comments=    | Plists =:id :remote-id :path :line :lines :side :body :author :at :status :reply-to :resolved=. =:id= is =cr_id=, =:remote-id= is =remote_id=, =:status= is =draft=, =pending= or =sent=, =:side= is =diff_side=, =:lines= is =(START END)= (the JSON =lines= is =[START END]=, =[L L]= for one line). A plist with =:reply-to= becomes an entry of its parent's =replies=. |
+| =code-review-api-upsert-comment= REPO NUMBER PLIST =&key dry-run=          | =write=       | Creates or updates a local draft by =:id=. Ids are integers in [2^44, 2^53), so the adapter must pass =:id=; sent and pending comments are read-only (=user-error=); a draft needs =:path=; =:reply-to= must be a forge comment of the PR; =:resolved=, =:status=, =:remote-id=, =:at= and =:author= (on update) are ignored. Last writer wins against an open review buffer. |
+| =code-review-api-delete-comment= REPO NUMBER ID =&key dry-run=             | =delete=      | Deletes a stale local draft matching an already-published JSON comment during non-dry-run import (skipped with `:deleted` counted in dry-run). |
+| =code-review-api-verdict= / =-set-verdict= REPO NUMBER STATE HEAD =&key dry-run= | =verdict= | Stored in the pullreq record's otherwise unused =review= slot (no schema migration). STATE is =approved=, =changes=, =comment= or nil to clear. =code-review-api-verdict-stale-p= is not used yet. The submit commands do not read it; route-submit must default to it and clear it after a send. |
+| =code-review-api-viewed= / =-set-viewed= (=code-review-api-viewed=)        | =viewed=, =set-viewed= | See Viewed state. |
+| =code-review-api-analysis= and =-available-p= (=code-review-api-analysis=) | =analysis=    | See Analysis. |
+
+Fields the JSON carries that code-review cannot store: =resolved= (read-only; an import that only changes resolved counts as skipped), =outdated=, =blob=, =gh_*= keys, =origin=, a reply to a draft (code-review only stores replies to forge comments), and verdict =by=, =at= and =submitted_*= (those stay in the file).
+
+** Mapping
+
+| diff-review/1 comment | code-review plist | Rule |
+|-----------------------+-------------------+------|
+| =cr_id=               | =:id=             | Integer. A local draft without one uses =magit-dash-review-json-draft-id=. |
+| =remote_id=           | =:remote-id=      | Read only. |
+| =status=              | =:status=         | String of the symbol; read only. |
+| =resolved=            | =:resolved=       | =true= or =false=; read only. |
+| =lines=, none         | =:line=, =:lines= | =[S E]= maps to =:lines (S E)= and =:line E=; one line is =:line= alone. |
+| =diff_side=           | =:side=           | =LEFT= or =RIGHT=. |
+| =replies[]=           | =:reply-to=       | An unpublished reply of a sent comment is upserted with =:reply-to= set to the parent's =cr_id=; a reply to a draft is not stored. |
+
+A comment GitHub owns (status =sent= or =pending=, origin =github=, or any of =remote_id=, =gh_thread_id=, =gh_comment_id=) is never upserted as a draft: only its unpublished replies are stored, and a comment code-review does not hold is skipped with a message, so a sent thread is never duplicated as a draft.
+
+** Viewed state
+
+Seam ops =viewed= (a table of path to ={"blob", "viewed"}= for the stored diff) and =set-viewed= (a table of path to blob; returns =set=, =unchanged= or =stale= per path). code-review's =reviewed= table has no blob column, so its viewed flag follows the file's diff block: a content change that keeps the hunk headers leaves the mark set. Never trust the flag alone: =magit-dash-review-json-viewed-agreement= keeps a diff-review mark only when code-review says viewed /and/ the blobs match (prefix match, at least 7 characters, since code-review stores the index line's abbreviated hash); a mismatch counts as not viewed. =set-viewed= passes the blob so code-review refuses a stale one. These marks are local to code-review: its GitHub seeding overwrites them on the next fetch, and nothing here pushes them to GitHub (the viewed-sync task must). Setting a mark signals =user-error= while a GitHub sync of that path is pending.
+
+** Analysis
+
+Seam op =analysis= returns the nested table exported under =code_review.analysis= (path, then =@@= ranges text, then =rank=, =tags=, =criteria=), only when =code-review-api-analysis-available-p= (the PR and its diff are stored and an existing worktree is found); otherwise nil with a message, because without the engines the data lacks NO-TEST, RISK, INCIDENT and criteria. The call is synchronous and can run worktree-wide =git grep= and =git blame=, and it writes code-review's shared analysis caches, so it is never called on the UI thread or in the live daemon and export only runs it on request. Ranks depend on engine settings, and the heat tag appears only after a history harvest, so results can differ between calls.
+
+** Showing analysis in diff-review (=magit-dash-review-analysis.el=)
+
+=magit-dash-review-analysis-mode= (global minor mode) only /displays/ =code_review.analysis= already in the review file: the highest rank, the union of the =[TAG]= markers and the criteria ids on a file's line in the diff-review sidebar and overview, and the hunk's own rank, tags and criteria at the end of its first line in a file buffer. Turning it off removes everything. diff-review has no decoration hooks, so the mode adds two named pieces of advice to its internals (=diff-review--file-line= and =diff-review--decorate=); both swallow their own errors and report one message, and enabling the mode signals a =user-error= if those functions are missing. diff-review itself is unmodified.
+
+diff-review parses hunks with =git diff -U0=, whose old-side ranges differ from code-review's. A hunk therefore matches an analysis key when the key's /new-side/ range overlaps the hunk's new lines; a deletion (count 0) lives on the line after it. Keys that match nothing are ignored.
+
+=M-x magit-dash-review-analysis-refresh= computes analysis explicitly: it exports with analysis in a throwaway =emacs --batch -Q= child (never on the UI thread), then writes =code_review.analysis= with the adapter's writer, replacing any analysis in the file. A second refresh of the same file replaces the running child; =magit-dash-review-analysis-cancel= kills it; =magit-dash-review-analysis-timeout= (default 600 seconds) bounds it. A modified visiting buffer follows =magit-dash-review-json-modified-buffer-action=; with =skip= the file is written, the buffer is not refreshed and the message says so. A corrupt review file (only its backup parses) is never overwritten. Because the child runs with =-Q=, code-review must be on the parent's =load-path= or the setup (database, accounts) must come from =magit-dash-review-analysis-child-init-files=, a list of files loaded with =-l= first; refresh refuses with a =user-error= otherwise.
+
+Caveat: the sidebar is narrow (36 columns by default, =diff-review-sidebar-width=), so a file line with several tags may wrap. The commands are unbound: diff-review's map is third-party.
+
+* Submitting through code-review (experimental)
+
+=magit-dash-review-submit-via-code-review= (default nil) sends the review through =code-review-api-submit= instead of the legacy GraphQL mutations. Caveats:
+
+- It is experimental and off by default.
+- Emacs blocks, and cannot be quit, for up to =magit-dash-review-submit-time-limit= seconds (the whole send, including the lookups before and after). When interactive you confirm first and the file is read again afterwards.
+- An uncertain send (a timeout or 5xx on a create) leaves =submit_pending=. Until =M-x magit-dash-review-clear-submit-pending= resolves it, EVERY submit refuses, including the legacy path: nothing is ever resent automatically. Items found on GitHub by an exact match are stamped; the rest need a human decision.
+- =mark sent= and =discard= in the clear command are trusted human decisions: marking an unposted item sent loses it, discarding a posted one posts it twice (both ask to confirm; the default is keep).
+- After a push a landed comment can show as not found, since GitHub moves its commit and line.
+- Replies need the thread's REST id (=gh_database_id=); sync first. There is no fallback.
+- Do not use code-review's own submit commands on the same PR while a record exists.
+- The lock (=FILE.submit-lock=) is a file lock, not a kernel lock. A live process on this host is never overridden; a lock from another host is only replaced when over an hour old.
+- After a landed review, setting the verdict again (a new state or head) is refused once: the landed review is stamped as what it actually carried, and the new verdict stays pending and is sent by the next submit. New comments after a landed review with the same summary are posted singly, outside a review.
+- A crash in the middle of a send can leave items already stamped in the file but still listed in =submit_pending=. The next submit settles those itself; the clear command lists them as already stamped, and both mark sent and discard are safe for them.
+- The clear command asks for confirmation before discarding an item that was found on GitHub or whose lookup failed; only a positive "not found" (or an already stamped item) is discarded without the second question.
+- The lock is held across the confirmation and token prompts, so an abandoned prompt blocks other instances until it is answered or C-g'd. Delete =FILE.submit-lock= by hand only after confirming that the owning Emacs is gone.
+- Item ids must be unique among the comments of a review file and among its replies.
+- Do not run a submit from another Emacs on the same file while the clear command is prompting: the clear command refuses to apply if the record changed, but the other submit would still have run.
+- After a crash that had already stamped the review, retrying with the same summary is refused once, and a second retry posts the summary again as a COMMENT review: leave the summary empty then.
+- "A verdict set again is sent by the next submit" holds only when the verdict carries a head; a head-less verdict is not resent after the review head moves.
+- A resolve marked on a comment this path just posted is not applied by the submit that posts it, and refuses later submits until =magit-dash-review-sync= has fetched its thread id.
