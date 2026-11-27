@@ -1,0 +1,250 @@
+#+TITLE: Futures, Async/Await, and Fleet Coordination
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+A sprite is an Emacs daemon that evaluates forms in its own process.
+=sprite-future= dispatches a form to one sprite without waiting for the
+result.  =sprite-fleet= schedules work across several sprites and offers
+progress, cancellation, and streaming callbacks.  Both use the transport
+selected by ~sprite-communication-backend~.
+
+The examples below assume that the named sprites exist and that any
+functions and files needed by a remote form are available in those daemons.
+Use a sprite's full name, such as =tychoish.0.worker=, as the target.
+
+* Dispatch to one sprite
+:PROPERTIES:
+:CUSTOM_ID: dispatch-to-one-sprite
+:END:
+
+Load ~sprite-future~ and use ~with-sprite-async~ to dispatch a literal form.
+It returns the original future immediately, and its optional callbacks run
+when that future resolves or rejects.  A future may already be settled at
+return time, for example if a direct connection fails immediately.
+
+#+begin_src emacs-lisp
+(require 'sprite-future)
+
+(let ((future
+       (with-sprite-async "tychoish.0.worker"
+           (+ 20 22)
+         :on-resolve (lambda (value) (message "Result: %S" value))
+         :on-reject (lambda (error) (message "Failed: %S" error)))))
+  ;; Keep FUTURE if you need to inspect, wait for, or cancel the call.
+  future)
+#+end_src
+
+** Dispatch without callbacks
+:PROPERTIES:
+:CUSTOM_ID: dispatch-without-callbacks
+:END:
+
+Use the returned future when another command needs to cancel or inspect the
+operation.  The form runs in the worker, so this counts the worker's buffers.
+
+#+begin_src emacs-lisp
+(defvar my-worker-buffer-count nil)
+
+(setq my-worker-buffer-count
+      (with-sprite-async "tychoish.0.worker"
+        (length (buffer-list))))
+
+;; Later, if it is still pending:
+(when (sprite-future-pending-p my-worker-buffer-count)
+  (sprite-future-cancel my-worker-buffer-count 'no-longer-needed))
+#+end_src
+
+** Use a result in an async workflow
+:PROPERTIES:
+:CUSTOM_ID: use-a-result-in-an-async-workflow
+:END:
+
+~with-sprite-async~ also produces a future that a workflow can await.  Here
+the first form is sent literally; its result is returned to the local Emacs.
+
+#+begin_src emacs-lisp
+(sprite-future-async-defun my-worker-buffer-count-async ()
+  (1+ (sprite-future-await
+       (with-sprite-async "tychoish.0.worker"
+         (length (buffer-list))))))
+
+(sprite-future-then (my-worker-buffer-count-async)
+                    (lambda (count) (message "Adjusted count: %d" count))
+                    (lambda (error) (message "Worker failed: %S" error)))
+#+end_src
+
+** Send local values
+:PROPERTIES:
+:CUSTOM_ID: send-local-values
+:END:
+
+The macro quotes its form, just like ~with-sprite~: local variables in the
+form are not interpolated into the remote evaluation.  To build a form from
+local values, use ~sprite-future-eval~ and attach callbacks separately:
+
+#+begin_src emacs-lisp
+(let* ((number 42)
+       (future (sprite-future-eval "tychoish.0.worker" `(1+ ,number))))
+  (sprite-future-then future
+                      (lambda (value) (message "Result: %S" value))))
+#+end_src
+
+~sprite-future-then~ returns a *new* future for the callback's result;
+~with-sprite-async~ returns the original dispatch future.  Callbacks on an
+already settled future run immediately.  Errors in a callback reject the
+new chained future.  Use the new future when subsequent code depends on a
+callback's return value.  Callback errors passed to ~with-sprite-async~ are
+reported with ~display-warning~, since the macro returns the dispatch future
+rather than the chained future.
+
+* Logging and outcomes
+:PROPERTIES:
+:CUSTOM_ID: logging-and-outcomes
+:END:
+
+Dispatch logging is opt-in.  Pass ~:log t~ to write =sent= and then
+=received= or =error= entries in =*sprite:NAME*= in the calling Emacs.  The
+log contains the printed form and result or error; chained futures do not add
+duplicate dispatch entries.  Open the buffer with ~sprite-open-log~:
+
+#+begin_src emacs-lisp
+(with-sprite-async "tychoish.0.worker" (+ 1 2) :log t)
+(sprite-future-eval "tychoish.0.worker" '(+ 1 2) :log t)
+(with-sprite "tychoish.0.worker" (+ 1 2) :log t)
+#+end_src
+
+The synchronous ~with-sprite~ interface also logs only when ~:log t~ is
+supplied.
+
+A transport failure may reject a future with nil, and a synchronous failure
+while starting a transport is signaled to the caller and logged when enabled.  Successful
+nil results are possible too.  Use ~sprite-future-resolved-p~,
+~sprite-future-rejected-p~, and ~sprite-future-pending-p~ when the state
+matters.  ~sprite-future-wait~ blocks and returns the future's value; its nil
+return alone does not distinguish a nil result, failure, and timeout.  Check
+the future's state after waiting.  Pass
+~:timeout~ to bound the wait.  Waiting does not cancel a timed-out future.
+
+~sprite-future-cancel~ rejects a pending future with
+~(:canceled . REASON)~ and closes its client process or connection.  It
+returns nil if the future has already settled.  Canceling the client does not
+guarantee that remote work already started has stopped.
+
+* Async workflows
+:PROPERTIES:
+:CUSTOM_ID: async-workflows
+:END:
+
+~sprite-future-async-defun~ defines a function returning a future.
+~sprite-future-await~ suspends its body until an awaited future settles,
+without blocking the caller's event loop.  Rejection signals
+~sprite-future-rejected~ inside the workflow, where ~condition-case~ can
+handle it; an uncaught error rejects the workflow future.
+
+#+begin_src emacs-lisp
+(sprite-future-async-defun calculate-in-stages ()
+  (let* ((first (sprite-future-await
+                 (sprite-future-eval "tychoish.0.worker" '(+ 20 22))))
+         (second (sprite-future-await
+                  (sprite-future-eval "tychoish.1.worker" `(* ,first 2)))))
+    second))
+
+(sprite-future-then (calculate-in-stages)
+                    (lambda (value) (message "Pipeline: %S" value)))
+#+end_src
+
+* Process work across a fleet
+:PROPERTIES:
+:CUSTOM_ID: process-work-across-a-fleet
+:END:
+
+~sprite-fleet-map~ returns a future by default.  Each item is evaluated on
+one available worker, and the result list preserves input order by default.
+For a form argument, the worker binds the current item to ~item~ and ~_~.
+Alternatively pass a function symbol or lambda that can run in the remote
+Emacs.  ~:fleet-size~ selects the requested number of sprites when the fleet
+is acquired automatically; ~:sprites~ supplies an explicit list of sprites
+or full target names.
+Pass ~:log t~ to ~sprite-fleet-map~, ~sprite-fleet-mapcar~,
+~sprite-fleet-each~, or ~sprite-fleet-pool~ to log each worker dispatch and
+outcome in that worker's log buffer.
+
+#+begin_src emacs-lisp
+(require 'sprite-fleet)
+
+(let ((future (sprite-fleet-map '(* item item) '(1 2 3 4)
+                                :fleet-size 2)))
+  (sprite-future-then future
+                      (lambda (values) (message "Squares: %S" values))))
+#+end_src
+
+~sprite-fleet-mapcar~ is the compatibility interface and waits by default;
+pass ~:async t~ for a future.  ~sprite-fleet-map~ can instead block with
+~:wait t~ or ~:async nil~.  For blocking calls ~:timeout~ bounds the wait,
+but does not cancel remaining work.
+
+** Stream results and control a run
+:PROPERTIES:
+:CUSTOM_ID: stream-results-and-control-a-run
+:END:
+
+~sprite-fleet-each~ starts a run and returns its controller handle.
+~:on-item~ receives the original item, its raw result or rejection value,
+and its zero-based input index as workers settle.  ~:on-done~ receives the
+result list on normal completion.  Since ~each~ uses unordered collection,
+do not assume its result list has input order.
+
+#+begin_src emacs-lisp
+(let ((handle
+       (sprite-fleet-each '(* item item) '(1 2 3 4)
+                          :fleet-size 2
+                          :on-item (lambda (item result index)
+                                     (message "%S at %d: %S" item index result))
+                          :on-done (lambda (results)
+                                     (message "Finished: %S" results)))))
+  (sprite-fleet-progress handle) ; => (COMPLETED . TOTAL), total may be nil
+  ;; Retain HANDLE to pause, resume, cancel, or wait from other commands.
+  handle)
+#+end_src
+
+~sprite-fleet-pause~ stops new dispatches while in-flight work continues;
+~sprite-fleet-resume~ schedules pending work again.  ~sprite-fleet-cancel~
+cancels a handle or a future returned by ~sprite-fleet-map~.  To control a
+map run by handle, obtain it with ~sprite-future-fleet-handle~.
+~sprite-fleet-wait~ accepts either a handle or its fleet future.
+
+** Ordering and failures
+:PROPERTIES:
+:CUSTOM_ID: ordering-and-failures
+:END:
+
+~:order~ on ~sprite-fleet-map~ and ~sprite-fleet-pool~ accepts ~preserve~
+(input order, the default), ~fifo~ (completion order), ~lifo~ (reverse
+completion order), or ~unordered~.  ~:delay~ sets the timer delay between
+dispatch steps, in seconds.
+
+~:error-policy~ selects what happens when a worker rejects:
+
+- ~:collect-nil~ (default) puts nil in the results for that item.
+- ~:collect-error~ puts ~(:error ERROR :target NAME)~ in the results.
+- ~:abort~ cancels the run and rejects its overall future.
+
+If an input iterator signals an error, the run is canceled and its overall
+future rejects with ~(:canceled :iterator-failed ERROR)~.
+
+Callbacks passed to ~:on-item~ receive the raw worker value even with
+~:collect-error~.  Check the overall future or supply a rejection callback
+when using ~:abort~.  The lower-level ~sprite-fleet-pool~ exposes the same
+controller for callers needing explicit flow control.
+
+* Reference
+:PROPERTIES:
+:CUSTOM_ID: reference
+:END:
+
+See the [[file:api.org][Sprite API Reference]] for future and fleet operations, and the
+[[file:daemon-lifecycle.org][daemon lifecycle guide]] for creating and naming sprites.

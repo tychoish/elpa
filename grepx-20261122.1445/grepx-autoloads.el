@@ -115,10 +115,9 @@ evaluate `(default-value \\='grepx-mode)'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
-\\{grepx-mode-map}
-
 (fn &optional ARG)" t)
 (register-definition-prefixes "grepx" '("grepx-"))
+
 
 ;;; End of scraped data
 

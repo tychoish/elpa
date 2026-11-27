@@ -1,0 +1,79 @@
+#+TITLE: Sprite Daemon Lifecycle and Architecture
+#+OPTIONS: toc:2 num:nil
+
+* Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+=sprite.el= coordinates subordinate Emacs daemon instances (called "sprites") managed by a parent Emacs process. Each sprite runs as an independent =emacs --daemon= subprocess, isolated from the parent's memory and event loop, yet addressable via Unix domain sockets or TCP.
+
+* Naming Conventions and Identity
+:PROPERTIES:
+:CUSTOM_ID: naming-conventions-and-identity
+:END:
+
+Sprite names follow a strictly deterministic naming pattern:
+#+BEGIN_EXAMPLE
+<parent>.<idx>.<unique-name>
+#+END_EXAMPLE
+
+- =<parent>=: Name of the parent instance (e.g. =tychoish= or =work=).
+- =<idx>=: The lowest unused integer for that parent, ensuring clean sequence numbering.
+- =<unique-name>=: Human-readable role or task identifier (e.g. =render=, =build=, =worker=).
+
+Filesystem state directories serve as the ground truth for instance discovery and recovery across Emacs crashes or restarts. The active registry is automatically persisted across sessions via =savehist= when =sprite-mode= is enabled.
+
+* Key Functions and Options
+:PROPERTIES:
+:CUSTOM_ID: key-functions-and-options
+:END:
+
+- [[file:api.org::#sprite-mode][~sprite-mode~]]: Global minor mode that enables registry persistence and automatic filesystem scanning.
+- [[file:api.org::#sprite-create][~sprite-create~]]: Spawn and initialize a new named subordinate daemon.
+- [[file:api.org::#sprite-stop][~sprite-stop~]]: Gracefully stop a running sprite daemon.
+- [[file:api.org::#sprite-restart][~sprite-restart~]]: Restart a sprite daemon process.
+- [[file:api.org::#sprite-decommission][~sprite-decommission~]]: Mark a sprite decommissioned, removing it from registry and active pools.
+- [[file:api.org::#sprite-get-next][~sprite-get-next~]]: Return the struct of the next available, idle sprite instance.
+- [[file:api.org::#sprite-get-or-create-next][~sprite-get-or-create-next~]]: Return the next available sprite, spawning a new one if all current sprites are busy.
+- [[file:api.org::#with-sprite][~with-sprite~]]: Convenient macro to execute an Elisp form inside a named sprite.
+- [[file:api.org::#sprite-open-frame][~sprite-open-frame~]]: Open an interactive graphical or terminal frame attached to a sprite.
+- [[file:api.org::#sprite-active-threshold][~sprite-active-threshold~]]: Threshold in seconds after which an uncontacted sprite is deemed available.
+- [[file:api.org::#sprite-max-count][~sprite-max-count~]]: Maximum number of subordinate daemons allowed.
+- [[file:api.org::#sprite-startup-timeout][~sprite-startup-timeout~]]: Seconds to wait for a spawned daemon to accept socket connections.
+
+* Examples
+:PROPERTIES:
+:CUSTOM_ID: examples
+:END:
+
+** Spawning and Evaluating in a Subordinate Daemon
+
+#+BEGIN_SRC emacs-lisp
+;; Spawn a daemon named 'worker'
+(sprite-create "worker")
+
+;; Run heavy computation or compilation in the background daemon
+(with-sprite "worker"
+  (require 'org)
+  (org-publish-project "documentation"))
+
+;; Attach an interactive frame to inspect the daemon visually
+(sprite-open-frame "worker")
+#+END_SRC
+
+** Dynamic Worker Allocation
+
+#+BEGIN_SRC emacs-lisp
+;; Obtain an available worker or spawn a new one (up to sprite-max-count)
+(let ((worker (sprite-get-or-create-next :timeout 15)))
+  (with-sprite worker
+    (load-theme 'modus-operandi t)))
+#+END_SRC
+
+* Reference
+:PROPERTIES:
+:CUSTOM_ID: reference
+:END:
+
+See the [[file:api.org][Sprite API Reference]] for exhaustive docstrings and signatures.

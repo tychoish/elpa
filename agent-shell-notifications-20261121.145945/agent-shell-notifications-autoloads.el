@@ -98,6 +98,7 @@ Interactively, reads a provider symbol from the minibuffer.
 
 (fn PROVIDER)" t)
 (register-definition-prefixes "agent-shell-notifications" '("agent-shell-notifications-"))
+
 
 ;;; End of scraped data
 

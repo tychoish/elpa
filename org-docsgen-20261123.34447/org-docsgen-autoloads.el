@@ -70,6 +70,7 @@ recursively under `default-directory' (e.g. docs/api.org), or falling
 back to `approximate-project-root'." t)
 (defalias 'org-docsgen-dwim #'org-docsgen-regenerate-dwim)
 (register-definition-prefixes "org-docsgen" '("org-docsgen-"))
+
 
 ;;; End of scraped data
 

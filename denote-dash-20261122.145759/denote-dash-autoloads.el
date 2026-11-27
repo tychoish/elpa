@@ -179,6 +179,7 @@ disabled.
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "denote-dash" '("denote-dash-"))
+
 
 ;;; End of scraped data
 

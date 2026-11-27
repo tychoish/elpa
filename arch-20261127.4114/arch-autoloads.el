@@ -190,6 +190,7 @@ Return the progress buffer, or nil when confirmation is declined.
 
 (fn GROUP)" t)
 (register-definition-prefixes "arch-upgrade" '("arch-upgrade-"))
+
 
 ;;; End of scraped data
 

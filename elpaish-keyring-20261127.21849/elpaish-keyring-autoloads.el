@@ -17,6 +17,7 @@ STREAM defaults to \\='snapshot.  BASE-URL defaults to `elpaish-base-url'.
 
 (fn &optional STREAM BASE-URL)" t)
 (register-definition-prefixes "elpaish-keyring" '("elpaish-keyring--canonical-stream"))
+
 
 ;;; End of scraped data
 
